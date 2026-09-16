@@ -58,9 +58,7 @@ import { Foreign } from "../../shared/ui/Foreign";
  *    verändert.
  */
 
-/* ==================================================================== */
 /* Anlegen und Ändern                                                   */
-/* ==================================================================== */
 
 export interface BookingFormDialogProps {
   readonly open: boolean;
@@ -226,9 +224,7 @@ export function BookingFormDialog({
   );
 }
 
-/* ==================================================================== */
 /* Exportstatus zurücksetzen (E-012, R-10)                              */
-/* ==================================================================== */
 
 export interface ResetExportDialogProps {
   readonly open: boolean;
@@ -344,9 +340,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
   );
 }
 
-/* ==================================================================== */
 /* Nicht abrechnen (E-047)                                              */
-/* ==================================================================== */
 
 export interface NotBilledDialogProps {
   readonly open: boolean;
@@ -411,9 +405,7 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
   );
 }
 
-/* ==================================================================== */
 /* Verlauf einer Buchung (R-10, E-012, E-047, Befund C-01)              */
-/* ==================================================================== */
 
 export interface BookingHistoryDialogProps {
   readonly open: boolean;

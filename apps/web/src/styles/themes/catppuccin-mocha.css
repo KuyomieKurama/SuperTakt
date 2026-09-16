@@ -1,0 +1,12 @@
+/* @theme {"label":"Catppuccin Mocha","mode":"dark","hint":"Pastell auf dunklem Mauve","order":18} */
+:root[data-design-theme="catppuccin-mocha"] {
+  --preset-canvas: #1e1e2e;
+  --preset-surface: #181825;
+  --preset-ink: #cdd6f4;
+  --preset-muted: #a5acc6;
+  --preset-accent: #cba6f7;
+  --preset-link: #cba6f7;
+  --preset-on: #101010;
+  --preset-accent-hover: #ceabf7;
+  --preset-accent-active: #d0aff8;
+}

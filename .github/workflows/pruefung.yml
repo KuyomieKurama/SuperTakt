@@ -1,37 +1,4 @@
-# Prüfung — der Auftrag, der bei jedem Anstoß läuft.
-#
-# Anlaß: T-164 (A-A-32). `release.yml` behauptete, die einzigen Prüffälle, die
-# unter Windows überhaupt übersetzt werden, würden „gemessen" — sie werden es,
-# aber nur beim Bau einer Veröffentlichung, also frühestens dann, wenn niemand
-# mehr etwas ändern will. Zwischen zwei Etiketten liegt jede `#[cfg(windows)]`-
-# Zusage brach: Ein Prüffall, der nur auf einem Läufer übersetzt wird, den man
-# einmal im Quartal startet, ist eine Absichtserklärung.
-#
-# Dieser Auftrag hat deshalb genau drei Aufgaben, und alle drei sind Aufgaben,
-# die der Entwicklungsrechner hier nicht oder nicht verläßlich erledigen kann:
-#
-#   1. Die Rust-Prüffälle auf **Windows** übersetzen und fahren. Sie sind die
-#      letzte Kontrolle zwischen einer fremden Zeichenkette und `ShellExecuteW`
-#      (R-21), und ihre Windows-Zweige — nachgestellter Punkt, nachgestelltes
-#      Leerzeichen, `Prefix`-Formen — verhalten sich unter Linux anders oder
-#      gar nicht. Ein grüner Lauf auf dem falschen Betriebssystem ist eine
-#      Aussage über den Läufer, nicht ein Nachweis (Nachtrag zu R-21).
-#   2. Die **Lieferkette** messen (E-079). `pnpm audit` läuft auch hier, aber
-#      `cargo audit` gibt es auf diesem Rechner nicht — und 498 Kisten in
-#      `Cargo.lock` sind bisher nie auf Warnungen gesehen worden (T-B07).
-#   3. Den **Engine-Vergleich** fahren, und zwar so, daß ein Übersprung **rot**
-#      wird (E-095 Punkt 3). `proof:engines` steht bewußt nicht in `proof:all`:
-#      Er braucht `xvfb-run`, `python3-gi` mit `WebKit2 4.1`, Pillow und
-#      Playwrights Chromium und überspringt sich sonst ehrlich — mit Code 0.
-#      Auf einem Entwicklerrechner ist das richtig. Hier nicht: Hier steht die
-#      Umgebung fest, und ein grüner Lauf, der nichts gemessen hat, ist genau
-#      der Fehler, den diese Sitzung achtmal gefunden hat. Deshalb
-#      `--kein-uebersprung`, und deshalb hängt der Schritt am **Ausgangscode**
-#      und nicht an einer Textsuche im Protokoll — die wird beim ersten
-#      umformulierten Satz still blind.
-#
-# Die Release-Prüffälle laufen auch vor dem Merge, damit ein grüner PR nicht
-# erst beim Release an einem veralteten Dienstszenario scheitert.
+# Windows-Prüfungen brauchen einen Windows-Läufer. Der Engine-Vergleich muss bei fehlender Umgebung fehlschlagen.
 name: Prüfung
 
 on:
@@ -90,11 +57,14 @@ jobs:
           npm install --global "$manager"
           pnpm install --frozen-lockfile
       - name: Zeitaufteilung und Erkennung prüfen
-        run: pnpm exec vitest run apps/local-api/test/usecases/idle.test.ts apps/web/test/idle.test.ts apps/desktop/test/idleActivity.test.ts
+        run: pnpm exec vitest run apps/local-api/test/usecases/idle.test.ts apps/web/test/features/timer/idle.test.ts apps/desktop/test/idleActivity.test.ts
       - name: Chromium bereitstellen
         run: pnpm exec playwright install --with-deps chromium
       - name: Rückkehrdialog und Timer-Einstellung im Browser prüfen
         run: pnpm exec playwright test --config tests/e2e/playwright.config.ts tests/e2e/idle-recovery.spec.ts tests/e2e/timer-prompt-setting.spec.ts tests/e2e/startup-appearance.spec.ts --retries=0
+
+      - name: Plattformübergreifenden Zertifikatsdialog prüfen
+        run: pnpm test:e2e:outlook-certificate
       - name: Prüfbilder und Fehlerberichte aufbewahren
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -103,6 +73,7 @@ jobs:
           path: |
             test-results-e2e/
             playwright-report-e2e/
+            test-results-outlook-certificate/
           retention-days: 7
 
   outlook-zertifikat:
@@ -164,7 +135,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libxdo-dev \
-            libssl-dev
+            libssl-dev \
+            libnss3-tools \
+            openssl
 
       - name: Rust-Toolchain zeigen
         shell: bash

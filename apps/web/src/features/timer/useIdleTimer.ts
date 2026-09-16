@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from '../../api/client';
-import { beginIdleSession, getIdleSession, returnFromIdle, type IdleSession, type RunningTimerView } from './api';
+import { beginIdleSession, getIdleSession, getRunningTimer, returnFromIdle, type IdleSession, type RunningTimerView } from './api';
 import { idleCandidate, idleReturnTime } from './idle';
 import { readIdleActivity } from '../../app/connection';
 
@@ -38,34 +38,36 @@ export function useIdleTimer(options: {
       let pending = forceSync || cached.current === null || Date.now() - cached.current.syncedAt >= SERVER_SYNC_MS
         ? await synchronize() : cached.current.session;
       if (!alive.current) return pending;
-      setSession(pending);
       setError(null);
       const current = latest.current;
-      if (current.blocked || (pending === null && (!current.enabled || current.running === null))) return pending;
-      const activity = await readIdleActivity();
+      const activity = await readIdleActivity({ enabled: current.enabled && !current.blocked && (current.running !== null || pending !== null), thresholdMinutes: current.thresholdMinutes });
       if (!alive.current) return pending;
       setSupported(activity?.supported === true);
-      if (!activity?.supported) return pending;
-      // A suspended process may briefly expose its previous sample on waking.
-      if (Math.abs(Date.now() - activity.sampledAtMs) > 10_000) return pending;
-      // Native sampling is cheap and local. Contact the service before a transition,
-      // rather than fetching unchanged idle state on every native sample.
-      const returning = pending !== null && pending.returnedAt === null && idleReturnTime(activity, pending.startedAt) !== null;
-      const beginning = pending === null && current.enabled && current.running !== null &&
-        idleCandidate(activity, current.running.entry.startedAt, current.thresholdMinutes) !== null;
-      if (!synced && (returning || beginning)) pending = await synchronize();
-      if (!alive.current) return pending;
-      if (pending !== null && pending.returnedAt === null) {
-        const at = idleReturnTime(activity, pending.startedAt);
-        if (at !== null) {
-          pending = await returnFromIdle(pending.id, at);
-          current.changed();
-        }
-      } else if (pending === null && current.enabled && current.running !== null) {
-        const candidate = idleCandidate(activity, current.running.entry.startedAt, current.thresholdMinutes);
-        if (candidate !== null) {
-          pending = await beginIdleSession({ entryId: current.running.entry.id, ...candidate });
-          current.changed();
+      if (!current.blocked && activity?.supported && Math.abs(Date.now() - activity.sampledAtMs) <= 10_000) {
+        let running = current.running;
+        const candidateFor = () => running === null ? null : idleCandidate(activity,
+          pending?.returnedAt && pending.returnedAt > running.entry.startedAt ? pending.returnedAt : running.entry.startedAt,
+          current.thresholdMinutes);
+        const canReturn = pending !== null && pending.returnedAt === null && idleReturnTime(activity, pending.startedAt) !== null;
+        const canBegin = (pending === null || pending.returnedAt !== null) && current.enabled && candidateFor() !== null;
+        if (canReturn || canBegin) {
+          if (!synced) pending = await synchronize();
+          running = await getRunningTimer();
+          // Drain native history before publishing one dialog state. Active gaps
+          // remain regular timer entries; every absent period is stored separately.
+          for (let count = 0; count < 33; count += 1) {
+            if (pending !== null && pending.returnedAt === null) {
+              const at = idleReturnTime(activity, pending.startedAt);
+              if (at === null) break;
+              pending = await returnFromIdle(pending.id, at);
+            } else {
+              const candidate = current.enabled ? candidateFor() : null;
+              if (candidate === null || running === null) break;
+              pending = await beginIdleSession({ entryId: running.entry.id, ...candidate });
+            }
+            current.changed();
+            running = await getRunningTimer();
+          }
         }
       }
       cached.current = { session: pending, syncedAt: cached.current?.syncedAt ?? Date.now() };

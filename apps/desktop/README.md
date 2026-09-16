@@ -19,6 +19,7 @@ Fachlogik.** Sie lebt in TypeScript unter `packages/domain` und `apps/local-api`
 | `pnpm --filter @takt/desktop taskpane:dev` | Dasselbe für `tauri dev`, neben die Binärdatei im Bauordner. |
 | `pnpm --filter @takt/desktop licenses` | Erzeugt die Lizenzbeilage für das Paket (T-075). |
 | `pnpm --filter @takt/desktop release:collect` | Sammelt die gebauten Installationsdateien mit Prüfsummen ein. |
+| `pnpm --filter @takt/desktop tauri icon icons/quelle.png` | Erzeugt alle Plattformsymbole neu (T-377, siehe unten). |
 | `cd apps/desktop/src-tauri && cargo test` | Die Rust-Tests der Hülle. |
 
 Beide Anwendungsbefehle sind seit T-054 vollständige Ketten, seit T-075 mit
@@ -32,6 +33,25 @@ Binärdatei bauen    sie ausführen und    Aufgabenbereich       Lizenztexte der
 
 (`collect-licenses.mjs` läuft nur in `app:build`; im Entwicklungsbetrieb wird
 nichts weitergegeben.)
+
+Unter Linux registriert der Tauri-`beforeDevCommand` außerdem das Icon für das
+ungebündelte Entwicklungsfenster. `scripts/register-linux-dev-icon.mjs` schreibt
+einen ausgeblendeten `takt-desktop.desktop`-Eintrag nach
+`${XDG_DATA_HOME:-~/.local/share}/applications` und aktualisiert den KDE-Cache,
+falls das Werkzeug dafür installiert ist. GTK verwendet bei unserer Konfiguration
+den Binärnamen `takt-desktop` als Wayland-App-ID. Der Eintrag verweist direkt auf
+das Icon im Checkout; nach einem Umzug genügt ein neuer Entwicklungsstart.
+Ein bereits vorhandener fremder Eintrag wird nicht überschrieben.
+Zum Entfernen den erzeugten `takt-desktop.desktop`-Eintrag löschen.
+Auf anderen Betriebssystemen tut das Skript nichts. Die Registrierung lässt
+sich für ein bereits laufendes Fenster auch separat ausführen:
+
+```bash
+node apps/desktop/scripts/register-linux-dev-icon.mjs
+```
+
+Das Logo in der Seitenleiste verwendet `apps/web/public/favicon-192.png` und
+wird damit zusammen mit dem Browser-Icon erneuert.
 
 Der Nachweis in der Mitte ist der eigentliche Befund aus T-053: Es gab ihn
 vorher, er stand nur in `app:build` und damit in keiner Kette, die jemand im
@@ -245,6 +265,48 @@ dafür ist die Übersetzungskennzeichnung `config-json5` auf `tauri` und
 `tauri-build` gesetzt, denn reines JSON kennt keine Kommentare. Wer den
 Schalter doch umlegt, muss die Herkunft in `apps/local-api/src/config.ts`
 bewusst wieder aufnehmen und die CSP anpassen.
+
+## Das Anwendungssymbol (T-377)
+
+**Eine Quelle:** `icons/quelle.png`, 1024×1024, RGBA mit echter Transparenz.
+Die Zeichnung stammt vom Auftraggeber (2026-09-14) und ist kein erzeugtes Bild
+— sie wird von Hand ersetzt, von keinem Skript geschrieben. Die sichtbare Marke
+ist SuperTakt (A-21); die technischen Kennungen bleiben davon unberührt.
+
+Aus dieser einen Datei entstehen **alle** Plattformformate in
+`src-tauri/icons/`:
+
+```bash
+pnpm --filter @takt/desktop tauri icon icons/quelle.png
+```
+
+Der Lauf schreibt siebzehn Dateien — `32x32.png`, `64x64.png`, `128x128.png`,
+`128x128@2x.png`, `icon.png` (512), `icon.icns`, `icon.ico` sowie die zehn
+`Square*Logo.png` und `StoreLogo.png`. Fünf davon führt `tauri.conf.json` unter
+`bundle.icon`; die übrigen zwölf holt Tauri über den Dateinamen. Deshalb gilt:
+**alle siebzehn erneuern, nicht die fünf.** Wer nur die Liste aus der
+Konfiguration anfasst, hinterlässt zwölf Dateien mit dem alten Motiv, und keiner
+der Nachweisläufe misst das.
+
+Zwei Dinge, die dabei von Hand nachzuräumen sind:
+
+- Der Lauf legt zusätzlich `src-tauri/icons/android/` und `src-tauri/icons/ios/`
+  an — 35 Dateien, 1,4 MiB. SuperTakt liefert weder nach Android noch nach iOS
+  aus (`bundle.targets`: `nsis`, `deb`, `appimage`, `app`, `dmg`). Sie werden
+  gelöscht; eingecheckt wären sie ein Rest, der beim nächsten Symbolwechsel
+  stillschweigend veraltet.
+- Das Browserfenster der Weboberfläche zieht sein Symbol **nicht** von hier,
+  sondern aus `apps/web/public/favicon-*.png`. Die beiden Dateien entstehen aus
+  derselben Quelle und sind mit zu erneuern — der Befehl steht in
+  `apps/web/README.md`.
+
+Bis T-377 erzeugte `scripts/make-icon.mjs` diese Quelldatei aus den
+Design-Token; das Zeichen war ein Taktstrich in `--accent-bg`. Das Skript ist
+**gestrichen**, nicht stillgelegt: Sein Zweck war ein Platzhalter, bis der
+Auftraggeber ein Symbol hat, und dieser Fall ist eingetreten. Ein Aufruf hätte
+von da an nur noch ein falsches Ergebnis schreiben können — die Zeichnung des
+Auftraggebers wortlos überschrieben. Ein Skript, dessen einziger möglicher
+Ausgang eine Weigerung ist, ist kein Werkzeug mehr.
 
 ## Auslieferung (T-075)
 

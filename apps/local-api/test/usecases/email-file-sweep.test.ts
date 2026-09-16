@@ -1,3 +1,4 @@
+import { recordLogs } from '../support/record-logs.ts';
 /**
  * Takt — T-316 (unit-tester): der Aufräumlauf für übernommene E-Mail-Dateien
  * (A-A-83, A-A-98, E-111, T-313, T-314-domain-dev.md).
@@ -48,18 +49,11 @@ import {
   type EmailFileSweepReport,
   type OrphanedEmailFileSweep,
 } from '../../src/features/todos/email-file-sweep.ts';
-import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../../src/logger.ts';
+import { UNCLASSIFIED_REASON } from '../../src/logger.ts';
 
-interface Recorded {
-  readonly logger: Logger;
-  readonly lines: { level: string; message: string; reason?: string }[];
-}
 
-function recording(): Recorded {
-  const lines: { level: string; message: string; reason?: string }[] = [];
-  const logger = createLogger((line) => lines.push(JSON.parse(line) as never));
-  return { logger, lines };
-}
+
+
 
 function darfNichtAufgerufenWerden(name: string): never {
   throw new Error(`darf in diesem Fall nicht aufgerufen werden: ${name}`);
@@ -123,7 +117,7 @@ describe('sweepOrphanedEmailFiles — Riegel 0 (A-A-36): die Artmenge des Bestan
         return ['link', 'file']; // "image" fehlt
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -149,7 +143,7 @@ describe('sweepOrphanedEmailFiles — Riegel 0 (A-A-36): die Artmenge des Bestan
         return [];
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -169,7 +163,7 @@ describe('sweepOrphanedEmailFiles — Riegel 1: eine leere Verzeichnisliste been
         return [];
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -210,7 +204,7 @@ describe('sweepOrphanedEmailFiles — pathOf filtert VOR jeder Frage an den Best
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -245,7 +239,7 @@ describe('sweepOrphanedEmailFiles — pathOf filtert VOR jeder Frage an den Best
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -283,7 +277,7 @@ describe('sweepOrphanedEmailFiles — ohne Waise wird NICHT gefragt (T-313-2: ei
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -326,7 +320,7 @@ describe('sweepOrphanedEmailFiles — der Widerspruchsriegel: ZWEI Achsen, geste
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -380,7 +374,7 @@ describe('sweepOrphanedEmailFiles — der Widerspruchsriegel: ZWEI Achsen, geste
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -428,7 +422,7 @@ describe('sweepOrphanedEmailFiles — der Widerspruchsriegel: ZWEI Achsen, geste
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -473,7 +467,7 @@ describe('sweepOrphanedEmailFiles — der Widerspruchsriegel: ZWEI Achsen, geste
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -514,7 +508,7 @@ describe('sweepOrphanedEmailFiles — no_folder: kein Ordner bestimmbar, sobald 
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -569,7 +563,7 @@ describe('sweepOrphanedEmailFiles — Reihenfolge: erst das Verzeichnis, dann de
         return 'removed';
       },
     };
-    const { logger } = recording();
+    const { logger } = recordLogs();
 
     await sweepOrphanedEmailFiles(ports, logger);
 
@@ -615,7 +609,7 @@ describe('sweepOrphanedEmailFiles — Reihenfolge: erst das Verzeichnis, dann de
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -654,7 +648,7 @@ describe('sweepOrphanedEmailFiles — ein Abbruch mitten im Entfernen verschluck
         return target.endsWith(waiseEins) ? 'failed' : 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -694,7 +688,7 @@ describe('sweepOrphanedEmailFiles — ein Abbruch mitten im Entfernen verschluck
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 
@@ -749,7 +743,7 @@ describe('sweepOrphanedEmailFiles — ein Abbruch mitten im Entfernen verschluck
         return darfNichtAufgerufenWerden('removeEmailFile');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedEmailFiles(ports, logger);
 

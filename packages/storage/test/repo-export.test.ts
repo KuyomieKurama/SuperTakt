@@ -84,6 +84,25 @@ describe('createExportReadPort — nur offene Buchungen (R-06, R-10)', () => {
     expect(Object.values(candidates[0] as object)).not.toContain('interner Vermerk');
   });
 
+  it('NoExport excludes selected and unselected entries, rejects stale runs, and can be reversed without losing time', async () => {
+    db = openTestDatabase();
+    const { entry, todo } = await seedOpenBooking(db);
+    expect(todo.noExport).toBe(false);
+    const staleRecord = runRecordFor(entry.id, todo.id);
+    expect((await db.unit.todos.update(todo.id, { noExport: true, now: NOW })).ok).toBe(true);
+    expect((await db.unit.todos.load(todo.id))?.noExport).toBe(true);
+    expect(await db.unit.exportRead.openCandidates()).toEqual([]);
+    expect(await db.unit.exportRead.openCandidates([entry.id])).toEqual([]);
+    expect(await db.unit.exportRead.openCount()).toBe(0);
+    expect((await db.unit.export.recordRun(staleRecord)).ok).toBe(false);
+    expect((await db.unit.timeEntries.search({ excludeNoExport: true })).total).toBe(0);
+    expect(await db.unit.timeEntries.sumSeconds({ todoId: todo.id })).toBe(1800);
+    expect((await db.unit.timeEntries.load(entry.id))?.exportStatus).toBe('open');
+    await db.unit.todos.update(todo.id, { noExport: false, now: NOW });
+    expect(await db.unit.exportRead.openCandidates()).toHaveLength(1);
+    expect((await db.unit.timeEntries.search({ excludeNoExport: true })).total).toBe(1);
+  });
+
   it('eine bereits exportierte Buchung erscheint nicht als Kandidat, aber mit previouslyExported nach einem Reset (R-10)', async () => {
     db = openTestDatabase();
     const { entry, todo } = await seedOpenBooking(db);

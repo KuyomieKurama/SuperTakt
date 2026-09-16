@@ -1,7 +1,9 @@
 import { countPoolRuleConditions, MAX_NAME_LENGTH } from "@takt/domain";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { updatePool } from "../../api/endpoints";
-import { createPool } from "./api";
+import {
+  updatePool,
+  createPool,
+} from "./api";
 import type {
   Id,
   Pool,
@@ -127,9 +129,7 @@ const PLACEMENT_HINT: Readonly<Record<PoolPlacement, string>> = {
   both: "Dieselbe Regel an zwei Stellen: als Pool und als Spalte des Boards.",
 };
 
-/* ==================================================================== */
 /* Bausteine des Formulars                                              */
-/* ==================================================================== */
 
 /**
  * Ein benannter Abschnitt im Formular.
@@ -177,9 +177,7 @@ export function FormSection({
  * zeigen statt nur in dem einen guten.
  */
 
-/* ==================================================================== */
 /* Der Dialog                                                           */
-/* ==================================================================== */
 
 export interface PoolFormDialogProps {
   readonly open: boolean;

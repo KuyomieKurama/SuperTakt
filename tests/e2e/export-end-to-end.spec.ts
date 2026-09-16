@@ -1,15 +1,5 @@
-/**
- * TP-EXPORT-01 bis TP-EXPORT-03, TP-B64-10 (docs/testplan.md, Abschnitt 9)
- *
- * Export von Anfang bis Ende: mehrere offene Buchungen, Export ausführen,
- * JSON prüfen (Struktur der Standardvorlage, `Zeit` in Viertelstunden über die
- * Tagessumme je Todo — E-020, `Notiz` als Base64 über UTF-8, `WindowsUser`
- * gesetzt). Danach sind genau die exportierten Buchungen markiert; ein
- * zweiter Lauf gibt keine davon erneut aus.
- *
- * Die Standardvorlage hat laut `packages/storage/migrations/0005_*.up.sql`
- * genau vier Felder: `Call`, `Zeit`, `Notiz`, `WindowsUser`.
- */
+import { todayAt } from './support/local-time';
+
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
@@ -17,13 +7,6 @@ import { createTodo, createTimeEntry, listTimeEntriesByTodo } from './support/ap
 import { confirmExportRun, readResultFilePath } from './support/actions';
 import { gotoExport } from './support/nav';
 import { E2E_EXPORT_DIR, WINDOWS_USER } from './support/session';
-
-/** Ein Zeitpunkt heute, in der Zeitzone des Testlaufs (Europe/Berlin). */
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 test.describe('TP-EXPORT-01/02/03 — Export von Anfang bis Ende', () => {
   test('mehrere offene Buchungen, Export ausführen, JSON prüfen, zweiter Lauf ist leer', async ({ page }) => {

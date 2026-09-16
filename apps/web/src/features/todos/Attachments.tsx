@@ -1,3 +1,5 @@
+import type { MailEntry } from '@takt/domain';
+import { chronologicalAttachments } from './attachmentChronology';
 import { useCallback, useState } from "react";
 
 import {
@@ -162,19 +164,18 @@ function refusalText(result: AttachmentOpen): string | null {
   }
 }
 
-/* ==================================================================== */
 /* Fläche A — der Bereich (A-19.11)                                     */
-/* ==================================================================== */
 
 export interface AttachmentsProps {
   readonly todoId: Id;
   /** Titel des Todos — für die Rückfrage beim Entfernen. */
   readonly todoTitle: ForeignText;
+  readonly mails?: readonly MailEntry[];
   /** Wird erhöht, wenn anderswo geschrieben wurde. */
   readonly version?: number;
 }
 
-export function Attachments({ todoId, todoTitle, version = 0 }: AttachmentsProps) {
+export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: AttachmentsProps) {
   const toasts = useToasts();
   const list = useAsync(async () => listAttachments(todoId), [todoId], [version]);
 
@@ -300,7 +301,7 @@ export function Attachments({ todoId, todoTitle, version = 0 }: AttachmentsProps
         ) : (
           <>
             <ul className="attachment-list" aria-label="Anhänge">
-              {list.state.value.items.map((attachment) => (
+              {chronologicalAttachments(list.state.value.items, mails).map((attachment) => (
                 <AttachmentRow
                   key={attachment.id}
                   todoId={todoId}

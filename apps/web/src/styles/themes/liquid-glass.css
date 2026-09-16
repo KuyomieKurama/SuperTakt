@@ -1,0 +1,59 @@
+/* @theme {"label":"Liquid-Glass","mode":"auto","hint":"Weiche Lichtreflexe auf getöntem Glas","order":8} */
+:root[data-design-theme="liquid-glass"] {
+  --preset-canvas: #e9f0fa;
+  --preset-surface: #f8fbff;
+  --preset-ink: #20314c;
+  --preset-muted: #505d73;
+  --preset-accent: #2563bd;
+  --preset-link: #2563bd;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #245eb3;
+  --preset-accent-active: #235bac;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="liquid-glass"]:not([data-theme="light"]) {
+  --preset-canvas: #101826;
+  --preset-surface: #1c293c;
+  --preset-ink: #e9f2ff;
+  --preset-muted: #bcc6d4;
+  --preset-accent: #8cc4ff;
+  --preset-link: #8cc4ff;
+  --preset-on: #101010;
+  --preset-accent-hover: #93c8ff;
+  --preset-accent-active: #98caff;
+  }
+}
+
+:root[data-design-theme="liquid-glass"][data-theme="dark"] {
+  --preset-canvas: #101826;
+  --preset-surface: #1c293c;
+  --preset-ink: #e9f2ff;
+  --preset-muted: #bcc6d4;
+  --preset-accent: #8cc4ff;
+  --preset-link: #8cc4ff;
+  --preset-on: #101010;
+  --preset-accent-hover: #93c8ff;
+  --preset-accent-active: #98caff;
+}
+:root[data-design-theme="liquid-glass"] .app {
+  background-image: radial-gradient(ellipse at top right, color-mix(in srgb, var(--accent-bg) 18%, transparent), transparent 60%);
+}
+
+:root[data-design-theme="liquid-glass"] :is(.card, .filterbar, .app__sidebar, .app__header) {
+  background-color: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(115%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent), var(--shadow-sm);
+}
+
+:root[data-design-theme="liquid-glass"] :is(.card, .filterbar) {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--accent-bg) 6%, transparent), transparent 65%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 18%, transparent), var(--shadow-lg);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-design-theme="liquid-glass"] :is(.card, .filterbar, .app__sidebar, .app__header) {
+    background-color: var(--bg-surface);
+    backdrop-filter: none;
+  }
+}

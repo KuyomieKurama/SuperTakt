@@ -146,9 +146,7 @@ export function TimerDisplay({
   );
 }
 
-/* ==================================================================== */
 /* Was hier bis T-108 stand: `ReactivationNotice` (A-2.5, I-05)         */
-/* ==================================================================== */
 
 /*
  * Der Baustein ist **ersatzlos** entfallen (W-9 aus R-2a), und diese Notiz

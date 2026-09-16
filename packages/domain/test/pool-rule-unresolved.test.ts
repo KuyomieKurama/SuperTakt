@@ -30,9 +30,7 @@ import { describe, expect, it } from 'vitest';
 import { poolRuleMatchesNothing, tagAxisIsUnresolved } from '../src/pool.js';
 import type { ResolvedPoolRuleAxes } from '../src/pool.js';
 
-// ---------------------------------------------------------------------------
 // tagAxisIsUnresolved — die fünf Ecken aus T-082 §4
-// ---------------------------------------------------------------------------
 
 describe('tagAxisIsUnresolved — die vier Ecken aus T-082 §4 (named, resolved, emptyTerms)', () => {
   it('(1,0,1) — ein einzelner Ordnerterm, leer: unresolved', () => {
@@ -96,9 +94,7 @@ describe('tagAxisIsUnresolved — die vier Ecken aus T-082 §4 (named, resolved,
   });
 });
 
-// ---------------------------------------------------------------------------
 // poolRuleMatchesNothing — wo die beiden Gründe zusammenkommen
-// ---------------------------------------------------------------------------
 
 /** Eine vollständig neutrale, aufgelöste Regel — Ausgangspunkt für die Fälle unten. */
 const neutralAxes: ResolvedPoolRuleAxes = {

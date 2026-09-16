@@ -40,10 +40,8 @@ export async function readResultFilePath(page: Page): Promise<string> {
   return (await page.locator('dd.mono:not(.truncate)').first().innerText()).trim();
 }
 
-/* ==================================================================== */
 /* Kanban — eine Spalte über die echte Oberfläche anlegen (T-081, E-054, */
 /* E-055)                                                                */
-/* ==================================================================== */
 
 /**
  * Wählt ein vorhandenes Tag in einer der beiden Taglisten des Regelformulars

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
@@ -48,8 +49,31 @@ const entry = (name: string): string =>
 
 // Takt laeuft lokal (E-001). Der Entwicklungsserver bindet deshalb bewusst
 // nur auf die Loopback-Adresse und gibt nichts ins Netz frei.
+const syncThemes = () => execFileSync(process.execPath, [fileURLToPath(new URL("../../scripts/sync-themes.mjs", import.meta.url))], { stdio: "inherit" });
+syncThemes();
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), {
+    name: "supertakt-theme-files",
+    configureServer(server) {
+      const themeFolder = fileURLToPath(new URL("./src/styles/themes/", import.meta.url));
+      const changed = (file: string) => {
+        if (!file.startsWith(themeFolder) || !file.endsWith(".css")) return;
+        try {
+          syncThemes();
+          server.ws.send({ type: "full-reload" });
+        } catch (error) {
+          server.config.logger.error(`Theme konnte nicht übernommen werden: ${String(error)}`);
+          server.ws.send({ type: "error", err: { message: String(error), stack: "" } });
+        }
+      };
+      server.watcher.add(themeFolder);
+      server.watcher.on("add", changed).on("change", changed).on("unlink", changed);
+      server.httpServer?.once("close", () => {
+        server.watcher.off("add", changed).off("change", changed).off("unlink", changed);
+      });
+    },
+  }],
   server: {
     host: "127.0.0.1",
     port: 5173,

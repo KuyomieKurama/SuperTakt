@@ -1,31 +1,5 @@
-//! Takt — der Windows-Benutzername (E-010, A-8.5, B-8.1, B-8.2).
-//!
-//! Das Feld `WindowsUser` geht in die Exportdatei und entscheidet dort mit
-//! darüber, wem Arbeitszeit zugerechnet wird. Es ist damit keine Bequemlichkeit
-//! und keine Anzeige, sondern ein Abrechnungswert.
-//!
-//! ## Was hier ausdrücklich **nicht** steht
-//!
-//! - `std::env::var("USERNAME")`. Umgebungsvariablen setzt, wer den Prozess
-//!   startet: `set USERNAME=kollege.mueller && takt.exe`, und jede Exportzeile
-//!   trägt einen fremden Namen (B-8.1).
-//! - `USERPROFILE`, aus demselben Grund.
-//! - Ein Unterprozess `whoami`. Der erbt die Umgebung **und** die `PATH`-Suche;
-//!   ein untergeschobenes `whoami.exe` im Arbeitsverzeichnis wäre zusätzlich
-//!   eine Codeausführung.
-//!
-//! Übrig bleibt der Betriebssystemaufruf. `GetUserNameW` liefert den nackten
-//! Anmeldenamen, `GetUserNameExW(NameSamCompatible)` denselben Namen mit
-//! Domäne davor. Beide werden gelesen und beide weitergereicht — welcher in
-//! den Export geht, ist eine offene Frage an den Auftraggeber (B-8.2 Punkt 4)
-//! und keine, die die Hülle still entscheidet.
-//!
-//! ## Warum die Aufrufe von Hand deklariert sind
-//!
-//! Zwei Funktionen aus zwei Systembibliotheken. Dafür eine Bindungskiste in die
-//! Lieferkette zu holen, deren Modulpfade sich zwischen Fassungen verschieben,
-//! wäre mehr Fläche als Gewinn — und dieser Rechner kann keine davon
-//! übersetzen, um es zu merken.
+//! Den Exporturheber über Betriebssystem-APIs lesen. Umgebung und Unterprozesse sind manipulierbar.
+//! Anmeldename und Name mit Domäne werden getrennt zurückgegeben.
 
 use serde::Serialize;
 

@@ -1,9 +1,11 @@
 # Die Todo-Liste wird eine Tabelle — der Fluß
 
-**Aufgabe:** T-361, nachgezogen in **T-374**.
+**Aufgabe:** T-361, nachgezogen in **T-374**, **T-378** und **T-382**.
 **Verfasser:** ux-designer.
-**Stand:** 2026-09-14, **zweite Fassung** — nach dem Abgleich beider Papiere (T-366), den
-Entscheidungen des Orchestrators zu B-1 bis B-8 und den Messungen des Baus (T-365).
+**Stand:** 2026-09-14, **vierte Fassung** — nach dem Abgleich beider Papiere (T-366), den
+Entscheidungen des Orchestrators zu B-1 bis B-8, den Messungen des Baus (T-365), dem zweiten
+Abgleich (T-376, **ein** blockierender Befund; S-3, S-4 und S-8 sind in der vierten Fassung
+nachgetragen) und dem Augenschein am echten Bild (T-372).
 **Schwesterpapier:** `docs/design/todo-tabelle.md` (ui-designer, T-362), inzwischen gelesen und
 gegen dieses Papier gemessen. Fünf der acht blockierenden Befunde gingen **gegen** dieses Papier;
 sie sind hier eingearbeitet und nicht weginterpretiert.
@@ -45,7 +47,7 @@ diese Tabelle und springt.
 | **B-6** `.todo-row` überlebt | **für dieses Papier** | §13: Zählung berichtigt (**zwölf**, nicht neun), Meßergebnis aus T-365 eingetragen, TT-30 nachgezogen |
 | **B-7/B-8** A-25.9 nachgeschärft | erledigt, betrifft §12 | **§12 neu gezählt (dreizehn Einträge)**, 12.1 OF-1 geschlossen, 12.2 die **Lehre** zum falschen Vorgriff |
 | **N-1** Affordanz der Kopfzellen | Ergänzung | §7 und **TT-03** geschärft |
-| **N-2** Erledigt-Kästchen liest sich wie Auswahl | offen bei visual-qa | 3.2 nennt die vier Bedingungen, die jede Antwort erfüllen muß, ohne die Antwort vorwegzunehmen; **OF-7** |
+| **N-2** Erledigt-Kästchen liest sich wie Auswahl | damals offen bei visual-qa — **inzwischen entschieden, siehe 0.2** | 3.2 nennt die vier Bedingungen, die jede Antwort erfüllen muß, ohne die Antwort vorwegzunehmen; **OF-7** |
 | **N-4** Randmarkierung | Ergänzung | 3.5 und 9.3, **TT-33** neu |
 | **N-5** Zeitwerte, Versatz, Rolle der Fläche | gehört T-362 | 6.1 vermerkt, was gebaut ist, und gibt die Entscheidung ausdrücklich nicht an sich |
 | **N-6** Hinweis im festen Teil | entschieden: zweiter Weg | §9 Z0/Z4 berichtigt, 8.1 ergänzt, **R-11** neu |
@@ -60,6 +62,48 @@ diese Tabelle und springt.
 gibt), 5.2 (die Zahl aus `todo.tagIds.length`), 5.3 (der Knopf ist der Weg, Hover die Zugabe), 7
 (keine Zeilenfärbung für Überfälligkeit), 11 (die Pflichtflows). T-366 Abschnitt 5 nennt drei davon
 ausdrücklich als das, was die Nacharbeit nicht mitreißen soll.
+
+### 0.1 Was die dritte Fassung ändert (T-378)
+
+Der zweite Abgleich (T-376) hat **einen** blockierenden Befund erzeugt statt acht — die
+Zuordnungstabelle oben hat dabei getan, wofür sie gedacht war: nachschlagen statt lesen. Der eine
+Befund wiegt trotzdem schwer, denn er hätte eine **Tastatursperre** erzwungen.
+
+| Entscheidung | Ausgang | Was hier geändert ist |
+|---|---|---|
+| **S-1** Der Tabulator aus der Fläche heraus | **gegen dieses Papier**, blockierend | **6.2** und **§10** tragen nicht mehr „in jedem dieser Fälle steht der Fokus auf dem Auslöser". Die Ausgänge sind nach dem getrennt, was sie mit dem Fokus tun; die Zusage lautet jetzt „kein Ausgang läßt den Fokus ins Leere fallen". **TT-35** neu |
+| **T-372** Höhenanteil bei 960 × 640 | Zahl und Bezug berichtigt | **8.1**, **TT-24**, **R-3**: die tragende Aussage steht in **absoluten** Zahlen gegen das Budget aus AK-23; jede Prozentzahl trägt ihren Nenner daneben |
+| **T-372** R-10 am Bild | freigegeben, kein blockierender Befund | **R-10** und **§4** tragen den Augenschein neben der Messung |
+| **F-8 → TT-33** | geschlossen | 3.5, 9.3 und §17: F-8 des Schwesterpapiers ist hier beantwortet und wird nirgends mehr als offen geführt |
+| **N-2 / OF-7** | Bedingung meßbar gemacht | **TT-36** neu. Die Bedingung, unter der „keine sichtbare Unterscheidung" zulässig ist, stand nur in Prosa (3.2) — für einen e2e-Auftrag war sie damit unauffindbar |
+
+**Was die dritte Fassung offen ließ, und der Grund gehört an diese Stelle und nicht in eine
+Fußnote:** die nicht blockierenden Befunde **S-3, S-4 und S-8** aus T-376. Der Bericht
+`.claude/team/reports/T-376-spec-ux-reviewer.md` lag beim Schreiben der dritten Fassung nicht vor;
+von ihnen waren die Nummern bekannt, nicht der Wortlaut und nicht die Stelle. Sie zu raten wäre
+schlimmer gewesen, als sie offen zu führen — dieselbe Regel wie bei einer zurückgereichten Zahl
+(15.1). **Der Bericht liegt seit dem 2026-09-14 wieder vor** (er war unversioniert und ging beim
+Wechsel des Arbeitsbaums nach `main` verloren; der Prüfer hat ihn inhaltsgleich neu geschrieben,
+mit dem Vermerk, daß seine Zeilennummern den Stand **vor** der Nacharbeit meinen). **Die drei
+Befunde sind in der vierten Fassung eingearbeitet — 0.2.**
+
+### 0.2 Was die vierte Fassung ändert (T-382)
+
+Eng begrenzt: die drei nachgereichten Befunde, die Folge einer Entscheidung des Schwesterpapiers
+für **eine** meiner Meßlatten und eine Zahl, die inzwischen zweimal unabhängig gemessen ist. Keine
+Überarbeitung darüber hinaus.
+
+| Entscheidung | Ausgang | Was hier geändert ist |
+|---|---|---|
+| **S-3** Zwei veraltete „unbeantwortet" | **gegen dieses Papier** | **15.4** führt das Ladeskelett nicht mehr als „die einzige, die niemand beantwortet hat" — das Schwesterpapier hat es in 8.1a **entschieden** (Stapelform des Bestands). §15 heißt entsprechend „alle vier"; §17 trägt die Vorbemerkung nach |
+| **S-4** Beantwortete Frage weiterdelegiert | **gegen dieses Papier** | **6.3**, Zeile „überfahrbar": die Delegation an T-362 fällt, die Antwort steht (Nachlauf **und** Versatz als Paar; die lückenlose Anlage ist ausgeschlossen) |
+| **S-8** Deckungstabelle an den Zusätzen aufgespannt | **gegen dieses Papier** | **12.1**: zwei Zeilen dazu — die **wechselnde Zeilenhöhe** (R-10) und die **drei Wegnahmen** aus §12 Nr. 11–13, je mit dem Vermerk, worauf ihre Deckung ruht. Aus sechs Zeilen werden acht |
+| **N-2 entschieden** (Schwesterpapier 8.1b) | Folge für **TT-36** | **TT-36**, **3.2** und **OF-7**: die Bedingung war an die Antwort „**keine** sichtbare Unterscheidung" geknüpft. Die Antwort ist eine dritte — „**keine neu erfundene**" —, und die Bedingung gilt unter ihr genauso. TT-36 und **A17** des Schwesterpapiers sind **eine** Zusage an zwei Adressen |
+| **T-372** Die Zahl ist gemessen | Kennzeichnung fällt | **8.1**, **TT-24**, **R-3**: Die Auflösung der beiden Anteile war als *gerechnet* gekennzeichnet. T-372 hat 588 px, 107,7 px und 480,3 px **direkt gemessen**; die Belegstelle steht jetzt im Text |
+
+**Was ausdrücklich nicht geändert ist:** alles übrige. Die Kleinigkeiten aus T-376 Abschnitt 5
+(darunter der Verweis „A-25.9 Satz 4" in 12.1, der auf Satz 2 zeigen müßte) standen nicht in
+diesem Auftrag und sind nicht angefaßt; sie stehen im Bericht zu T-382.
 
 ---
 
@@ -260,6 +304,20 @@ und ohne Zwischenschritt. Eine Spalte, die einen Zustand mit einem Klick ändert
 Rücknahme, die dabei wegfällt, wären zusammen ein Sackgassen-Paar; einzeln ist keines von beiden
 eines.
 
+**Diese Bedingung ist ab der dritten Fassung meßbar und heißt TT-36.** Sie stand bisher nur hier
+im Fließtext, und damit hätte ein e2e-Auftrag sie nicht gefunden: Er hätte das Kästchen geprüft
+und die Rücknahme nicht. **Wer OF-7 mit „keine sichtbare Unterscheidung" beantwortet, sagt damit
+TT-36 zu** — die Antwort und ihre Bedingung gehören in denselben Auftrag (E-081 Punkt 4).
+
+**Die Antwort liegt inzwischen vor, und sie ist eine dritte** (Schwesterpapier 8.1b, N-2
+entschieden): **keine *neu erfundene*** Gestalt, weil eine vorhandene trägt — der **Wortkopf**
+„Erledigt" über Spalte 1, der erste der drei Sätze oben. Er stand nur deshalb unter „strukturell",
+weil er neben `aria-selected` und der Sammelleiste aufgezählt war; sichtbar ist er, und weil der
+Kopf klebt, steht er in jeder Bildlaufstellung über seiner Spalte. **Die Bedingung dieses
+Abschnitts bleibt davon unberührt und gilt unter der dritten Antwort genauso** — die Unterscheidung
+steht über der Spalte, der Fehlklick geschieht in der Zeile. Meßlatte hier **TT-36**, im
+Schwesterpapier **A17**; die Entscheidung selbst gehört dorthin und wird hier nicht getroffen.
+
 ### 3.3 Warum `DoneFlag` in Spalte 1 gehört und nicht in eine eigene
 
 `DoneFlag` zeigt nichts, solange das Todo offen ist (`DoneFlag.tsx:50`, `state === "open"` gibt
@@ -317,6 +375,12 @@ verlangt dort ausdrücklich nichts) und für die Tag-Zelle ohne Tags.
   `--running` ist das einzige Merkmal der ganzen Zeile; eine Schiene wäre das zweite und
   konkurrierte mit ihm um dieselbe Aussage. Sie bliebe zudem an der linken Kante hängen und wäre
   nach einem waagerechten Lauf (10.1) als Erstes aus dem Bild. Meßlatte: **TT-33**.
+  **Das ist F-8 des Schwesterpapiers, und sie ist damit beantwortet** — dort steht sie in der
+  Frageliste und in der Zeile „Randmarkierung am Zeilenanfang" noch als offen und an T-361
+  verwiesen. Sie ist hier entschieden (3.5, 9.3) und gemessen (TT-33); dieses Papier führt sie
+  nirgends mehr als Frage. **Eine Frage, die beide Papiere dem jeweils anderen zuschreiben, ist
+  genau der Fall, aus dem E-113 zweimal entstanden ist** — erledigt ist sie erst, wenn beide
+  Papiere sie geschlossen führen.
 
 ---
 
@@ -364,6 +428,12 @@ Spaltenbreite ist die Zeile **76,6 px** hoch statt 40 px. Drei solche Titel hint
 eine Bildschirmhöhe von etwa zwei weiteren Zeilen. Der Zweck der Tabelle — gleiche Angabe an
 gleicher waagerechter Stelle — bleibt davon unberührt; was leidet, ist das Überfliegen der
 **senkrechten** Kante. Das steht als **R-10** und ist kein verschwiegener Preis.
+
+**Und wie es aussieht, ist inzwischen angesehen worden statt gerechnet:** T-372 hat den langen
+Titel am echten Bild geprüft, ausdrücklich auch den Fall ohne eine einzige Leerstelle, und
+**keinen blockierenden Befund** gemeldet. Eine Messung sagt über den Eindruck nichts — deshalb war
+die Frage nötig, und deshalb zählt die Antwort. R-10 bleibt trotzdem stehen: Der Augenschein galt
+dem heutigen Bestand und nicht jedem künftigen Titel.
 
 **Und was er nicht kostet:** Die übrigen sieben Spalten halten ihre 40 px. Vier Zellen brechen in
 ihrer breitesten Ausprägung ebenfalls um — „Erledigt aufgehoben", „Überfällig"/„Heute fällig" mit
@@ -531,7 +601,7 @@ Genau **eine** Tag-Fläche ist in der Ansicht offen. Ein zweiter Auslöser schli
 |---|---|---|---|
 | **P0 — zu** | Die Zelle zeigt die Zahl, `aria-expanded="false"`. | Ausgangszustand. | — |
 | **P1 — offen durch Zeiger** | Fläche sichtbar, Fokus bleibt, wo er war. `aria-expanded="true"`. | Zeiger ruht auf dem Auslöser (Absichtsverzögerung: T-362). | Zeiger verläßt Auslöser **und** Fläche; `Escape`; Bildlauf des Laufbereichs; ein anderer Auslöser geht auf; Ansichtswechsel. |
-| **P2 — offen durch Absicht** | Wie P1, zusätzlich: die Fläche ist fokussierbar und hat den Fokus (A-25.9). | `Eingabe`/`Leertaste` auf dem Auslöser; Tippen auf dem Berührungsbildschirm; ein Zeiger-Aufgang, in dem der Benutzer danach die Tastatur benutzt (**P1 → P2**). | `Escape`; zweites Auslösen; Auslösen außerhalb; Tabulator aus der Fläche heraus; **Bildlauf des Laufbereichs** (B-5); Ansichtswechsel. **In jedem dieser Fälle steht der Fokus danach auf dem Auslöser**, nicht im Leeren. **Nicht** durch Wegziehen des Zeigers. |
+| **P2 — offen durch Absicht** | Wie P1, zusätzlich: die Fläche ist fokussierbar und hat den Fokus (A-25.9). | `Eingabe`/`Leertaste` auf dem Auslöser; Tippen auf dem Berührungsbildschirm; ein Zeiger-Aufgang, in dem der Benutzer danach die Tastatur benutzt (**P1 → P2**). | `Escape`; zweites Auslösen; Auslösen außerhalb; `Tabulator` **und** `Umschalt`+`Tabulator` aus der Fläche heraus; **Bildlauf des Laufbereichs** (B-5); Ansichtswechsel. **Kein Ausgang läßt den Fokus ins Leere fallen** — wohin er geht, ist nicht in jedem Fall der Auslöser und steht einzeln in der Tabelle darunter (S-1). **Nicht** durch Wegziehen des Zeigers. |
 | **P3 — offen und selbst laufend** | Mehr Marken als Höhe. Die Fläche läuft in sich. | Aus P1 oder P2, wenn der Deckel greift. | Wie der Zustand, aus dem sie kam. **Der innere Lauf der Fläche schließt sie nicht** (TT-34). |
 
 **Der Bildlauf schließt die Fläche — in P1 *und* in P2. Das ist gegen die erste Fassung
@@ -545,10 +615,43 @@ die nicht mehr im Bild ist, ist keine Auskunft, sondern eine Behauptung über ei
 niemand sieht.
 
 **Was die Norm hier statt dessen fordert, und es ist eingelöst:** Der Benutzer darf durch das
-Schließen nichts verlieren. Deshalb gilt in P2 die Fokuszusage ohne Ausnahme — **schließt die
-Fläche, steht der Fokus auf dem Auslöser**, und der Laufbereich holt ihn von selbst ins Bild
-(AK-16). Der Weg zurück ist eine Taste. Das ist der Unterschied zwischen einem Ausgang und einer
-Sackgasse, und er ist der Grund, warum dieser Ausgang tragbar ist.
+Schließen nichts verlieren. Deshalb gilt für den Bildlauf-Ausgang in P2 die Fokuszusage ohne
+Ausnahme — **rollt der Laufbereich, schließt die Fläche, und der Fokus steht auf dem Auslöser**,
+den der Laufbereich von selbst ins Bild holt (AK-16). Der Weg zurück ist eine Taste. Das ist der
+Unterschied zwischen einem Ausgang und einer Sackgasse, und er ist der Grund, warum dieser Ausgang
+tragbar ist.
+
+**Wohin der Fokus geht — und der eine Ausgang, der ihn *nicht* zurückgibt (S-1).** Die zweite
+Fassung dieses Papiers zog den Satz über alle Ausgänge zusammen: „in jedem dieser Fälle steht der
+Fokus danach auf dem Auslöser". Das war nicht bloß ungenau, es war in **einem** Fall schädlich.
+Wörtlich gelesen verlangt es, den Fokus nach einem `Tabulator` wieder nach vorn zu ziehen — und
+damit gäbe es aus der Zelle heraus keinen Weg mehr vorwärts. Das ist eine **Tastatursperre** nach
+SC 2.1.2. Die Zusage lautet ab dieser Fassung:
+
+> **Kein Ausgang läßt den Fokus ins Leere fallen, und keiner hält ihn fest.** Wohin er geht, hängt
+> davon ab, ob der Benutzer ihn bei diesem Ausgang selbst weiterbewegt hat.
+
+| Ausgang aus P2 | Fokus danach | Warum |
+|---|---|---|
+| `Escape` | auf dem Auslöser | Abgewiesen ist nicht weitergegangen: Der Benutzer hat die Fläche weggenommen, nicht den Ort gewechselt. |
+| zweites Auslösen | auf dem Auslöser | Er steht dort ohnehin schon. |
+| **Bildlauf** des Laufbereichs (B-5) | auf dem Auslöser, ins Bild geholt (AK-16) | Ein Bildlauf bewegt den Fokus nicht von selbst; ohne die Rückgabe stünde er **in** der Fläche, die beim Schließen aus dem Baum verschwindet. |
+| Auslösen außerhalb auf eine **nicht** fokussierbare Stelle | auf dem Auslöser | Sonst fiele er auf den Dokumentkörper — der Fall, den dieser Fluß „ins Leere" nennt. |
+| Auslösen außerhalb auf ein **fokussierbares** Element | **dort, wohin der Benutzer geklickt hat** | Ein Klick, der den Fokus setzt, und eine Rückgabe, die ihn gleich wieder wegnimmt, wären zusammen ein Springen. |
+| `Umschalt`+`Tabulator` aus der Fläche heraus | auf dem Auslöser | Rückwärts **ist** der Auslöser der nächste Halt; von dort geht es weiter rückwärts und nicht wieder hinein. |
+| **`Tabulator` aus der Fläche heraus** | auf dem **nächsten Halt nach dem Auslöser** — in dieser Zeile der Timerknopf (Sp. 8, §10) | **Hier ausdrücklich nicht auf den Auslöser.** Ihn zurückzuziehen machte den Tabulator wirkungslos: Aus der Fläche käme man vorwärts nie heraus. Das ist die Sperre aus SC 2.1.2, und sie ist der ganze Grund für S-1. |
+| Ansichtswechsel | nach der Regel der neuen Ansicht | Dort ist die Fläche nicht mehr die Frage. |
+
+**Der gebaute Stand trägt diese Trennung bereits**, und er benennt sie selbst: `TodoTagsCell.tsx`
+setzt die Rückgabe nur für den Absichtsmodus (`restoreFocus={mode === "intent"}`) und schreibt
+daneben, daß der Baustein „die Hand wegnimmt, wenn ein Tabulator die Fläche verlassen und den
+Fokus schon weitergereicht hat — ihn dort wieder wegzuziehen wäre eine Tastatursperre". Darunter
+liegt `proxyTabFocus` des Bausteins, das beim `Tabulator` den nächsten Halt **nach** dem Auslöser
+ansteuert und beim `Umschalt`+`Tabulator` den Auslöser selbst; und die Abweisung nach außen
+unterläßt die Rückgabe, sobald das Ziel außerhalb fokussierbar ist. **Die zweite Fassung dieses
+Papiers hätte den Bau also entweder zu einem Rückschritt gezwungen oder — der wahrscheinlichere
+Weg — einen Prüffall erzeugt, der gegen einen richtigen Bau rot wird.** Meßlatte: **TT-35**. Das
+Schwesterpapier mißt an dieser Stelle nichts; A14b prüft ausschließlich den Bildlauf-Ausgang.
 
 **Eine Auflage an die Messung, die aus dem Bau kommt und ins Papier gehört:** Gemessen wird die
 **Bewegung des Ankers** gegen seinen Stand beim Aufgehen, **nicht** das Eintreffen eines
@@ -568,7 +671,7 @@ darin liegt der ganze Unterschied, und die erste Fassung hat ihn verwischt.
 | Teilsatz | Zusage hier |
 |---|---|
 | **abweisbar** (dismissible) | `Escape` schließt die Fläche, ohne den Zeiger zu bewegen und ohne die Bildlaufstelle zu ändern. In P2 kehrt der Fokus auf den Auslöser zurück; in P1 bewegt sich der Fokus nicht. `Escape` gehört dabei der Fläche und nicht einem Dialog dahinter — dieselbe Bremse, die `Menu.tsx:76` (`stopClosingKeys`) schon fährt. |
-| **überfahrbar** (hoverable) | Der Zeiger kommt vom Auslöser in die Fläche, **ohne** daß sie zwischendurch schließt. Ob das über eine lückenlose Anlage oder über einen Nachlauf gelöst wird, entscheidet T-362; **daß** es gelöst ist, ist hier entschieden. |
+| **überfahrbar** (hoverable) | Der Zeiger kommt vom Auslöser in die Fläche, **ohne** daß sie zwischendurch schließt. **Gelöst über Nachlauf und Versatz als Paar** (Schwesterpapier 5.5); ein lückenloser Anschluß ist ausgeschlossen, weil er den Auslöser verdeckte (SC 2.4.11, TT-17). *Die erste Fassung reichte die Wahl zwischen beidem noch an T-362 weiter; T-362 hat geantwortet — `gutter: 4` und 220 ms Nachlauf —, und eine Delegation, deren Empfänger geantwortet hat, ist ein veralteter Satz (S-4).* |
 | **beständig** (persistent) | **Kein Zeitgeber — und nur das.** Sie bleibt, bis Zeiger **und** Fokus sie verlassen haben, bis sie abgewiesen wird, bis der Benutzer den Laufbereich rollt (6.2, B-5) oder bis ihre Auskunft ungültig wird — Letzteres tritt ein, wenn die Liste neu geladen wird und die Zeile verschwindet. In **jedem** dieser Fälle geht der Fokus nicht ins Leere. *Die erste Fassung las „beständig" zusätzlich als „überlebt einen weggerollten Anker". Das steht nicht in der Norm; die Überdehnung ist zurückgenommen.* |
 
 ### 6.4 Am unteren Fensterrand
@@ -706,17 +809,55 @@ eine Textzeile und wird an schmalen Fenstern zwei; die erste Fassung hat daraus 
 („der jetzt feste Hinweis reißt das Höhenbudget") und die Neumessung als **TT-24** zur Auflage
 gesetzt. Beides war richtig. Das Ergebnis widerlegt die Sorge:
 
-> **Gemessen bei 960 × 640, mit stehendem Hinweis (T-365):** fester Teil **432,3 px von 588 px =
-> 73,5 %**. Der Laufbereich behält 108 px gegen einen Boden von 64 px, `.app__main` läuft nicht
-> (588/588), das Dokument läuft nicht (640/640). **Kein Befund.**
+> **Gemessen bei 960 × 640, mit stehendem Hinweis — und die tragenden Zahlen sind die absoluten:**
+> Der feste Teil steht bei **432,3 px** gegen die **500 px**, die AK-23 ihm zugesteht (T-365). Für
+> den Laufbereich bleiben **108 px** gegen seinen Boden von **64 px** (4 rem) — dieselbe Zahl hat
+> T-372 am echten Bild gemessen. `.app__main` läuft nicht (588/588), das Dokument läuft nicht
+> (640/640). **Kein Befund.**
 
-**73,5 % liegen *unter* den 75,9 % der vorigen Fassung** — der Hinweis kostet netto nichts, weil
-die Tabelle an anderer Stelle Höhe freigibt (eine Zeile ist eine Zeile und nicht drei). R-3 ist
-damit widerlegt und steht in Abschnitt 16 als widerlegt, nicht gestrichen: Eine Sorge, die sich
-als unbegründet erweist, war nicht umsonst, sie war die Auflage, die zur Messung geführt hat.
-Bliebe es bei einem Riß, gälte unverändert: Der Hinweis fällt **nicht** weg, sondern eine andere
-Zeile des festen Teils gibt nach, nach der Regel „es weicht zuerst, was schon einmal weicht"
-(T-323 7.5).
+**Und jetzt die Prozentzahl, mit ihrem Nenner daneben (T-372).** Es sind zwei im Umlauf, **73,5 %**
+und **81,7 %**, und beide sind richtig — sie zählen **verschiedene Dinge**:
+
+| Zahl | Zähler | Nenner | Herkunft |
+|---|---|---|---|
+| **73,5 %** | die **Leisten** des festen Teils, als Summe ihrer Kästen: 432,3 px | Inhaltsbereich **588 px** | T-365, im Bau gemessen |
+| **81,7 %** | **alles, was nicht Laufbereich ist**: 588 − 107,7 = **480,3 px** — also dieselben Leisten **plus** die Anschläge von `.screen` (24 px oben, ebensoviel unten) und die Zwischenräume | Inhaltsbereich **588 px** | T-372, im Browser direkt gemessen |
+| **86,5 %** | derselbe feste Teil wie in Zeile 1: 432,3 px | **das Budget aus AK-23: 500 px** | gerechnet aus beidem |
+
+**Die dritte Zeile ist die einzige, die etwas entscheidet.** AK-23 zieht seine Grenze in
+absoluten Pixeln und nicht in Anteilen: Inhaltsbereich 588 px, davon 24 px oberer Anschlag, davon
+4 rem Boden für den Laufbereich, **Rest höchstens 500 px für Bildschirmkopf und alle Leisten
+zusammen**. Ein Anteil am Inhaltsbereich mißt diese Auflage gar nicht — er wird nur dann
+aussagekräftig, wenn jemand daneben schreibt, ob die Anschläge im Zähler stehen.
+
+**Deshalb steht keine dieser Prozentzahlen in diesem Papier als tragende Aussage.** Tragend sind
+**432,3 px gegen 500 px** und **108 px gegen 64 px**.
+
+**Die Auflösung der beiden Anteile ist nicht mehr gerechnet, sondern gemessen** — die dritte
+Fassung führte sie als *Verdacht*, weil sie ohne den Bericht von T-372 entstanden war; die
+Kennzeichnung ist mit der vierten Fassung herausgenommen. Belegstelle:
+`.claude/team/reports/T-372-visual-qa.md`, **Befund B-1** — `.screen.todo-screen` **588 px**,
+`.screen__body.table-wrap` **107,7 px**, fester Teil daraus **480,3 px = 81,7 %**, gemessen bei
+960 × 640 im gefüllten Zustand mit stehendem Hinweis. **Der Nenner ist in beiden Messungen
+derselbe** (588 px), und **beide kommen auf denselben Laufbereich** (T-365: 108 px, T-372:
+107,7 px); abweichend ist ausschließlich der **Zähler** für den festen Teil (432,3 px gegen
+480,3 px). Genau das war die Rekonstruktion dieses Papiers, und sie ist damit aus einer zweiten,
+unabhängigen Quelle bestätigt. *Eine Rechnung bleibt nur noch, wohin die 48 px Unterschied im
+einzelnen gehören — Anschläge von `.screen` und Zwischenräume, Kette 24 + 432,3 + 108 + 23,7 = 588,
+auf 0,4 px aufgehend. Auf ihr liegt keine Last.*
+
+**Die Sorge hinter R-3 ist widerlegt, und zwar über den Laufbereich, nicht über den Anteil:** Er
+behält 108 px, wo 64 px genügen müßten. Daß der feste Teil in der vorigen Fassung mit **75,9 %**
+beziffert wurde (T-341), ist kein Gegenbeweis und auch kein Beleg — ob T-341 gegen denselben Nenner
+und mit demselben Zähler gerechnet hat, ist nicht nachgeprüft, und genau diese Sorte Vergleich hat
+in dieser Reihe schon zweimal danebengelegen (15.1). Der sachliche Grund, warum der Hinweis netto
+nichts kostet, bleibt davon unberührt: Die Tabelle gibt an anderer Stelle Höhe frei — eine Zeile
+ist eine Zeile und nicht drei.
+
+R-3 steht in Abschnitt 16 als **widerlegt, nicht gestrichen**: Eine Sorge, die sich als unbegründet
+erweist, war nicht umsonst; sie war die Auflage, die zur Messung geführt hat. Bliebe es bei einem
+Riß, gälte unverändert: Der Hinweis fällt **nicht** weg, sondern eine andere Zeile des festen Teils
+gibt nach, nach der Regel „es weicht zuerst, was schon einmal weicht" (T-323 7.5).
 
 **Was der feste Ort kostet, und das ist der Preis, der wirklich anfällt (N-6).** Der Hinweis liest
 `totalWithDone − page.total` — eine Zahl, die erst mit der Antwort feststeht. Im festen Teil steht
@@ -807,7 +948,7 @@ Der Zustand darf nicht entstehen.
 | Wie erreicht die Tastatur die Tabellenfläche? | Über den Laufbereich, der sie **ist** — ein Halt, benannt „Todos", unmittelbar vor seinem Inhalt, mit sichtbarem Fokusring (R-4, AK-15). Der Name bleibt „Todos", zeichengleich zu heute (`ScreenBody label="Todos"`, gemessen in `tests/e2e/viewport-fit.spec.ts:873`). |
 | Und die Sprungmarke? | „Zum Inhalt springen" führt auf denselben Kasten: `.table-wrap`, der zugleich `.screen__body` ist. Danach bewegt `Bild ab` messbar etwas (AK-14 (a)–(c)), weil dieser Kasten in Z2 selbst läuft. Der zweite Zweig von AK-14 (c) wird hier **nicht** in Anspruch genommen. |
 | Waagerechter Lauf und die rechte Spalte | 5.3 des Schwesterpapiers gilt — **mit einer Berichtigung**, siehe 10.1. |
-| Die Fläche und der Fokus | Siehe 6.2. In P2 trägt die Fläche den Fokus (A-25.9). **Jeder** Ausgang gibt ihn auf den Auslöser zurück — `Escape`, zweites Auslösen, Auslösen außerhalb und seit B-5 auch der **Bildlauf des Laufbereichs** —, und der Laufbereich holt ihn ins Bild (AK-16). Ein Ausgang, der den Fokus verlöre, wäre die Sackgasse, die dieser Fluß nicht kennt. |
+| Die Fläche und der Fokus | Siehe 6.2 und dort die Tabelle der Ausgänge. In P2 trägt die Fläche den Fokus (A-25.9). **Die Zusage ist: kein Ausgang läßt den Fokus ins Leere fallen** — nicht: jeder gibt ihn auf den Auslöser zurück (S-1). Auf den Auslöser zurück gehen `Escape`, das zweite Auslösen, der **Bildlauf des Laufbereichs** (B-5), `Umschalt`+`Tabulator` und ein Auslösen außerhalb auf eine nicht fokussierbare Stelle; der Laufbereich holt ihn dabei ins Bild (AK-16). **Zwei Ausgänge tun es ausdrücklich nicht:** der `Tabulator` aus der Fläche heraus führt auf den **nächsten Halt nach dem Auslöser** — ihn zurückzuziehen wäre eine Tastatursperre (SC 2.1.2) —, und ein Auslösen außerhalb auf ein fokussierbares Element läßt ihn dort, wo der Benutzer ihn hingesetzt hat. Ein Ausgang, der den Fokus **verlöre**, wäre die Sackgasse, die dieser Fluß nicht kennt; einer, der ihn **festhielte**, die Sperre, die er ebensowenig kennt. |
 | Ein Menü schließt, während die Fläche offen ist | Die Fläche und das Zeilenmenü schließen einander aus: Öffnet das Menü, schließt die Fläche. Zwei überlagernde Flächen an derselben Zeile sind ein Schichtstreit ohne Gewinn. |
 | Ein fokussierter Eintrag außerhalb des Sichtfelds | Der Laufbereich zieht nach (AK-16). Bedingung: In keiner Achse, in der Inhalt liegt, ist der Lauf abgeschaltet (R-d). |
 
@@ -940,9 +1081,11 @@ Die erste Fassung hat den Konflikt gefunden und richtig gestellt: A-25.7 zählt 
 Gestaltänderungen **abschließend** auf, und die Todo-Tabelle stand nicht darin. Der Orchestrator
 hat entschieden: **A-25.9 steht seit dem 2026-09-14 in der Spezifikation**, und sie ist am selben
 Tag nach T-366 ein zweites Mal nachgeschärft worden. Die sechs Gestaltänderungen, die diese
-Umstellung verlangt, sind damit alle gedeckt:
+Umstellung verlangt, sind damit alle gedeckt — **und zwei sichtbare Folgen derselben
+Entscheidungen stehen seit der vierten Fassung mit in der Tabelle** (**S-8**), zusammen acht
+Zeilen:
 
-| Gestaltänderung | Deckung |
+| Gestaltänderung — **und ab der vierten Fassung auch jede sichtbare Folge davon** | Deckung |
 |---|---|
 | Die Tabellenform selbst | A-25.9 Satz 1 |
 | Die Spaltenüberschriften | A-25.9 Satz 2 |
@@ -950,6 +1093,8 @@ Umstellung verlangt, sind damit alle gedeckt:
 | **Der Hinweis rückt in den festen Teil** | A-25.9 Satz 3, **nachgeschärft** — er war ungedeckt |
 | **„Weitere laden" wird der Tabellenfuß** | A-25.9 Satz 3, **nachgeschärft** — er war ungedeckt |
 | Der zugängliche Name des Tag-Auslösers | A-25.9 Satz 4 |
+| **Die Zeilenhöhe hängt wieder an den Daten** (R-10: 40 px gegen 76,6 px bei 110 Zeichen) | A-25.9 Satz 1, **als Vorgabefolge der Tabellenform**: Eine Tabellenzelle, die nicht kürzt, bricht um, und eine umbrechende Zelle macht ihre Zeile höher. Die Deckung ruht damit auf der Tabellenform selbst und **nicht** auf einer eigenen Zusage. **Wer das anders sieht, braucht einen Halbsatz in A-25.9** — das entscheidet der Orchestrator, nicht dieses Papier (T-376, offene Frage 2). Gegenprobe, die den Fall eng hält: In den sieben übrigen Spalten wächst die Höhe nicht (TT-32) |
+| **Die drei Wegnahmen** aus §12 Nr. 11–13 („Call" vor der Nummer, `+n`, die drei sichtbaren Tag-Namen) | **Kein Wegfall im Sinne von A-25.7, sondern Verlegungen** — Nr. 11 in den Spaltenkopf, Nr. 12 in die Zahl der Tag-Zelle (5.2), Nr. 13 in die Fläche, dort mit vollem Pfad (5.4). Die Deckung ruht auf den Zielen, die A-25.9 Satz 2 und Satz 3 benennen; kein Text verschwindet aus der Ansicht. Gemessen: null Prüffälle hängen an einem der drei Wortlaute (12.3) |
 
 **Die Lehre daraus ist größer als die drei Halbsätze, und sie gehört hierher und nicht in eine
 Fußnote.** A-25.9 wurde geschrieben, um genau diese Deckungslücke zu schließen — und schloß sie
@@ -959,6 +1104,13 @@ wird, ist wieder eine abschließende Aufzählung mit einer Lücke. **Wer eine De
 spannt seine Menge an der Änderung auf, nicht an den drei Änderungen, die ihm einfallen** — das
 ist dieselbe Regel, die E-099 Punkt 3 für Wächter aufgestellt hat, angewandt auf einen
 Anforderungssatz.
+
+**Und dieselbe Lehre traf danach diese Tabelle selbst, eine Ebene kleiner (S-8).** Sie stand mit
+**sechs** Zeilen da — den sechs Gestaltänderungen, die die Nachschärfung von A-25.9 gebracht hat —
+und ließ zwei sichtbare Folgen aus, die aus denselben Entscheidungen stammen: die wechselnde
+Zeilenhöhe und die drei Wegnahmen. Beide waren im Fließtext begründet (§4, §12), aber nicht dort,
+wo jemand die Deckung abhakt. **Die Menge war wieder an den Zusätzen aufgespannt statt an der
+Änderung** — und diesmal von dem Papier, das die Regel aufgeschrieben hat.
 
 ### 12.2 „Die übrigen" — derselbe falsche Vorgriff stand an drei Stellen (B-8)
 
@@ -1086,10 +1238,16 @@ Gemessen wird im Standardfenster 1280 × 820, an der getragenen Untergrenze 960 
 bei 1024 × 640 und 1440 × 900, und im Rückfallgebiet bei 831 × 640 und 640 × 480. Die Zusagen des
 Schwesterpapiers (AK-01 bis AK-25) gelten unverändert weiter; hier stehen nur die zusätzlichen.
 
-**Stand nach T-366 und T-365.** **TT-07 und TT-08 sind gestrichen** (B-1) — sie messen eine
-Entscheidung, die es nicht mehr gibt, und TT-08 wäre bei jedem denkbaren Bau rot. An ihre Stelle
-treten **TT-31** und **TT-32**. **TT-04** steht auf **1280** statt auf 960 (B-2). **TT-18** ist
-umgeschrieben (B-5), **TT-03** und **TT-30** sind geschärft, **TT-33** und **TT-34** sind neu. Wo
+**Stand nach T-366, T-365, T-376 und T-372.** **TT-07 und TT-08 sind gestrichen** (B-1) — sie
+messen eine Entscheidung, die es nicht mehr gibt, und TT-08 wäre bei jedem denkbaren Bau rot. An
+ihre Stelle treten **TT-31** und **TT-32**. **TT-04** steht auf **1280** statt auf 960 (B-2).
+**TT-18** ist umgeschrieben (B-5), **TT-03** und **TT-30** sind geschärft, **TT-33** und **TT-34**
+sind neu. **In der dritten Fassung kommen TT-35 (S-1, der Tabulatorausgang) und TT-36 (N-2/OF-7,
+die zeichengleiche Rücknahme) dazu, und TT-24 mißt in absoluten Pixeln statt in einem Anteil.**
+**Die vierte Fassung fügt keine Nummer hinzu und ändert keine:** TT-36 trägt nur nach, daß es auch
+unter der inzwischen getroffenen Antwort auf N-2 gilt („keine **neu erfundene** Unterscheidung",
+Schwesterpapier 8.1b) und daß es mit **A17** dort **eine** Zusage an zwei Adressen ist; TT-24 nennt
+die zweite Messung. Wo
 T-365 eine Zusage bereits gefahren hat, steht das dabei; **das entbindet den e2e-tester nicht** —
 eine Messung im Bau ist kein Prüfbestand (E-117), und die Sondierung, mit der sie entstand, ist
 gelöscht.
@@ -1152,6 +1310,16 @@ gelöscht.
   Entscheidung nicht (A14 des Schwesterpapiers war in beide Richtungen grün).
 - **TT-19** Reicht die Höhe nicht, läuft die Fläche in sich, und dieser Lauf ist mit `Bild ab`
   bedienbar, nachdem die Fläche über die Tastatur geöffnet wurde.
+- **TT-35** *(neu, S-1 — und es ist die Gegenprobe gegen eine Tastatursperre)* **Der Ausgang mit
+  dem Tabulator gibt den Fokus *nicht* auf den Auslöser zurück.** Fläche über die Tastatur
+  geöffnet, dann `Tabulator`: Die Fläche schließt, und der Fokus steht auf dem **nächsten Halt
+  nach dem Auslöser** — in dieser Zeile dem Timerknopf (Sp. 8), nicht auf dem Tag-Auslöser.
+  **Gegenprobe in beide Richtungen, beide sind einzeln zu messen:** (a) `Umschalt`+`Tabulator` aus
+  der Fläche heraus setzt den Fokus **auf** den Auslöser; (b) `Escape` aus derselben Lage ebenso.
+  Eine Abfrage, die für (a), (b) und den Tabulator dasselbe Ziel erwartet, mißt genau den Fehler,
+  den S-1 gefunden hat. **Und die eigentliche Zusage dahinter:** Von der geöffneten Fläche aus
+  erreicht eine Folge von `Tabulator`-Anschlägen das Ende der Ansicht — es gibt keine Stelle, an
+  der der Fokus zurückspringt (SC 2.1.2).
 - **TT-34** *(neu, B-5)* **Der innere Lauf der Fläche schließt sie nicht.** Gegenprobe zu TT-18:
   `scrollTop` **in** der Fläche ändern ⇒ sie bleibt; `scrollTop` **im Laufbereich** ändern ⇒ sie
   schließt. Und: Ein Auslöser, der beim Anklicken erst ins Bild gerollt wird, läßt die Fläche
@@ -1169,11 +1337,19 @@ gelöscht.
 - **TT-23** Der Hinweis auf ausgeblendete erledigte Todos steht im festen Teil, unmittelbar über
   der Tabelle, an derselben Bildschirmstelle wie heute (± 4 px bei Bildlaufstelle 0), und er bleibt
   beim Scrollen stehen. Sein Wortlaut und der Knopf „Einblenden" sind zeichengleich.
-- **TT-24** **AK-23 des Schwesterpapiers wird bei 960 × 640 mit stehendem Hinweis neu gemessen.**
-  Ergibt sich ein Überlauf, ist das ein Befund an dieser Aufgabe und nicht der Rückfall (R-3a,
-  E-115). **Gefahren (T-365): 432,3 px von 588 px = 73,5 %, Laufbereich 108 px gegen einen Boden
-  von 64 px, `.app__main` 588/588, Dokument 640/640 — kein Befund.** Der Wert liegt unter den
-  75,9 %, die T-341 für die vorige Fassung gemessen hat.
+- **TT-24** **AK-23 wird bei 960 × 640 mit stehendem Hinweis neu gemessen — in absoluten Pixeln,
+  nicht in Anteilen.** Zwei Zahlen, beide aus AK-23: der feste Teil (Bildschirmkopf und alle
+  Leisten zusammen) **höchstens 500 px**, der Laufbereich **mindestens 64 px**. Ergibt sich ein
+  Überlauf, ist das ein Befund an dieser Aufgabe und nicht der Rückfall (R-3a, E-115).
+  **Gefahren (T-365): fester Teil 432,3 px, Laufbereich 108 px, `.app__main` 588/588, Dokument
+  640/640 — kein Befund;** T-372 hat im Browser direkt nachgemessen (B-1 seines Berichts) und kommt
+  auf **denselben Nenner (588 px)** und **denselben Laufbereich (107,7 px)**; sein Zähler für den
+  festen Teil (**480,3 px**) zählt die Anschläge von `.screen` mit, die AK-23 bereits getrennt
+  abzieht — er ist deshalb **nicht** die Zahl, die gegen die 500 px zu halten ist. **Zu messen sind
+  die beiden Zahlen dieses Kriteriums**, und die belastbarste Gegenprobe ist der Laufbereich:
+  **107,7 px gegen einen Boden von 64 px**, in zwei unabhängigen Messungen gleich. **Wer hier eine
+  Prozentzahl notiert, schreibt ihren Nenner daneben** — 73,5 % und 81,7 % sind beide im Umlauf,
+  beide richtig und zählen Verschiedenes (8.1).
 - **TT-25** „Weitere laden (n übrig)" steht als Fußzeile innerhalb der Tabelle, läuft mit und
   trägt den zeichengleichen Text.
 - **TT-26** Ein Timerstart auf einer erledigten Zeile: Kästchen leer, `DoneFlag` auf „Erledigt
@@ -1192,14 +1368,37 @@ gelöscht.
   späteren.
 - **TT-33** *(neu, N-4)* Die erste Zelle jeder Zeile trägt **keine** sichtbare Randmarkierung, in
   keinem der sechs Zeilenzustände aus 9.3 und in keiner der sieben Paletten. `--running` ist das
-  einzige Merkmal der ganzen Zeile.
+  einzige Merkmal der ganzen Zeile. *(Dies ist zugleich die Antwort auf F-8 des Schwesterpapiers.)*
+- **TT-36** *(N-2/OF-7 — die Bedingung, unter der eine Antwort auf N-2 **ohne neu erfundene
+  Gestalt** zulässig ist; dieselbe Zusage wie **A17** des Schwesterpapiers)* **Die Rücknahme
+  bleibt zeichengleich, und sie hängt an der Tabelle wie heute an der Liste.**
+  Ein Klick auf das Kästchen einer offenen Zeile **in der Tabelle** zeigt die Meldung
+  „„X" ist erledigt." mit der Handlung **„Rückgängig"**; ein Klick darauf stellt das Todo wieder
+  her und meldet „„X" ist wieder offen." — dieselben Wortlaute wie heute aus der Liste, ohne
+  Zwischenschritt und ohne Bestätigungsdialog. **Gegenprobe am Bestand:** Es gibt genau **eine**
+  Fassung dieses Rückwegs (`undoDone.ts`, `undoDoneAction`); die Tabelle ruft sie auf, statt sie
+  abzuschreiben. **Warum das hier eine Meßlatte und keine Prosa ist:** 3.2 läßt „keine sichtbare
+  Unterscheidung" als Antwort auf N-2 ausdrücklich zu — aber **nur** unter dieser Bedingung. Fiele
+  sie weg, wären eine Spalte, die einen Zustand mit einem Klick ändert, und eine fehlende
+  Rücknahme zusammen eine Sackgasse. Wer OF-7 mit „keine" beantwortet, hat damit TT-36 zugesagt —
+  **und wer ihn mit „keine *neu erfundene*" beantwortet, ebenso.** N-2 ist inzwischen entschieden,
+  und die Antwort ist eine **dritte**: Die sichtbare Unterscheidung fehlt gar nicht, sie ist der
+  **Wortkopf** über Spalte 1 (Schwesterpapier 8.1b — über einer Auswahlspalte steht in diesem
+  Bestand kein Wort, über dieser eines, und der Kopf klebt). **Das entlastet TT-36 nicht, sondern
+  begründet es:** Die vorhandene Unterscheidung steht **über** der Spalte und nicht **in** der
+  Zeile; wer nur auf eine Zeile sieht, ist genau in der Lage, für die diese Meßlatte geschrieben
+  ist. Sie gilt unter der dritten Antwort damit genauso wie unter der zweiten, für die sie
+  geschrieben wurde. **Dieselbe Zusage mißt das Schwesterpapier als
+  A17** (dort 9.3) — **eine** Zusage an zwei Adressen, und keine der beiden ersetzt die andere:
+  A17 steht im Meßsatz der Tabellengestalt, TT-36 im Meßsatz des Flusses.
 
 ---
 
-## 15. Übergabe an ui-designer (T-362) — **drei der vier Fragen sind beantwortet**
+## 15. Übergabe an ui-designer (T-362) — **alle vier Fragen sind beantwortet**
 
-Offen, ausdrücklich nicht hier entschieden — die Liste aus der Abgrenzung, dazu vier Fragen, die
-ich gestellt statt beantwortet habe. Ihr Stand nach T-366 und T-365:
+Ausdrücklich nicht hier entschieden — die Liste aus der Abgrenzung, dazu vier Fragen, die ich
+gestellt statt beantwortet habe. Ihr Stand nach T-366, T-365 und der Entscheidung zum Ladeskelett
+(Schwesterpapier 8.1a): **keine dieser vier ist noch offen.**
 
 ### 15.1 Die Spaltensumme — beantwortet, und die Lehre ist teurer als die Zahl
 
@@ -1262,14 +1461,30 @@ Laufbereich ist bei 960 nur 662 px breit und **wandert beim waagerechten Rollen 
 der `tfoot` mit `colspan=8` ist 958,5 px breit und steht über der ganzen Tabelle. **8.2 dieses
 Papiers ist damit gemessen richtig**, nicht bloß plausibel.
 
-### 15.4 Das Ladeskelett — **bleibt offen**
+### 15.4 Das Ladeskelett — **beantwortet, und der Satz darüber war veraltet (S-3)**
 
-Die vierte Frage ist die einzige, die niemand beantwortet hat: *Wie sieht ein Ladeskelett aus, das
-keine Kopfzeile hat (9.1) und trotzdem nach Tabelle aussieht?* Das Schwesterpapier nennt bisher nur
-`rows={6}` (N-5e). Gebaut ist die Stapelform des Bestands. **Das ist kein Befund an T-365** — es
-ist eine unbeantwortete Gestaltfrage, und sie gehört weiterhin T-362. Dieses Papier hält nur den
-Fluß fest: Z0 zeigt kein Tabellengerüst, das Z3 wieder zurücknähme (9.1), und der Sprung von Z0
-nach Z1 um eine Zeilenhöhe ist von Z7 gedeckt.
+Die vierte Frage lautete: *Wie sieht ein Ladeskelett aus, das keine Kopfzeile hat (9.1) und
+trotzdem nach Tabelle aussieht?* Die dritte Fassung führte sie als „die einzige, die niemand
+beantwortet hat". **Das stimmte schon beim Schreiben nicht mehr**, und es ist die harmlose Hälfte
+desselben Fehlers wie bei F-8: nicht eine Lücke, sondern ein veralteter Satz **über** einer
+Antwort (T-376, S-3).
+
+> **Entschieden im Schwesterpapier 8.1a: Der Ladezustand behält die Stapelform des Bestands.** Kein
+> `TableShell`, kein gezeichnetes Tabellengerüst, `LoadingBlock` mit `rows={6}` im `ScreenBody`.
+
+Die Frage war richtig adressiert — sie ist eine Gestaltfrage — und ist dort beantwortet, nicht
+zurückgereicht. **Sie trifft den Fluß an genau der Stelle, an der er es ohnehin verlangt:** Z0
+zeigt kein Tabellengerüst, das Z3 wieder zurücknähme (9.1); der Sprung von Z0 nach Z1 um eine
+Zeilenhöhe ist von Z7 gedeckt. Die Zustandstabelle in §9 trägt für Z0 dieselbe Form („Skelett
+(`AsyncBoundary`, `rows={6}`)") und bleibt unverändert. **Kein Widerspruch zwischen den Papieren,
+und diese Seite führt die Frage ab sofort nirgends mehr als offen.**
+
+*Zur Vorgeschichte, weil sie zum Befund gehört:* Eine Zwischenfassung des Schwesterpapiers hatte an
+dieser Stelle einen Rahmen an Tabellenstelle zugesagt (`TableShell` im Ladezustand) und
+widersprach damit ihrer eigenen Zustandstabelle und dem Bau (T-376, S-2). Das ist dort berichtigt.
+Dieses Papier hat die Abweichung gemeldet und **nicht** übernommen — richtig so; gebaut ist die
+Stapelform (`TodoListScreen.tsx:479`, `AsyncBoundary.tsx:49-51`), und `TableShell` steht
+ausschließlich im **Leer**zustand.
 
 ---
 
@@ -1279,13 +1494,13 @@ nach Z1 um eine Zeilenhöhe ist von Z7 gedeckt.
 |---|---|---|---|
 | **R-1** | `BookingTable` wird als Vorlage kopiert, samt Auswahlkästchen in der Kopfzelle und `aria-selected` | Die Ansicht behauptet eine Mehrfachauswahl, die keine Aktion verwerten kann. Eine Vorlesehilfe sagt sie an. Dieselbe Klasse wie ein Satz, der eine Handlung nennt, die es nicht gibt (E-100) | 3.2, TT-02 — die schärfste Auflage dieses Papiers |
 | **R-2** | Die Tag-Fläche entsteht innerhalb der Zeile | Sie wird von `.table-wrap` **abgeschnitten**, nicht nur falsch positioniert — und in `lines` und `zen` fällt es zusätzlich anders aus als in klassisch | 6.1, TT-15, TT-16; strukturell über das Portal, nicht über `position: fixed` (E-113, E-116, E-117) |
-| **R-3** | Der Hinweis auf ausgeblendete Erledigte reißt das Höhenbudget | Der Rückfall griffe im getragenen Fenster, und weil er selbsttätig ist, sagte es niemand (R-h) | **Widerlegt, gemessen: 73,5 % bei 960 × 640 mit stehendem Hinweis, kein Befund** (8.1, TT-24). Der Eintrag bleibt stehen, weil er die Messung ausgelöst hat; als Risiko ist er erledigt |
+| **R-3** | Der Hinweis auf ausgeblendete Erledigte reißt das Höhenbudget | Der Rückfall griffe im getragenen Fenster, und weil er selbsttätig ist, sagte es niemand (R-h) | **Widerlegt, gemessen — und die Zahl ist die absolute:** fester Teil **432,3 px gegen die 500 px aus AK-23**, Laufbereich **108 px gegen einen Boden von 64 px**, bei 960 × 640 mit stehendem Hinweis (8.1, TT-24). Der Anteil am Inhaltsbereich mißt diese Auflage nicht; die beiden kursierenden Prozentzahlen (73,5 % T-365, 81,7 % T-372) zählen Verschiedenes und stehen in 8.1 mit ihrem Nenner. **Zweimal unabhängig gemessen** (T-372 B-1: 588 px Nenner, Laufbereich 107,7 px, fester Teil 480,3 px, direkt im Browser) — die Auflösung ist nicht mehr gerechnet. Der Eintrag bleibt stehen, weil er die Messung ausgelöst hat; als Risiko ist er erledigt |
 | **R-4** | „Hover" wird wörtlich gebaut | Tastatur, Berührung und Vorlesehilfe verlieren eine Angabe, die heute dasteht (SC 2.1.1) | 5.3, TT-09, TT-12; der Knopf ist der Weg, Hover die Zugabe |
 | **R-5** | Die Zahl wird aus den **aufgelösten** Marken gebildet | Ein Fehler im `StructureContext` macht aus elf Tags eine leere Zelle, still | 5.2, TT-10 — die Zahl kommt aus `todo.tagIds` |
 | **R-6** | Der Exportstand hängt in derselben `Promise.all` wie die Liste | Fällt `loadExportSummaries` aus, fällt die ganze Todo-Liste in Z4 — obwohl nur Spalte 7 betroffen wäre | **Bestand, von T-361 nicht geändert.** Benannt, damit es nicht als Nebenwirkung dieses Umbaus gelesen wird. Eine Behebung wäre ein eigener Auftrag |
 | **R-7** | **Vier** Wortlaute stehen künftig zweimal in derselben Ansicht — „Status", „Tags", „Frist", „Erledigt" (N-10, nicht zwei) | Vorbestehende Prüffälle werden im strikten Modus vieldeutig und fallen um, ohne daß sie jemand angefaßt hat (R-g, T-315/T-316) | **Gemessen, nicht eingetreten: null Abfragen werden vieldeutig, 45 Prüffälle aus elf Dateien grün** (12.3). Daß es gutging, liegt daran, daß der Bestand `columnheader` nirgends abfragt — die Auflage bleibt |
 | **R-8** | Die Kopfzeile wird als „kein neuer Text" durchgewinkt | A-25.7 ist abschließend aufgezählt; ein ungedeckter Bau ist derselbe Fehler wie ein ungedeckter Satz | **Geschlossen:** A-25.9 steht seit dem 2026-09-14 und deckt nach der Nachschärfung alle sechs Gestaltänderungen (12.1). OF-1 ist damit erledigt |
-| **R-10** | Der umbrechende Titel macht die Zeilenhöhe wieder von den Daten abhängig | Bei sehr langen Titeln ist die Tabelle schlechter zu überfliegen als eine mit gleicher Zeilenhöhe — 76,6 px gegen 40 px bei 110 Zeichen, gemessen | **Bewußt in Kauf genommen** (B-1, §4). Der Preis ist die Gegenseite der Zusage, daß nichts verborgen wird; die sieben übrigen Spalten halten ihre 40 px (TT-32). Eine Frage an visual-qa, wie eine Liste mit mehreren langen Titeln aussieht |
+| **R-10** | Der umbrechende Titel macht die Zeilenhöhe wieder von den Daten abhängig | Bei sehr langen Titeln ist die Tabelle schlechter zu überfliegen als eine mit gleicher Zeilenhöhe — 76,6 px gegen 40 px bei 110 Zeichen, gemessen | **Bewußt in Kauf genommen** (B-1, §4), und **am Bild angesehen: T-372 hat den langen Titel ohne Leerstelle geprüft und keinen blockierenden Befund gemeldet.** Der Eintrag bleibt trotzdem stehen — der Augenschein galt dem heutigen Datenbestand, nicht jedem künftigen. Der Preis ist die Gegenseite der Zusage, daß nichts verborgen wird; die sieben übrigen Spalten halten ihre 40 px (TT-32) |
 | **R-11** | Der Hinweis auf ausgeblendete Erledigte fehlt in Z0 und Z4 | Im allerersten Lauf einer Sitzung erscheint er verzögert; bei einem Ladefehler steht er gar nicht | **Folge der Entscheidung zu N-6, zweiter Weg** (8.1). Ein Erscheinen ist die weniger schädliche Richtung; die Gegenrichtung hätte im Ladezustand die Zahl des vorigen Laufs gezeigt, und eine still veraltete Zahl ist schlechter als keine |
 | **R-9** | Ein Halt mehr je Zeile bei 100 Zeilen | Der Tabulatorweg durch die Liste wird um bis zu 100 Schritte länger | Bewußt in Kauf genommen (10), und der Halt entsteht nur an Zeilen mit Tags. Der Gewinn ist eine Angabe, die ohne Maus sonst gar nicht erreichbar wäre. Wer die Liste überspringen will, benutzt weiterhin die Sprungmarke und die Filterleiste |
 
@@ -1300,6 +1515,21 @@ benutzen und darf den Pfad nicht selbst zusammensetzen.** Ein `path.join(" / ")`
 ---
 
 ## 17. Offene Fragen
+
+**Zwei Vorbemerkungen, damit diese Liste nicht länger aussieht, als sie ist.**
+
+**F-8 des Schwesterpapiers ist hier beantwortet** und steht deshalb in dieser Liste nicht: Die
+erste Zelle trägt keine Randmarkierung, in keinem Zeilenzustand (3.5, 9.3), Meßlatte **TT-33**.
+T-376 hat festgestellt, daß jedes der beiden Papiere noch eine Frage als offen führt, die das
+andere längst beantwortet hat; das ist die hiesige Hälfte, und sie ist geschlossen.
+
+**Die drei Befunde aus T-376 — S-3, S-4 und S-8 — sind in der vierten Fassung eingearbeitet**
+(0.2). Sie waren nie offene *Fragen* dieses Papiers, sondern offene *Nacharbeit* an ihm, und sie
+lagen nur so lange offen, wie der Bericht fehlte, der ihren Wortlaut trug. **S-3 hatte hier zwei
+Hälften, und beide sind zu:** F-8 ist die Frage des Schwesterpapiers, die dieses beantwortet
+(3.5, 9.3, TT-33); das **Ladeskelett** ist die Frage dieses Papiers, die das Schwesterpapier
+beantwortet (8.1a dort, 15.4 hier). Kein Papier führt mehr eine Frage als offen, die das andere
+entschieden hat.
 
 - **OF-1 — A-25.7 deckt die Kopfzeile nicht.** **Geschlossen am 2026-09-14.** Der Orchestrator hat
   A-25.9 in die Spezifikation genommen und sie nach T-366 ein zweites Mal nachgeschärft; alle sechs
@@ -1324,11 +1554,17 @@ benutzen und darf den Pfad nicht selbst zusammensetzen.** Ein `path.join(" / ")`
   sind der Deckel für die Spaltenbreite (5.2). Ob es Todos mit mehr als 999 Tags geben kann, ist
   eine Frage an die Fachlogik und nicht an dieses Papier; bis dahin ist die Spalte auf drei Ziffern
   ausgelegt.
-- **OF-7 — Sieht das Erledigt-Kästchen in Spalte 1 aus wie eine Auswahl? (N-2, neu in dieser
-  Fassung.)** Offene Frage von T-365 an visual-qa und ui-designer. **Dieses Papier nimmt die
-  Antwort nicht vorweg.** Es nennt in 3.2 die vier Bedingungen, die jede zulässige Antwort erfüllen
-  muß — kein neuer sichtbarer Text, nicht Farbe allein, wirksam im **leeren** Zustand, verträglich
-  mit kompakter Dichte und 24 × 24 px —, und es sagt, was gilt, wenn keine Gestalt alle vier
-  erfüllt: Dann ist „keine sichtbare Unterscheidung" die richtige Antwort, und die **Rücknahme**
-  trägt das Risiko. Die muß dafür zeichengleich bleiben (`undoDone.ts`, Toast). Das ist die
-  Bedingung, unter der ich die Antwort „keine" mittrage.
+- **OF-7 — Sieht das Erledigt-Kästchen in Spalte 1 aus wie eine Auswahl? (N-2.)**
+  **Beantwortet am 2026-09-14, im Schwesterpapier (8.1b) und von dort aus.** Die Antwort ist
+  **keine neu erfundene Gestalt**: Die sichtbare Unterscheidung ist der **Wortkopf** „Erledigt"
+  über Spalte 1 — vorhanden, von A-25.9 gedeckt, und weil der Kopf klebt, in jeder
+  Bildlaufstellung da. **Dieses Papier hat die Antwort nicht vorweggenommen und trifft die
+  Entscheidung auch jetzt nicht**; es hat in 3.2 die vier Bedingungen genannt, die jede zulässige
+  Antwort erfüllen muß — kein neuer sichtbarer Text, nicht Farbe allein, wirksam im **leeren**
+  Zustand, verträglich mit kompakter Dichte und 24 × 24 px. Der Wortkopf erfüllt alle vier.
+  **Die Folge für diesen Fluß, und sie ist der ganze Eintrag:** Die Bedingung aus 3.2 fällt
+  **nicht** mit der dritten Antwort weg. Sie war an „keine sichtbare Unterscheidung" geknüpft, weil
+  das der Fall war, den ich vor Augen hatte; sie gilt unter „keine neu erfundene" genauso, denn die
+  vorhandene Unterscheidung steht **über** der Spalte, und der Fehlklick geschieht **in** der Zeile.
+  **Meßlatte bleibt TT-36**, im Schwesterpapier **A17** — eine Zusage an zwei Adressen. Eine
+  Bedingung, die ein e2e-Auftrag nicht findet, ist im nächsten Durchgang keine.

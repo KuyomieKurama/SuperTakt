@@ -38,8 +38,8 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../context.ts';
 import { loadBoard } from './board.ts';
-import { data } from '../../http/problem.ts';
-import { readFlag, readPagination } from '../../http/input.ts';
+import { data, failValidation } from '../../http/problem.ts';
+import { commaSeparatedIds, toFieldErrors, readFlag, readPagination } from '../../http/input.ts';
 import type { TaktEnv } from '../../http/guards.ts';
 
 export function createBoardRoutes(context: AppContext): Hono<TaktEnv> {
@@ -56,11 +56,16 @@ export function createBoardRoutes(context: AppContext): Hono<TaktEnv> {
    * dieselbe Spalte hier mitgegeben hat.
    */
   board.get('/', async (c) => {
+    const priorityIds = commaSeparatedIds.optional().safeParse(c.req.query("priorityId"));
+    if (!priorityIds.success) return failValidation(c, toFieldErrors(priorityIds.error));
     const pagination = readPagination(c.req.query());
     return data(
       c,
       await loadBoard(context, {
         includeCompleted: readFlag(c.req.query('includeCompleted')),
+        ...(priorityIds.data ? { priorityIds: priorityIds.data } : {}),
+        withoutPriority: readFlag(c.req.query("withoutPriority")),
+        sortByPriority: readFlag(c.req.query("sortByPriority")),
         ...(pagination.limit === undefined ? {} : { limit: pagination.limit }),
       }),
     );

@@ -1,3 +1,4 @@
+import { waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis, dass eine Regel der Datenbank nie als 500 beim Benutzer
  * ankommt (T-074).
@@ -70,7 +71,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
-import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
 import { dienstEinstieg, migrationsVerzeichnis } from './source-resolve.mjs';
@@ -117,29 +117,7 @@ function section(title) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function portFree(port) {
-  return new Promise((done) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    socket.once('connect', () => {
-      socket.destroy();
-      done(false);
-    });
-    socket.once('error', () => done(true));
-    setTimeout(() => {
-      socket.destroy();
-      done(true);
-    }, 500).unref();
-  });
-}
 
-async function waitForPortFree(port, timeoutMs = 5000) {
-  const until = Date.now() + timeoutMs;
-  do {
-    if (await portFree(port)) return true;
-    await sleep(150);
-  } while (Date.now() < until);
-  return false;
-}
 
 function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
   return new Promise((resolve) => {
@@ -177,9 +155,7 @@ function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
   });
 }
 
-// ===========================================================================
 section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
-// ===========================================================================
 //
 // Die Datenbank wird vollständig migriert; die Liste der Indizes kommt aus ihr
 // und nicht aus einer gepflegten Aufzählung in diesem Skript.
@@ -371,12 +347,10 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
     );
   }
 
-  // -------------------------------------------------------------------------
   // Bestand, gegen den die Verletzungen ausgelöst werden.
   //
   // Absichtlich am Adapter vorbei und mit festen Kennungen: Dieser Abschnitt
   // misst das Schema und die Übersetzung, nicht den Weg dorthin.
-  // -------------------------------------------------------------------------
   const T = '2026-01-01T00:00:00Z';
   const run = (sql, ...params) => db.prepare(sql).run(...params);
 
@@ -500,6 +474,17 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
       translated.message,
     );
   }
+
+  run(
+    'INSERT INTO todo_priority (id, name, weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    'priority-original', 'High', 10, T, T,
+  );
+  provoke('ux_todo_priority_name', 'name_conflict', () =>
+    run(
+      'INSERT INTO todo_priority (id, name, weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      'priority-duplicate', 'HIGH', 20, T, T,
+    ),
+  );
 
   provoke('ux_todo_status_name', 'name_conflict', () =>
     run(
@@ -653,9 +638,7 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
   db.close();
 }
 
-// ===========================================================================
 // Der Dienst
-// ===========================================================================
 
 if (!(await waitForPortFree(PORT))) {
   console.error(
@@ -740,9 +723,7 @@ try {
   check('der Dienst kommt hoch', up, stderr.slice(-400));
   if (!up) throw new Error('Dienst nicht erreichbar');
 
-  // -------------------------------------------------------------------------
   section('2  Der Dienst antwortet auf jede Verletzung mit 4xx');
-  // -------------------------------------------------------------------------
 
   const created = await post('/pools', { name: 'Kunden Nord' });
   check('eine Regel lässt sich anlegen', created.status === 201, JSON.stringify(created.body));
@@ -842,9 +823,7 @@ try {
     'name_conflict',
   );
 
-  // -------------------------------------------------------------------------
   section('3  Eine abgewiesene Anlage hinterlässt nichts');
-  // -------------------------------------------------------------------------
 
   const before = (await get('/pools?placement=all')).body?.data ?? [];
   await post('/pools', { name: 'Kunden Nord' });
@@ -873,9 +852,7 @@ try {
     JSON.stringify(after.map((pool) => [pool.name, pool.rule?.length])),
   );
 
-  // -------------------------------------------------------------------------
   section('4  „Derselbe Name“ heißt bei einer Regel dasselbe wie bei einem Tag');
-  // -------------------------------------------------------------------------
   //
   // Dieselben Paare, die `proof:tags` für Tags misst — hier über `POST /pools`.
   // Der eindeutige Index allein könnte das nicht: `COLLATE NOCASE` kennt kein Ä.
@@ -918,9 +895,7 @@ try {
     'name_conflict',
   );
 
-  // -------------------------------------------------------------------------
   section('5  Der Standard-Status ist auch ohne die Oberfläche geschützt');
-  // -------------------------------------------------------------------------
   //
   // Befund aus T-073: `apps/web` sperrte das Löschen des Standard-Status, der
   // Dienst ließ es durch, und `defaultStatus()` fiel danach **still** auf den
@@ -984,9 +959,7 @@ try {
     `${String(harmless.status)} ${JSON.stringify(harmless.body)}`,
   );
 
-  // -------------------------------------------------------------------------
   section('6  Ein Status, der in einer Regel steht, wird nicht weggelöscht (T-076)');
-  // -------------------------------------------------------------------------
   //
   // Seit T-076 kann eine Regel nach dem Status filtern. `pool_rule.status_id`
   // steht deshalb auf ON DELETE **RESTRICT** — anders als `tag_id`, das

@@ -1,118 +1,5 @@
-/**
- * Takt — der ausführbare Nachweis darüber, daß **am Zeilenende nichts gekürzt
- * wird** (T-302; A-19.23b, Auflage A-A-93, R-27).
- *
- * ===========================================================================
- * Die Frage, die R-27 offen hält
- * ===========================================================================
- *
- * R-27 heißt „Die Kürzung, die kein Wächter sieht", und der Eintrag endet mit
- * einer Frage statt mit einer Maßnahme:
- *
- *   > **Wie mißt man eine Zusage über die Darstellung?** Die zweite Bauart
- *   > desselben Fehlers, das Richtungszeichen, ist als Zeichen zu fangen. Die
- *   > Kürzung ist es nicht.
- *
- * Der Befund darunter ist der schwerste, den dieser Bestand über seine
- * Oberfläche hat: Die Rückfrage vor dem Öffnen einer Datei nennt den vollen
- * Pfad, und das ist seit A-19.18 die eine Sicherung zwischen einem fremden
- * Anhang und der Standardanwendung. Ein Deckel in der Darstellung nimmt ihr die
- * **Endung** — der Benutzer bestätigt `Rechnung…` und startet eine `.exe`.
- *
- * Und niemand sieht es:
- *
- *  - `visibleText` sieht es nicht. Es **behandelt** Zeichen; hier ist kein
- *    Zeichen falsch.
- *  - `proof:foreign` sieht es nicht. Es erkennt Anzeigestellen an ihrem
- *    **Typ**; ein CSS-Deckel hat keinen Typ.
- *  - `proof:surface` und `proof:locked` sehen es nicht. Sie messen **Text**;
- *    der Text ist in Ordnung.
- *  - Ein Prüffall in jsdom sieht es nicht. jsdom rechnet kein Layout: `.truncate`
- *    ändert dort weder `textContent` noch `scrollWidth`.
- *
- * ===========================================================================
- * Die Antwort dieses Laufs: zwei Mengen rechnen und ihren Schnitt messen
- * ===========================================================================
- *
- * Der Deckel hat keinen Typ — aber er hat einen **Namen**, und die Stelle, an
- * der er wirkt, hat einen. Daraus werden zwei Mengen, und beide entstehen bei
- * jedem Lauf neu, statt in einer Liste zu stehen:
- *
- *  **Menge D — die Deckel.** Gelesen aus den Stilblättern selbst. Jede Regel,
- *  die `text-overflow`, `-webkit-line-clamp`, `white-space: nowrap` oder
- *  `overflow: hidden` erklärt, ist ein Deckel; ihre Klassennamen sind die
- *  Menge. Niemand schreibt „truncate" in diesen Lauf. Wer morgen
- *  `.name-kurz { text-overflow: ellipsis }` erfindet, hat sie erweitert, ohne
- *  eine Zeile hier anzufassen.
- *
- *  **Menge A — die Anzeigestellen.** Gerechnet aus dem **Typ**. `UncappedText`
- *  (in `src/api/types.ts`) markiert jeden Wert, an dessen **Ende** eine
- *  Entscheidung hängt: der Dateiname, der aufgelöste Name, die Endung, der
- *  Anzeigename aus der E-Mail, der volle Pfad. Der Übersetzer führt die Marke
- *  durch Zuweisungen, Felder, Parameter und Rückgaben mit — genau die Bauart,
- *  mit der `proof:foreign` seit T-129 der abgeschriebenen Feldliste entkommen
- *  ist (E-063 Punkt 4). Gefunden wird jedes JSX-Element, das einen solchen Wert
- *  aufnimmt, **jedes Elternelement in derselben Datei** und — über einen
- *  Fixpunkt — **jede Aufrufstelle jedes Bausteins**, der einen solchen Wert
- *  anzeigt. Damit reicht die Messung über Dateigrenzen: Wer `<Attachments>` in
- *  eine Spalte mit `truncate` stellt, wird rot, obwohl in seiner Datei kein
- *  fremder Name vorkommt.
- *
- * **Der Schnitt beider Mengen muß leer sein.** Das ist der ganze Lauf.
- *
- * ===========================================================================
- * Warum das mehr ist als eine Mustersuche
- * ===========================================================================
- *
- * Die Messung, die A-A-93 vorschlägt, ist eine Suche nach `text-overflow` „in
- * Nachbarschaft der Anhangsanzeigen". „Nachbarschaft" ist dabei das Wort, an
- * dem sie zerbricht: Sie braucht eine Liste der Anhangsanzeigen, und diese
- * Liste ist abgeschrieben, sobald sie existiert. Ein neuer Baustein, der einen
- * Anhangsnamen zeigt, steht nicht darin — und der Lauf meldet grün, weil er
- * die Datei nicht kennt.
- *
- * Hier ist keine der beiden Mengen aufgezählt. Die eine steht im Stilblatt, die
- * andere im Typsystem, und beide sind an derselben Anforderung aufgespannt und
- * nicht an dem, was der Schreibende gerade kannte (E-099 Punkt 3).
- *
- * ===========================================================================
- * Was dieser Lauf **nicht** kann — ausgesprochen, nicht beruhigt
- * ===========================================================================
- *
- *  - **Er mißt Quelltext, keine Pixel.** Daß ein 200 Zeichen langer Name im
- *    ausgelieferten Bündel tatsächlich umbricht und seine Endung zeigt, mißt
- *    nur ein Browser. Das gehört dem e2e-tester; A-A-93 verlangt diesen
- *    Prüffall ausdrücklich, und dieser Lauf ersetzt ihn nicht. Er schließt die
- *    **Ursache** aus, jener mißt die **Wirkung**.
- *  - **Er sieht keine Stile von außerhalb dieses Bestands.** Käme eines Tages
- *    ein fremdes Stilblatt dazu, stünde seine Deckelmenge nicht in Menge D.
- *    Heute gibt es keines: `proof:surface` mißt die Stilblätter der beiden
- *    Einstiegsseiten zeichengleich.
- *  - **Er sieht keinen Stil, der zur Laufzeit entsteht.** Ein `style`-Attribut
- *    mit deckelnden Eigenschaften findet Abschnitt 2; ein zur Laufzeit
- *    zusammengesetzter Klassenname wird gemeldet, statt geraten (Abschnitt 2,
- *    „unlesbare Klassenangabe").
- *  - **Er urteilt nicht über die Kürzung in der Mitte.** Die ist erlaubt
- *    (A-A-93 wörtlich) und findet im Dienst statt, nicht hier.
- *
- * ===========================================================================
- * Wo dieser Lauf hängt — an genau einem Namen
- * ===========================================================================
- *
- * `pnpm --filter @takt/web proof:clamp`, und als **eigenes Glied** in
- * `proof:all` der Wurzel-`package.json`. Seit T-302 sind es dort
- * zweiundzwanzig Läufe statt einundzwanzig.
- *
- * **Er hängt an keinem zweiten Namen, und das ist eine Regel und keine
- * Ordnungsfrage.** Bis zur Freigabe von T-302 lief er behelfsweise als zweites
- * Glied von `proof:surface`, damit die Zusage überhaupt im Tor stand. Der
- * Behelf ist zurückgenommen: Ein Lauf, der zweimal fährt, schreibt seine
- * Bilanzzeile zweimal — und in einer Ausgabe, in der Zeilen gezählt werden,
- * ist eine doppelte Bilanz schlimmer als ein fehlender Lauf. Wer ihn wieder
- * irgendwo anhängt, hängt seine Zahlen mit an.
- *
- * Aufruf: `node apps/web/scripts/proof-clamp.mjs`
- */
+/** Prüft, ob CSS-Begrenzungen `UncappedText` oder dessen Container betreffen. Dateiendungen müssen sichtbar bleiben.
+ * Die Analyse ersetzt keine Layoutprüfung im Browser und erfasst keine externen oder erst zur Laufzeit erzeugten Stile. */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -132,9 +19,7 @@ const styleRoot = requireDirectory(
   "die Stilblätter, aus denen die Menge der Deckel entsteht",
 );
 
-/* ==================================================================== */
 /* 0  Werkzeug                                                          */
-/* ==================================================================== */
 
 /*
  * Pfade in der Schreibweise des Übersetzers — dieselbe Regel und derselbe
@@ -175,9 +60,7 @@ const where = (node) => {
   return `${displayPath(file.fileName)}:${line + 1}:${character + 1}`;
 };
 
-/* ==================================================================== */
 /* 1  Menge D — die Deckel entstehen aus den Stilblättern                */
-/* ==================================================================== */
 
 /**
  * Die Eigenschaften, die am **Zeilenende** abschneiden.
@@ -370,9 +253,7 @@ check("`truncate` ist als Deckel erkannt — die Gegenprobe an einem bekannten F
   );
 });
 
-/* ==================================================================== */
 /* 2  Menge A — die Anzeigestellen entstehen aus dem Typ                 */
-/* ==================================================================== */
 
 const configFile = path.join(appRoot, "tsconfig.json");
 const rawConfig = ts.readConfigFile(configFile, ts.sys.readFile);
@@ -438,9 +319,7 @@ const inspect = (program, caps) => {
   const isUncapped = (node) =>
     node !== undefined && node !== null && carries(checker.getTypeAtLocation(node));
 
-  /* ---------------------------------------------------------------- */
   /* 2a  Klassenangaben lesen — und sagen, wenn sie nicht zu lesen sind */
-  /* ---------------------------------------------------------------- */
 
   /**
    * Die Klassennamen eines `className`-Ausdrucks.
@@ -550,9 +429,7 @@ const inspect = (program, caps) => {
     return hits;
   };
 
-  /* ---------------------------------------------------------------- */
   /* 2b  Der Fixpunkt: wer einen ungedeckelten Namen zeigt, trägt ihn   */
-  /* ---------------------------------------------------------------- */
 
   /** Die Deklaration, auf die ein JSX-Bezeichner zeigt — Einfuhr aufgelöst. */
   const declarationOfTag = (tagName) => {
@@ -876,9 +753,7 @@ check("jede Klassenangabe an einer Anzeigestelle ist lesbar", () => {
   );
 });
 
-/* ==================================================================== */
 /* 3  Der Schnitt beider Mengen ist leer                                 */
-/* ==================================================================== */
 
 heading("3  Der Schnitt ist leer — kein Deckel über einem fremden Namen");
 
@@ -921,9 +796,7 @@ check("aus keinem markierten Wert wird das Ende herausgeschnitten", () => {
   );
 });
 
-/* ==================================================================== */
 /* 4  Der Träger selbst deckelt nicht                                    */
-/* ==================================================================== */
 
 heading("4  `.foreign-name` — die Klasse, die das Umbrechen zusichert");
 
@@ -964,9 +837,7 @@ check("sie deckelt nicht", () => {
   );
 });
 
-/* ==================================================================== */
 /* 5  Gegenproben — jede eingesetzte Verletzung muß auffallen             */
-/* ==================================================================== */
 
 heading("5  Gegenprobe — ein absichtlich gesetzter Deckel macht den Lauf rot");
 
@@ -1083,9 +954,7 @@ check("Gegenprobe: ohne Deckelmenge findet der Lauf nichts — und das darf nich
   );
 });
 
-/* ==================================================================== */
 /* Ausgabe                                                              */
-/* ==================================================================== */
 
 process.stdout.write(`\n${"═".repeat(58)}\n`);
 process.stdout.write(`${passed} bestanden, ${failed} fehlgeschlagen.\n`);

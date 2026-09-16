@@ -13,9 +13,7 @@ import { handleRouteLinkClick, href, type RouteName } from "./router";
  * Zeiterfassung ist der Bereich, Timer das Bedienelement. Oberflächentexte
  * sind deutsch.
  *
- * „Buchungen“ steht als eigener Punkt neben der Zeiterfassung. Abschnitt 14
- * nennt seine Liste ausdrücklich beispielhaft, und S-05 und S-06 sind zwei
- * Ansichten mit zwei Aufgaben: erfassen und nachsehen.
+ * „Buchungen“ gehört als eigener Bereich zum Export (S-06).
  *
  * **Die Musterseite steht seit T-057 nicht mehr hier.** Sie war der neunte
  * Eintrag, unten links, und sie war der einzige, der nicht zum Produkt gehört:
@@ -41,9 +39,7 @@ const ITEMS: readonly NavItem[] = [
   { route: "todos", label: "Todos", icon: "inbox" },
   { route: "board", label: "Kanban", icon: "square" },
   { route: "time", label: "Zeiterfassung", icon: "clock" },
-  { route: "bookings", label: "Buchungen", icon: "filter" },
   { route: "export", label: "Export", icon: "download" },
-  { route: "tags", label: "Tags", icon: "tag" },
   { route: "settings", label: "Einstellungen", icon: "shield" },
 ];
 
@@ -70,7 +66,7 @@ export function Navigation({ active, openTodoCount, openEntryCount, installedVer
           const current =
             active === item.route ||
             (item.route === "todos" && active === "todo") ||
-            (item.route === "export" && (active === "templates" || active === "exportAudit"));
+            (item.route === "export" && (active === "bookings" || active === "templates" || active === "exportAudit"));
           const badge =
             item.route === "todos"
               ? openTodoCount
@@ -81,7 +77,6 @@ export function Navigation({ active, openTodoCount, openEntryCount, installedVer
           return (
             <li key={item.route} className={cx(
               item.route === "time" && "nav__section-start",
-              item.route === "tags" && "nav__section-start",
               item.route === "settings" && "nav__settings",
             )}>
               <a

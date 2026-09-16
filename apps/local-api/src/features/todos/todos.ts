@@ -1,16 +1,9 @@
-/**
- * Takt — Anwendungsfälle rund um Todos (A-2.*, A-5.*, A-7.1, A-9.5, A-10.9).
- *
- * Die eine Regel, die hier zwingend steht und nirgends sonst stehen darf:
- * **Standard-Tags kommen beim Anlegen dazu, im Anwendungsfall.** Nicht in der
- * Oberfläche und nicht im Add-in. Genau das verlangt A-9.5 — sonst griffe die
- * Regel nur auf einem der beiden Wege, und welcher das ist, merkte man erst,
- * wenn ein aus Outlook angelegtes Todo in keinem Pool auftaucht.
- */
+import { validTodoSchedule } from '@takt/domain';
+import type { MailEntry } from '@takt/domain';
+/** Standard-Tags werden hier angewendet, damit sie für Web und Add-in gleichermaßen gelten. */
 
 import type {
   CalendarDay,
-  DefaultTag,
   PoolMovement,
   StatusId,
   Tag,
@@ -70,6 +63,10 @@ export interface CreateTodoInput {
    * eine zweite, abweichende Fassung wäre genau das, was E-045 für die
    * Call-Nummer beseitigt hat.
    */
+  readonly dueTime?: string | null;
+  readonly estimateMinutes?: number | null;
+  readonly noExport?: boolean;
+  readonly priorityId?: string | null;
   readonly dueDate: CalendarDay | null;
 }
 
@@ -141,6 +138,7 @@ export async function createTodo(
 
   // Rein, und deshalb vor der Transaktion: Eine unzulässige Eingabe soll gar
   // keine Klammer öffnen.
+  if (!validTodoSchedule(input.dueDate, input.dueTime, input.estimateMinutes)) return err(taktError('validation_error', 'Frist, Uhrzeit oder Schätzung sind ungültig.'));
   const names = checkTagNames(input.tagNames ?? []);
   if (!names.ok) return err(names.error);
 
@@ -166,6 +164,10 @@ export async function createTodo(
           tagIds: selected,
           note: input.note,
           dueDate: input.dueDate,
+          dueTime: input.dueTime ?? null,
+          estimateMinutes: input.estimateMinutes ?? null,
+          noExport: input.noExport ?? false,
+          priorityId: input.priorityId ?? null,
           now: timestamp,
         },
         effective,
@@ -204,6 +206,10 @@ export interface UpdateTodoInput {
    * „Frist entfernen", ein Tag heißt „setzen". Die Unterscheidung ist der
    * Grund für `exactOptionalPropertyTypes` in diesem Baum.
    */
+  readonly dueTime?: string | null;
+  readonly estimateMinutes?: number | null;
+  readonly noExport?: boolean;
+  readonly priorityId?: string | null;
   readonly dueDate?: CalendarDay | null;
 }
 
@@ -231,6 +237,10 @@ export async function updateTodo(
         : { callNumber: normalizeCallNumber(input.callNumber) }),
       ...(input.statusId === undefined ? {} : { statusId: input.statusId }),
       ...(input.tagIds === undefined ? {} : { tagIds: input.tagIds }),
+      ...(input.dueTime === undefined ? {} : { dueTime: input.dueTime }),
+      ...(input.priorityId === undefined ? {} : { priorityId: input.priorityId }),
+      ...(input.noExport === undefined ? {} : { noExport: input.noExport }),
+      ...(input.estimateMinutes === undefined ? {} : { estimateMinutes: input.estimateMinutes }),
       ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
       now: timestamp,
     }),
@@ -261,6 +271,7 @@ export interface TodoDetail {
   readonly openSeconds: number;
   /** Die Anhänge (A-19.8, A-19.11). Leer, wenn es keine gibt. */
   readonly attachments: readonly AttachmentView[];
+  readonly mails: readonly MailEntry[];
 }
 
 /*
@@ -326,6 +337,7 @@ export async function loadTodo(
       totalSeconds: sums.get(id) ?? 0,
       openSeconds,
       attachments: attachments.map(toAttachmentView),
+      mails: await unit.mails.list(id),
     });
   });
 }
@@ -630,17 +642,4 @@ export async function searchEverything(
   });
 }
 
-/** Standard-Tags lesen und setzen (A-9.1, A-9.2). */
-export function listDefaultTags(context: AppContext): Promise<readonly DefaultTag[]> {
-  return context.transactions.inTransaction((unit) => unit.defaultTags.list());
-}
-
-export function setDefaultTags(
-  context: AppContext,
-  tagIds: readonly TagId[],
-): Promise<readonly DefaultTag[]> {
-  const timestamp: Timestamp = now(context);
-  return context.transactions.inTransaction((unit: UnitOfWork) =>
-    unit.defaultTags.set(tagIds, timestamp),
-  );
-}
+export { listDefaultTags, setDefaultTags } from '../settings/settings.ts';

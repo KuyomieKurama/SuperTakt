@@ -1,16 +1,4 @@
-/**
- * Takt — die Form einer Exportvorlage (E-005, E-017, A-8.7).
- *
- * Reine Typen, kein Laufzeitanteil. Eine Vorlage ist eine **geordnete** Liste
- * von Feldern; die Reihenfolge der Liste ist die Reihenfolge der Schlüssel im
- * erzeugten JSON.
- *
- * Was hier bewusst fehlt: ein Feld für einen frei geschriebenen Quellenpfad.
- * Nach E-017 ist jede Quelle ein Wert aus `ExportSourcePath` der Domäne, und
- * jede Quelle hat in `sources.ts` eine ausgeschriebene Zugriffsfunktion. Ein
- * generischer Pfadauflöser wäre ein Leseprimitiv auf alles, was man ihm gibt,
- * und machte jedes später hinzugefügte Feld automatisch exportierbar (B-3.1).
- */
+/** Die Feldreihenfolge bestimmt die JSON-Schlüsselreihenfolge. Quellen bleiben auf die ausdrücklich erlaubten Exportfelder beschränkt. */
 
 import type { ExportCandidate, ExportGroup, ExportSourcePath } from '@takt/domain/export';
 
@@ -25,9 +13,7 @@ import type { ExportCandidate, ExportGroup, ExportSourcePath } from '@takt/domai
  */
 export type ExportTimeEntryId = ExportCandidate['timeEntryId'];
 
-// ---------------------------------------------------------------------------
 // Ergebnis und Fehler
-// ---------------------------------------------------------------------------
 
 /**
  * Ergebnis statt Ausnahme, formgleich zu `Result` aus `packages/domain`.
@@ -65,9 +51,7 @@ export interface ExportTemplateError<C extends ExportTemplateErrorCode = ExportT
   readonly details?: readonly ExportFieldIssue[];
 }
 
-// ---------------------------------------------------------------------------
 // Vorlage
-// ---------------------------------------------------------------------------
 
 /**
  * Transformationen, abschließend.
@@ -135,9 +119,7 @@ export interface ExportTemplateDefinition {
   readonly fields: readonly ExportFieldDefinition[];
 }
 
-// ---------------------------------------------------------------------------
 // Ergebnis einer Zeile
-// ---------------------------------------------------------------------------
 
 /** Was in einer Exportzelle stehen kann. Kein `undefined`: fehlend heißt fehlend. */
 export type ExportValue = string | number | null;

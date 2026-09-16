@@ -1,59 +1,13 @@
+import { localDayFromToday } from './support/local-time';
 /**
- * TP-KANBAN-07 — Karte mit drei Marken in schmaler Spalte (T-282, T-281).
- *
- * Der Befund, den dieser Fall festhält, kam als Bildschirmfoto: Auf einer
- * Kanban-Karte mit Call-Nummer, Erledigt-Kennzeichen **und** Frist legte sich
- * die Abspieltaste über das rote „⚠ Überfällig …". T-281 hat die Ursache
- * behoben (`.kcard__top` bricht um, `.kcard__deadline` schrumpft wirklich)
- * und am Musterbaustein gemessen — aber nicht am echten Board-Bildschirm, und
- * es gab bis dahin **keinen** Prüffall für „drei Marken, schmale Spalte". Der
- * war nie geprüft; sonst wäre der Fall aufgefallen (T-282).
- *
- * Zwei Dinge, die dieser Fall bewusst **nicht** tut:
- *
- * - Er sucht keine Regel im Stilblatt (`flex-wrap`, `flex: none` &c.). Ein
- *   Fall, der eine CSS-Regel sucht, misst die Behebung und nicht die Wirkung
- *   — und bliebe grün, wenn ein künftiger Umbau dieselbe Wirkung mit anderen
- *   Regeln wieder zerstört. Gemessen wird der gerenderte Baum: Ränder in
- *   Pixeln, Überlappung als Rechteckschnitt, `scrollWidth` gegen
- *   `clientWidth`.
- * - Er bringt die Spalte nicht über eine feste `width` am Testcode auf ihre
- *   Mindestbreite, sondern über ein schmales Fenster — dieselbe Bedingung,
- *   unter der der Fehler am Bildschirm entstand. `.board` legt Spaltenbreiten
- *   über `grid-auto-columns: minmax(17rem, 21rem)` fest (`app.css`, „Kanban
- *   (S-04)"); ohne Fließraum (`fr`) wächst eine solche Spur nur, wenn im
- *   Container mehr Platz übrig ist, als die Summe der Mindestbreiten aller
- *   Spuren braucht. Bei genau einer Spalte reicht dafür ein Fenster, dessen
- *   Inhaltsbreite (Fensterbreite minus dem Seitenabstand von `.app__main`,
- *   der unterhalb der 52 rem-Schwelle in `app.css` auf `var(--space-4)`
- *   [16 px] je Seite fällt) unter 17 rem (272 px) liegt: **288 px** Fenster
- *   ergeben rechnerisch 288 − 32 = 256 px Inhaltsbreite, deutlich unter
- *   272 px, und die Spalte fällt auf ihren Boden. Nachgemessen unten
- *   (`expect(columnBox.width)`), nicht nur gerechnet — der Test hätte sich
- *   sonst selbst auf eine Annahme über eine Rechenregel verlassen, die er
- *   eigentlich prüfen soll.
- *
- * Der Fall aus TP-KANBAN-01 (`boardColumn`) wird hier bewusst noch einmal
- * lokal definiert statt importiert: Diese Datei ist die einzige Stelle im
- * Bestand, die den Helfer braucht, und `support/actions.ts` exportiert ihn
- * nicht — derselben Konvention folgt bereits `deadline-computed-state.spec.ts`
- * mit seinem eigenen `isoDay`.
+ * Überlappung und Abschneiden am gerenderten Board messen. Das schmale Fenster muss die Spalte
+ * tatsächlich auf ihre Mindestbreite bringen.
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import { createBoardColumn } from './support/actions';
 import { createTag, createTodo, deletePoolByName, deleteTag, deleteTodo } from './support/api';
 import { gotoBoard } from './support/nav';
-
-/** Ein Kalendertag `offsetDays` von heute, in Ortszeit (`YYYY-MM-DD`) — wie `deadline-computed-state.spec.ts`. */
-function isoDay(offsetDays: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${String(year)}-${month}-${day}`;
-}
 
 /** Wie in `kanban.spec.ts`: eine Spalte über ihre Überschrift, nicht über den ganzen Text finden. */
 function boardColumn(page: Page, name: string): Locator {
@@ -93,7 +47,7 @@ test.describe('TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in sc
     // dann sicher im Zustand "Überfällig", wenn die Uhr des Testläufers ein
     // paar Stunden von der Browser-Zeitzone (Europe/Berlin, playwright.config
     // .ts) abweicht — derselbe Kniff wie in `deadline-computed-state.spec.ts`.
-    const overdue = isoDay(-5);
+    const overdue = localDayFromToday(-5);
 
     const threeMarks = await createTodo({
       title: `E2E-KOPF-DREI-${run}`,

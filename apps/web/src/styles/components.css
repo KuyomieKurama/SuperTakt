@@ -4326,7 +4326,7 @@
   margin-top: 2px;
 }
 
-/* Keep short notices and their action together when the container allows it. */
+
 .message--inline-action > .grow {
   display: flex;
   flex-wrap: wrap;
@@ -4339,3 +4339,104 @@
   min-width: 0;
 }
 .message--inline-action .message__action { margin-top: 0; }
+
+/* Shared, platform-independent calendar for day filters. */
+.date-field__control { position: relative; inline-size: 10rem; max-inline-size: 100%; }
+.date-field__control .field__input { inline-size: 100%; padding-inline-end: 2.5rem; }
+.date-field__trigger { position: absolute; inset-inline-end: var(--space-1); top: 50%; transform: translateY(-50%); padding: var(--space-2); color: var(--text-muted); border: 0; background: transparent; border-radius: var(--radius-sm); cursor: pointer; }
+.date-field__positioner { z-index: var(--z-popover); --z-index: var(--z-popover); }
+.date-field__calendar { position: relative; z-index: var(--z-popover); padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.date-field__navigation { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-block-end: var(--space-2); font-weight: var(--weight-semibold); }
+.date-field__navigation button { padding: var(--space-2); background: transparent; border: 0; border-radius: var(--radius-sm); color: inherit; cursor: pointer; }
+.date-field__previous { display: block; transform: rotate(180deg); }
+.date-field__calendar table { border-collapse: separate; border-spacing: 2px; }
+.date-field__calendar th { padding-block: var(--space-2); color: var(--text-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.date-field__calendar [data-part="table-cell-trigger"] { display: grid; place-items: center; inline-size: 2rem; block-size: 2rem; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); }
+.date-field__calendar [data-outside-range] { color: var(--text-muted); }
+.date-field__calendar [data-today] { box-shadow: inset 0 0 0 1px var(--accent-border-subtle); }
+.date-field__calendar [data-part="table-cell-trigger"]:hover, .date-field__navigation button:hover { background: var(--bg-subtle); }
+.date-field__calendar [data-part="table-cell-trigger"][data-selected] { background: var(--accent-bg); color: var(--text-on-accent); }
+.date-field__clear { margin-block-start: var(--space-2); padding: var(--space-2); inline-size: 100%; border: 0; border-top: 1px solid var(--border-subtle); color: var(--text-muted); background: transparent; cursor: pointer; font-size: var(--text-xs); }
+
+.date-field--wide .date-field__control { inline-size: 100%; }
+
+/* Datum und optionale Ortszeit als ein gemeinsames Frist-Feld. */
+.date-field__control--with-time {
+  display: flex;
+  align-items: center;
+  padding-inline-end: 2.5rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg-surface));
+}
+.date-field__control--with-time:focus-within {
+  outline: 2px solid var(--accent-border, var(--border-control));
+  outline-offset: 2px;
+}
+.date-field__control--with-time .field__input {
+  flex: 1;
+  min-inline-size: 0;
+  inline-size: 0;
+  padding-inline-end: var(--space-2);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.time-field__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  inline-size: 6.5rem;
+  flex-shrink: 0;
+  padding: var(--space-2);
+  border: 0;
+  border-inline-start: 1px solid var(--border-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.time-field__trigger:disabled { color: var(--text-muted); cursor: default; }
+.time-field__picker {
+  position: relative;
+  z-index: var(--z-popover);
+  inline-size: 15rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+}
+.time-field__title { margin-block-end: var(--space-3); font-weight: var(--weight-semibold); }
+.time-field__columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.time-field__options { max-block-size: 12rem; overflow-y: auto; overscroll-behavior: contain; margin-block-start: var(--space-2); }
+.time-field__options button {
+  display: block;
+  inline-size: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.time-field__options button:hover { background: var(--bg-subtle); }
+.time-field__options button[aria-selected="true"] { background: var(--accent-bg); color: var(--text-on-accent); }
+.time-field__done {
+  inline-size: 100%;
+  margin-block-start: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

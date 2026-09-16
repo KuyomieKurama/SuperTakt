@@ -71,7 +71,7 @@ import { statusFor } from '../../http/problem.ts';
 
 import { bookOnTodo, createTodo, findMatches, loadContext } from './service.ts';
 import type { AddinDeps } from './ports.ts';
-import { bookSchema, createTodoSchema, toFieldIssues, type FieldIssue } from './schema.ts';
+import { appendMailSchema, bookSchema, createTodoSchema, toFieldIssues, type FieldIssue } from './schema.ts';
 
 /*
  * Hier stand bis T-046 zusätzlich `call_number_not_usable`.
@@ -348,8 +348,10 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
       }
     }
 
-    const result = await createTodo(deps, {
+    const input = {
       title: parsed.data.title,
+      dueTime: parsed.data.dueTime,
+      estimateMinutes: parsed.data.estimateMinutes,
       callNumber,
       statusId: parsed.data.statusId as StatusId | null,
       tagIds: parsed.data.tagIds as readonly string[] as readonly TagId[],
@@ -390,7 +392,11 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
        * anderen (A-A-82).
        */
       attachments: parsed.data.attachments,
-    });
+    };
+    if (input.dueTime !== null && input.dueDate === null) return c.json(errorBody('validation_error'), 422);
+    if (parsed.data.mail !== undefined && (parsed.data.requestId === undefined || deps.assignMail === undefined)) return c.json(errorBody('validation_error'), 422);
+    const result = parsed.data.mail === undefined ? await createTodo(deps, input)
+      : await deps.assignMail!({ ...input, requestId: parsed.data.requestId!, mail: parsed.data.mail, target: { kind: parsed.data.mode, input } });
 
     if (!result.ok) {
       // Der Statuscode kommt aus derselben Zuordnung wie auf der Hauptfläche:
@@ -421,6 +427,15 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * weil der Aufrufer es **anzeigen** soll und nicht, weil er daraus etwas
    * ableiten müsste.
    */
+  routes.post('/todos/:todoId/mails', async (c) => {
+    const parsed = appendMailSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) return c.json(errorBody('validation_error', toFieldIssues(parsed.error)), 422);
+    if (deps.assignMail === undefined) return c.json(errorBody('not_found'), 404);
+    const result = await deps.assignMail({ ...parsed.data, target: { kind: 'existing', todoId: c.req.param('todoId') as TodoId } });
+    if (!result.ok) return c.json(failureBody(result.error), statusFor(result.error.code));
+    return c.json({ data: result.value });
+  });
+
   routes.post('/todos/:todoId/time-entries', async (c) => {
     const todoId = c.req.param('todoId');
     const body = await readJson(c.req.raw);

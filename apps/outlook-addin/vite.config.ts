@@ -39,6 +39,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    rollupOptions: { input: ['index.html', 'commands.html'] },
     outDir: 'dist',
     sourcemap: true,
     target: 'es2022',

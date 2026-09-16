@@ -52,9 +52,7 @@ import {
   syncFolderEvidence,
 } from "../../lib/pathInspection";
 
-/* ==================================================================== */
 /* Gestalt                                                              */
-/* ==================================================================== */
 
 /**
  * Was an einem Pfad aufgefallen ist.
@@ -111,9 +109,7 @@ export interface ExportDirectoryAdvice {
 /** Nichts aufgefallen — der Normalfall und ein eigener Wert, kein `null`. */
 const NOTHING: ExportDirectoryAdvice = { verdict: "ok", concerns: [] };
 
-/* ==================================================================== */
 /* Listen                                                               */
-/* ==================================================================== */
 
 /**
  * Erste Ebene unter einem Laufwerksbuchstaben, in die Takt nicht schreibt
@@ -173,9 +169,7 @@ const REDIRECTED_FOLDER_NAMES: ReadonlySet<string> = new Set([
   "bilder",
 ]);
 
-/* ==================================================================== */
 /* Die Beurteilung                                                      */
-/* ==================================================================== */
 
 const ORDER: Readonly<Record<ExportDirectoryVerdict, number>> = {
   reject: 0,
@@ -315,9 +309,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
   return { verdict: worst, concerns };
 }
 
-/* ==================================================================== */
 /* Vergleich zweier Pfade                                               */
-/* ==================================================================== */
 
 /**
  * Liegt `filePath` innerhalb von `directory`?

@@ -1,28 +1,9 @@
-/*
- * Takt — Design-Token
- * ===================
- *
- * Zwei Ebenen:
- *   1. Primitive   --takt-<ramp>-<stufe>   Rohfarben. Nie direkt in Komponenten verwenden.
- *   2. Semantisch  --bg-*, --text-*, --border-*, --status-*, ...
- *      Nur diese Ebene wird in Komponenten benutzt.
- *
- * Der helle Modus ist vollstaendig unter :root definiert. Der dunkle Modus definiert
- * ausschliesslich die semantische Ebene neu, die Primitiven bleiben unveraendert.
- *
- * Themenwahl: [data-theme="light"] | [data-theme="dark"] am <html>-Element.
- * Ohne Attribut entscheidet die Systemeinstellung (prefers-color-scheme).
- *
- * Gemessene Kontrastwerte: siehe apps/web/design/DESIGNSYSTEM.md, Abschnitt 2.4.
- * Nachmessen mit:  node scripts/contrast-check.mjs
- */
+/* Komponenten verwenden semantische Tokens; Farbrampen bleiben deren Grundlage.
+ * Die Themenwahl erfolgt am html-Element, ersatzweise über die Systemeinstellung. */
 
 :root {
   color-scheme: light;
-
-  /* ------------------------------------------------------------------ */
   /* 1. Primitive — Farbrampen                                          */
-  /* ------------------------------------------------------------------ */
 
   /* Neutral: kuehles Schiefergrau mit leichtem Blaustich. Traegt Flaechen,
      Text und Rahmen in beiden Modi. */
@@ -103,10 +84,7 @@
   --takt-violet-700: #472b90;
   --takt-violet-800: #392472;
   --takt-violet-900: #2b1b56;
-
-  /* ------------------------------------------------------------------ */
   /* 2. Semantisch — Flaechen                                           */
-  /* ------------------------------------------------------------------ */
 
   --bg-canvas: #f6f8fa; /* Anwendungshintergrund hinter allen Panels */
   --bg-surface: #ffffff; /* Karte, Panel, Dialog, Tabellenkoerper */
@@ -118,10 +96,7 @@
   --bg-selected: #eef4ff; /* ausgewaehlte Zeile, aktiver Navigationseintrag */
   --bg-scrim: rgba(15, 21, 32, 0.48); /* Dialog-Abdunklung */
   --bg-disabled: #eff2f6;
-
-  /* ------------------------------------------------------------------ */
   /* 3. Semantisch — Text und Symbole                                   */
-  /* ------------------------------------------------------------------ */
 
   --text-primary: #1c2330;
   --text-secondary: #454e5d;
@@ -130,10 +105,7 @@
   --text-on-accent: #ffffff;
   --text-on-solid: #ffffff; /* Text auf gefuellten Status-/Aktionsflaechen */
   --text-link: #1a47b0;
-
-  /* ------------------------------------------------------------------ */
   /* 4. Semantisch — Rahmen und Trennlinien                             */
-  /* ------------------------------------------------------------------ */
 
   /* Rein dekorative Linien. SC 1.4.11 ist auf sie nicht anwendbar, weil sie
      kein Bedienelement und keinen Zustand kennzeichnen. */
@@ -144,10 +116,7 @@
   --border-control: #7e8a9e; /* Eingabefeld, Auswahlliste, Sekundaerknopf */
   --border-strong: #5d6879; /* Bedienelement unter dem Zeiger */
   --border-accent: #2159da;
-
-  /* ------------------------------------------------------------------ */
   /* 5. Semantisch — Aktion                                             */
-  /* ------------------------------------------------------------------ */
 
   --accent-bg: #2159da;
   --accent-bg-hover: #1a47b0;
@@ -162,10 +131,7 @@
   --danger-bg-subtle: #fdf0ef;
   --danger-text: #ac2a22;
   --danger-border: #f6bab6;
-
-  /* ------------------------------------------------------------------ */
   /* 6. Semantisch — Exportstatus einer Zeitbuchung (A-6.5 bis A-6.7)   */
-  /* ------------------------------------------------------------------ */
 
   /* Offen: noch nicht uebertragen. Kontur, keine Fuellung. */
   --status-open-fg: #6f4708;
@@ -205,10 +171,7 @@
   --status-notbilled-bg: var(--bg-inset);
   --status-notbilled-border: var(--border-strong);
   --status-notbilled-marker: var(--border-strong);
-
-  /* ------------------------------------------------------------------ */
   /* 7. Semantisch — Timer                                              */
-  /* ------------------------------------------------------------------ */
 
   --timer-running-fg: #472b90;
   --timer-running-bg: #f3f0ff;
@@ -217,10 +180,7 @@
   --timer-idle-fg: #5d6879;
   --timer-idle-bg: #eff2f6;
   --timer-idle-border: #cfd6e1;
-
-  /* ------------------------------------------------------------------ */
   /* 8. Semantisch — Hinweisfarben ausserhalb des Exportstatus          */
-  /* ------------------------------------------------------------------ */
 
   --info-fg: #1a47b0;
   --info-bg: #eef4ff;
@@ -231,10 +191,7 @@
   --warning-fg: #6f4708;
   --warning-bg: #fdf5e6;
   --warning-border: #f3d392;
-
-  /* ------------------------------------------------------------------ */
   /* 9. Semantisch — Vermerk- und Leistungsfeld (R-08, E-016)           */
-  /* ------------------------------------------------------------------ */
 
   /* Leistung: Inhalt verlaesst die Anwendung und landet beim Kunden.
      Die Schiene ist durchgezogen; unterbrochen ist die des Vermerks. Bis
@@ -255,10 +212,7 @@
   --note-internal-header-bg: #eff2f6;
   --note-internal-header-fg: #454e5d;
   --note-internal-border: #cfd6e1;
-
-  /* ------------------------------------------------------------------ */
   /* 10. Fokus                                                          */
-  /* ------------------------------------------------------------------ */
 
   /* Zwei Baender mit zwei Aufgaben, und sie liegen seit T-216 an den Plaetzen,
      an die sie gehoeren (T-213 Abschnitt 10.2). Der Satz, der bis dahin hier
@@ -268,10 +222,7 @@
   --focus-ring-contrast: #ffffff; /* Gegenband; liegt innen an der Fuellung eines gefuellten Bedienelements */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
-
-  /* ------------------------------------------------------------------ */
   /* 11. Schrift                                                        */
-  /* ------------------------------------------------------------------ */
 
   /* Keine Web-Schrift von einem CDN: Takt laeuft vollstaendig lokal (E-001),
      ein Schriftabruf waere eine Netzverbindung. Es gilt der Systemstapel. */
@@ -310,10 +261,7 @@
   --tracking-wide: 0.06em; /* Versalien-Etiketten */
   --tracking-normal: 0;
   --tracking-tight: -0.01em; /* ab 24px, gegen zu lockere Ueberschriften */
-
-  /* ------------------------------------------------------------------ */
   /* 12. Abstandsraster — Basis 4px                                     */
-  /* ------------------------------------------------------------------ */
 
   --space-0: 0;
   --space-1: 0.25rem; /* 4  — Symbol zu Text */
@@ -331,10 +279,7 @@
      [data-density] am Wurzelelement. */
   --row-height: 2.5rem; /* 40px, Vorgabe */
   --row-padding-x: var(--space-3);
-
-  /* ------------------------------------------------------------------ */
   /* 13. Radien                                                         */
-  /* ------------------------------------------------------------------ */
 
   --radius-xs: 3px; /* Schraffurflaechen, kleine Marker */
   --radius-sm: 4px; /* Chip, Etikett */
@@ -342,19 +287,13 @@
   --radius-lg: 8px; /* Karte, Kanban-Karte */
   --radius-xl: 12px; /* Panel, Dialog */
   --radius-pill: 999px; /* Statusetikett, Zaehlblase */
-
-  /* ------------------------------------------------------------------ */
   /* 14. Erhebung                                                       */
-  /* ------------------------------------------------------------------ */
 
   --shadow-none: none;
   --shadow-xs: 0 1px 2px rgba(15, 21, 32, 0.06);
   --shadow-sm: 0 1px 3px rgba(15, 21, 32, 0.08), 0 1px 2px rgba(15, 21, 32, 0.04);
   --shadow-lg: 0 12px 28px rgba(15, 21, 32, 0.14), 0 2px 6px rgba(15, 21, 32, 0.06);
-
-  /* ------------------------------------------------------------------ */
   /* 15. Bewegung                                                       */
-  /* ------------------------------------------------------------------ */
 
   --motion-instant: 80ms; /* Zeigerrueckmeldung */
   --motion-fast: 140ms; /* Hover, Fokus, Farbwechsel */
@@ -363,10 +302,7 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* ------------------------------------------------------------------ */
   /* 16. Ebenen                                                         */
-  /* ------------------------------------------------------------------ */
 
   --z-base: 0;
   --z-sticky: 10; /* Tabellenkopf, Werkzeugleiste */
@@ -403,10 +339,7 @@
    * kein Merkmal ist.
    */
   --z-toast: 400;
-
-  /* ------------------------------------------------------------------ */
   /* 17. Masse                                                          */
-  /* ------------------------------------------------------------------ */
 
   --control-height-sm: 1.75rem; /* 28px — Werkzeugleiste, Symbolknopf */
   --control-height-md: 2rem; /* 32px — Standardknopf, Eingabefeld */
@@ -420,19 +353,13 @@
   --icon-md: 16px;
   --icon-lg: 20px;
 }
-
-/* -------------------------------------------------------------------- */
 /* Dichte "kompakt" — mehr Zeilen pro Bildschirm                        */
-/* -------------------------------------------------------------------- */
 
 :root[data-density="compact"] {
   --row-height: 2rem; /* 32px */
   --row-padding-x: var(--space-2);
 }
-
-/* ==================================================================== */
 /* Dunkler Modus                                                        */
-/* ==================================================================== */
 /*
  * Nur die semantische Ebene wird neu definiert. Keine Invertierung:
  * die Farbtoene werden aufgehellt und entsaettigt, damit sie auf dunklem
@@ -638,10 +565,7 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
-
-/* -------------------------------------------------------------------- */
 /* Hoher Kontrast — respektiert die Systemeinstellung                   */
-/* -------------------------------------------------------------------- */
 
 @media (prefers-contrast: more) {
   :root {

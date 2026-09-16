@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { listExportTemplates, updateSettings } from "../../api/endpoints";
+import { listExportTemplates } from "../export/api";
+import { updateSettings } from "./api";
 import type { RoundingMode } from "../../api/types";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Select } from "../../shared/ui/Select";
@@ -13,9 +14,7 @@ import { useToasts } from "../../app/ToastContext";
 import { useAsync, useMutation } from "../../app/useAsync";
 import { ROUNDING_MODE_LABEL } from "../../lib/labels";
 import { foreignText } from "../../lib/foreign";
-/* ==================================================================== */
 /* Export — Ordner, Vorlage, Rundung                                    */
-/* ==================================================================== */
 
 /**
  * Der Bereich „Export" von S-09.

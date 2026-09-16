@@ -1,3 +1,4 @@
+import { waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis des Zugriffsverfahrens (T-011).
  *
@@ -119,9 +120,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Dienst starten
-// ---------------------------------------------------------------------------
 
 async function startService(
   dataDir,
@@ -220,22 +219,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Ein Verbindungsversuch, der scheitert, heißt "frei"; einer, der ankommt, heißt "belegt". */
-function portFree(port) {
-  return new Promise((done) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    socket.once('connect', () => {
-      socket.destroy();
-      done(false);
-    });
-    socket.once('error', () => done(true));
-    setTimeout(() => {
-      socket.destroy();
-      done(true);
-    }, 500).unref();
-  });
-}
-
 /**
  * Öffnet eine Verbindung auf {@link PORT} und schickt einen Anfragekopf **ohne**
  * die abschließende Leerzeile (T-126, Abschnitt 0e).
@@ -261,27 +244,7 @@ function openHalfRequest() {
   });
 }
 
-/**
- * Wartet, statt sofort aufzugeben, bis Port {@link PORT} frei ist (T-029,
- * Risiko 5).
- *
- * Unmittelbar nacheinander gefahren teilen sich `proof:access` und
- * `proof:addin-wiring` denselben Port. Der vorige Lauf braucht nach seinem
- * `SIGTERM` einen Moment, bis sein Kindprozess ihn tatsächlich freigibt.
- * Ohne diese Wartestufe hielte `waitForService()` weiter unten den ALTEN,
- * noch antwortenden Dienst für den eigenen — er antwortet ja auf `/health` —
- * und führte mit einem Sitzungsgeheimnis weiter, das zu einem fremden Prozess
- * gehört: reihenweise Fehlschläge, die keine Regression sind, sondern ein
- * falsch verstandener Zustand.
- */
-async function waitForPortFree(port, timeoutMs = 5000) {
-  const until = Date.now() + timeoutMs;
-  do {
-    if (await portFree(port)) return true;
-    await sleep(150);
-  } while (Date.now() < until);
-  return false;
-}
+
 
 /** Antworten werden vollständig eingesammelt, damit die Leckprüfung sie sieht. */
 const seenBodies = [];
@@ -347,9 +310,7 @@ function rawRequest(lines) {
   });
 }
 
-// ---------------------------------------------------------------------------
 // Lauf
-// ---------------------------------------------------------------------------
 
 const dataDir = await mkdtemp(join(tmpdir(), 'takt-proof-'));
 let service = null;
@@ -1094,9 +1055,7 @@ try {
   {
     // Statisch: Im Nachweispfad wird kein Geheimnis mit === verglichen.
     //
-    // ===================================================================
     // A-A-59 — die Aufstellung ist entfallen
-    // ===================================================================
     //
     // Bis T-223 standen hier vier Dateinamen: `verifier.ts`, `crypto.ts`,
     // `guards.ts`, `token-service.ts`. `src/access/` führt dreizehn Dateien.
@@ -1124,10 +1083,8 @@ try {
     // Dateien, die B-2.5 tragen, sind darin. Sonst urteilte die Zusicherung
     // über eine Menge, die es nicht mehr gibt (A-A-55, A-A-60).
     //
-    // ===================================================================
     // A-A-68 — die Untergrenze sagte nichts, und die Zeile sagte
     // „vollständig"
-    // ===================================================================
     //
     // Bis T-235 lautete die Vorbedingung
     // `scanned.length >= TRAGENDE_DATEIEN.length`, also „mindestens vier" —

@@ -151,9 +151,7 @@ function targetTriple() {
   return line.slice('host:'.length).trim();
 }
 
-// ---------------------------------------------------------------------------
 // 1 — Bündeln
-// ---------------------------------------------------------------------------
 
 step(1, 'Bündeln mit esbuild');
 
@@ -248,9 +246,7 @@ try {
 
 writeFileSync(metaFile, JSON.stringify(result.metafile, null, 2), 'utf8');
 
-// ---------------------------------------------------------------------------
 // 2 — Die Prüfung, wegen der dieses Skript existiert (R-04)
-// ---------------------------------------------------------------------------
 
 step(2, 'Prüfen, dass nichts extern geblieben ist');
 
@@ -321,9 +317,7 @@ if ((workspaceHits.get('@takt/local-api')?.count ?? 0) === 0) {
 const bundleBytes = statSync(bundleFile).size;
 process.stdout.write(`      Bündel: ${relative(repoRoot, bundleFile)} (${Math.round(bundleBytes / 1024)} KiB)\n`);
 
-// ---------------------------------------------------------------------------
 // 3 — SEA-Blob
-// ---------------------------------------------------------------------------
 
 const triple = targetTriple();
 
@@ -374,9 +368,7 @@ if (sea.status !== 0) {
   fail(`\`node --experimental-sea-config\` ist fehlgeschlagen:\n${sea.stderr || sea.stdout}`);
 }
 
-// ---------------------------------------------------------------------------
 // 4 — Binärdatei zusammensetzen
-// ---------------------------------------------------------------------------
 
 const suffix = process.platform === 'win32' ? '.exe' : '';
 const outFile = join(binariesDir, `${SIDECAR_NAME}-${triple}${suffix}`);

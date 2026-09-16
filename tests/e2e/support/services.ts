@@ -1,3 +1,5 @@
+import { killChildTree } from './child-process';
+import { sleep, waitFor } from './wait-for';
 /**
  * Takt — startet den echten lokalen Dienst und die echte Oberfläche für den
  * End-zu-Ende-Testlauf, ohne die Tauri-Hülle.
@@ -70,12 +72,11 @@
  * noch nicht gab.
  */
 
-import { execFile, spawn, type ChildProcessByStdio, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessByStdio, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
 import {
   API_BASE_URL,
@@ -93,70 +94,6 @@ import { isolatedAppDataEnv } from './app-data-isolation';
 // Windows `/C:/…`, verkettet über `${REPO_ROOT}apps/web` zu `C:\C:\…` und
 // ließ den Kindprozess nie starten (`spawn … ENOENT`, vor dem ersten Fall).
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-
-const execFileAsync = promisify(execFile);
-
-/**
- * Beendet den mit `startWeb` gestarteten Kindprozess samt seinem ganzen
- * Prozessbaum.
- *
- * **Gemessen, nicht vermutet (T-263, an `web-build-services.ts#startWebPreview`
- * zuerst gefunden, hier auf denselben Fund an `startWeb` angewandt):**
- * `child.kill('SIGTERM')` allein beendet unter Windows nur den unmittelbaren
- * Kindprozess. `startWeb` startete dafür wegen `shell: process.platform ===
- * 'win32'` ein `cmd.exe`, das `pnpm` aufruft, das wiederum den eigentlichen
- * `vite`-Prozess als **Enkelkind** startet — `SIGTERM` an das `cmd.exe`
- * lässt dieses Enkelkind unter Windows als Waise weiterlaufen, mit Port 5173
- * weiterhin belegt. Reproduziert (T-263): Nach einem Lauf von
- * `playwright.web-build.config.ts` (derselbe `startWeb`/`stopServices`-Pfad)
- * blieb ein `vite`/`vite preview`-Prozess auf 5173 zurück und blockierte den
- * nächsten Lauf — exakt die Bauart, die T-259 schon als „fremde, aber
- * erreichbare Gegenstelle" auf einem geteilten Port beschrieb, und die der
- * Auftraggeber als wiederkehrendes Problem benennt (`board.md`: „Hängende
- * Prozesse auf 5173 und 17844 haben heute mehrfach Läufe verfälscht").
- * `spawnLocalApi`/`restartLocalApi` sind davon **nicht** betroffen — `node`
- * wird dort ohne Zwischenprogramm direkt gestartet, kein Enkelkind, `SIGTERM`
- * trifft den richtigen Prozess.
- *
- * **Berichtigt (T-330, 2026-09-13): „kein Enkelkind-Problem" außerhalb von
- * Windows war eine falsche Annahme, jetzt gemessen widerlegt.** `startWeb`
- * ruft `pnpm exec vite …` **ohne** `shell: true` — trotzdem bleibt `vite`
- * ein echtes Enkelkind: `pnpm` exect sich nicht in `vite` hinein, sondern
- * startet es als eigenen Kindprozess (`ps` zeigt drei getrennte PIDs:
- * `node …/pnpm exec vite…` → `node …/pnpm.mjs exec vite…` → `node
- * …/vite.js…`). Nach einem vollständigen, fehlerfrei durchlaufenen
- * `stopServices()` blieb der `vite`-Prozess dieser Kette am Leben und Port
- * 5173 belegt — derselbe Befund wie unter Windows, nur ohne die Ursache
- * `shell: true`. `startWeb` startet den Prozess deshalb jetzt mit
- * `detached: true` (nur außerhalb von Windows, siehe dort), was ihn zum
- * Anführer einer eigenen Prozessgruppe macht; `killShellChildTree` signalisiert
- * die **Gruppe** (negative PID), nicht nur den unmittelbaren Kindprozess.
- *
- * `taskkill /t /f` beendet unter Windows weiterhin den ganzen Baum.
- */
-async function killShellChildTree(child: ChildProcessWithoutStdin): Promise<void> {
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    try {
-      await execFileAsync('taskkill', ['/pid', String(child.pid), '/t', '/f']);
-    } catch {
-      // Bereits beendet, oder nie wirklich gestartet — kein zweiter Versuch nötig.
-    }
-    return;
-  }
-  // Gruppe statt Einzelprozeß (siehe Dateikopf dieser Funktion, T-330): nur
-  // wirksam, wenn `startWeb` mit `detached: true` gestartet hat — sonst (z. B.
-  // ein bereits beendeter Prozeß ohne `pid`) bleibt `child.kill` der Rückweg.
-  if (child.pid !== undefined) {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-      return;
-    } catch {
-      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
-      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
-    }
-  }
-  child.kill('SIGTERM');
-}
 
 /**
  * Lazy gestartete, für den ganzen Prozess geteilte GitHub-Attrappe (O-CI).
@@ -197,10 +134,6 @@ export async function stopGithubStub(): Promise<void> {
  */
 type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Entfernt ANSI-Farbcodes aus mitgeschnittenem Kindprozess-`stdout`/`stderr`.
  * Eigenständig statt aus `web-build-services.ts` importiert (T-249-7-Bauart:
@@ -210,20 +143,6 @@ function sleep(ms: number): Promise<void> {
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex -- ANSI-Escapes enthalten per Definition ein Steuerzeichen (ESC, 0x1B).
   return text.replace(/\x1B\[[0-9;]*m/g, '');
-}
-
-async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError: unknown = null;
-  while (Date.now() < deadline) {
-    try {
-      if (await check()) return;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
-  }
-  throw new Error(`Zeitüberschreitung beim Warten auf: ${label}. Letzter Fehler: ${String(lastError)}`);
 }
 
 /**
@@ -370,7 +289,7 @@ async function startWeb(): Promise<ChildProcessWithoutStdin> {
     // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
     // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
     shell: process.platform === 'win32',
-    // Nur außerhalb von Windows (T-330, siehe `killShellChildTree`): Macht
+    // Nur außerhalb von Windows (T-330, siehe `killChildTree`): Macht
     // diesen Prozeß zum Anführer einer eigenen Prozeßgruppe, damit
     // `process.kill(-pid, 'SIGTERM')` beim Aufräumen das Enkelkind `vite`
     // mit erreicht, nicht nur `pnpm` selbst. Unter Windows hat `detached`
@@ -406,7 +325,7 @@ async function startWeb(): Promise<ChildProcessWithoutStdin> {
   const outcome = await Promise.race([readyOutcome, exitedEarly.then(() => 'exited' as const)]);
 
   if (outcome !== 'ready') {
-    await killShellChildTree(child);
+    await killChildTree(child);
     const reason =
       outcome === 'exited'
         ? 'Der eigene Vite-Entwicklungsserver-Prozess ist beendet, bevor er das Binden an Port ' +
@@ -423,7 +342,7 @@ async function startWeb(): Promise<ChildProcessWithoutStdin> {
       return response !== null && response.ok;
     }, 5_000, 'Vite-Entwicklungsserver (bereits gebunden) antwortet über HTTP auf 5173');
   } catch (error) {
-    await killShellChildTree(child);
+    await killChildTree(child);
     throw new Error(`${String(error)}\nAusgabe:\n${log}`);
   }
 
@@ -462,12 +381,12 @@ export async function startServices(): Promise<RunningServices> {
 }
 
 export async function stopServices(services: RunningServices): Promise<void> {
-  // `web` über `killShellChildTree` (T-263-Fund, Begründung dort): `startWeb`
+  // `web` über `killChildTree` (T-263-Fund, Begründung dort): `startWeb`
   // spawnt über `shell: true`, ein blankes `SIGTERM` träfe nur das `cmd.exe`
   // und ließe den eigentlichen `vite`-Prozess als Waise auf 5173 zurück.
   // `localApi` startet `node` direkt, ohne Shell — `SIGTERM` bleibt hier
   // richtig und ausreichend.
-  await killShellChildTree(services.web);
+  await killChildTree(services.web);
   services.localApi.kill('SIGTERM');
   // Kurze Gnadenfrist, damit beide Prozesse ihre Sockets freigeben, bevor ein
   // erneuter Lauf denselben Port belegen will.

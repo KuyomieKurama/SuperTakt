@@ -46,9 +46,7 @@ import {
   EXPORT_TRANSFORMATIONS,
 } from '@takt/export';
 
-/* ========================================================================= */
 /* Zusicherung: der Vermerk wird nicht ausgeliefert                          */
-/* ========================================================================= */
 
 /** Reiner Typ, kein Laufzeitanteil. `Assert<false>` verletzt seine Randbedingung. */
 type Assert<T extends true> = T;
@@ -74,9 +72,7 @@ export type NoteSourceIsNotPublished = Assert<
     : false
 >;
 
-/* ========================================================================= */
 /* Gestalt der Auskunft                                                      */
-/* ========================================================================= */
 
 /** Fachliche Ebene, aus der eine Quelle stammt. Nur zur Gliederung der Liste. */
 export type ExportSourceGroupId = 'todo' | 'group' | 'system';
@@ -127,9 +123,7 @@ export interface ExportSourceCatalog {
   readonly noteBoundaryHint: string;
 }
 
-/* ========================================================================= */
 /* Beschriftungen                                                            */
-/* ========================================================================= */
 
 /** Reihenfolge der Gruppen in der Auswahlliste. */
 const SOURCE_GROUPS: readonly ExportSourceGroupInfo[] = Object.freeze([
@@ -267,9 +261,7 @@ const NOTE_BOUNDARY_HINT =
   'Er bleibt in SuperTakt und geht in keinen Export. ' +
   'Die abrechenbare Leistung heißt „Leistung der Tagesgruppe“.';
 
-/* ========================================================================= */
 /* Zusammenbau                                                               */
-/* ========================================================================= */
 
 /**
  * Die Quellen in Anzeigereihenfolge: nach Gruppen, innerhalb einer Gruppe in

@@ -26,6 +26,6 @@ export function cacheAppearance(value: StartupAppearance): void {
       density: value.density, mode: preset.mode,
     }));
   } catch {
-    // The database save still works when web storage is unavailable.
+    // Die Datenbank speichert auch bei nicht verfügbarem Browserspeicher.
   }
 }

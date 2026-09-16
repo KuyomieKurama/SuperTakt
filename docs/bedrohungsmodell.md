@@ -14344,3 +14344,301 @@ messen muß und nicht die Tür, die er kennt. Hier steht dieselbe Lehre ohne Wä
 der „drei Wege" findet, wo der Vorgänger einen sah, hat **nicht** damit bewiesen, daß es drei sind
 — er hat bewiesen, daß das Zählen am falschen Ende anfing. Die Frage lautet nicht „welche Routen
 kenne ich", sondern „wer schreibt `ended_at`".
+
+## 47. Prüfung T-381 (2026-09-14) — R-34: die beiden Türen sind zu, der Deckel greift in beide Richtungen, und der Wächter mißt eine Schreibweise
+
+Gegenstand: **T-371** (`a5641e1`) und, mitgelesen, **T-375** (`a521ff2`). Beides sind die
+Gegenmittel zu den Befunden B-1 bis B-4 aus Abschnitt 46 und damit zu **A-A-128** bis **A-A-130**.
+`HEAD` = `7eeb073`; sein Baum ist mit `a521ff2` **zeichengleich** (`git diff a521ff2 HEAD` ist
+leer), im Arbeitsbaum stehen nur zwei unversionierte Symbole eines parallelen Auftrags.
+
+**Meßweg, wie in 46.** Kein HTTP, kein Port, keine Datei auf der Platte. Zwei
+`openDatabase({ location: ':memory:' })` als zwei Rechner, zwei bewegliche Uhren, der echte
+Anwendungsfallweg `exportDataArchive` → `importDataArchive` → Anwendungsfall, node 22.23.2.
+Quelluhr `T0 = 2026-09-13T06:00:00Z`, Lebenszeichen `T0 + 1 200 s`, Zieluhr `T0 + 42 300 s`
+(`17:45`), inaktive Zeit ab `17:05`. **Alle Zahlen unten sind neu gefahren**, keine aus einem
+Bericht übernommen. Für den Wächter lief eine vollständige Arbeitsbaumkopie im
+Kritzelverzeichnis; der Quellbaum ist dabei nicht angefaßt worden.
+
+### 47.1 Die Tabelle aus 46, noch einmal gemessen
+
+| Fall | 46 (2026-09-14, vormittags) | T-381 (2026-09-14, nachmittags) |
+|---|---|---|
+| `idle/begin` + `idle/return` auf dem vorgefundenen Eintrag, **mit** Archiv, `keep = true` | **39 900 s**, `export_status = open` | **`409 conflict`**, **keine** geschlossene Zeile |
+| dasselbe, `keep = false` | **39 900 s** | `409 conflict`, keine Zeile |
+| dasselbe **ohne** Archiv (gewöhnlicher Absturz), beide Stellungen | **39 900 s** | `409 conflict`, keine Zeile |
+| `GET /timer/orphaned` für denselben Eintrag, alle vier Fälle | 1 200 s | 1 200 s — unverändert |
+| Gegenprobe: Timer **dieses** Laufs, `idle/begin` + `return` | 39 900 s gebucht | **39 900 s gebucht**, Folgetimer ab `17:45`, keine Überlappung |
+| Lebenszeichen `9999-12-31`, `GET /timer/orphaned` | **251 613 021 599 s** | **42 300 s** (= Wanduhr des fragenden Laufs) |
+| dasselbe, `POST /timer/stop` | **251 613 021 599 s** | **42 300 s** |
+| dasselbe, `POST /timer/orphaned/resolve` („buchen") | (unbewertet) | **42 300 s** — dieselbe Zahl wie Dialog und Stopp |
+| dasselbe, `POST /timer/start {stopRunning:true}` | Ende in der Zukunft, **Überlappung** | Ende `17:45`, laufend ab `17:45` — **keine Überlappung** |
+| `decideOrphanedTimer` **ohne** `now`, Lebenszeichen aus der Zukunft | (unbewertet) | **251 613 021 599 s** — die Ausfallrichtung ist die teure |
+
+Vier Zeilen der Bewertung aus 46 sind damit **unwahr geworden**, und wieder in die gute Richtung:
+die beiden 39 900-s-Zeilen aus 46.3 und die beiden Zeilen der Tabelle in 46.4. Der Satz aus 46.3
+„Neununddreißigtausendneunhundert Sekunden auf einer abrechenbaren Zeile" trifft auf keinen
+gemessenen Fall mehr zu; der Satz aus 46.4 „Für ein präpariertes Archiv ist der Stopp großzügiger
+geworden" ebensowenig.
+
+**Die Menge der Türen, zum vierten Mal und auf einem eigenen Weg aufgespannt.** Über den ganzen
+Quellbaum gemessen — nicht über eine Liste bekannter Routen — gibt es **neun** Aufrufe der drei
+schließenden Portmethoden; zwei davon sind `timer.start(…, false, …)` und können nichts schließen.
+Bleiben **sieben**, dieselben sieben wie in 46 und in T-371, unabhängig erreicht. Der vierte
+SQL-Weg (`timeEntries.update`, dynamisch gebautes `UPDATE`) ist nicht gelesen, sondern **gemessen**
+zu: auf einem laufenden Eintrag `not_found`, Zeile unverändert.
+
+### 47.2 A-A-128 bis A-A-130 — Stand
+
+| Nr. | Stand | Nachweis |
+|---|---|---|
+| **A-A-128** | **erfüllt, mit einer Einschränkung (47.3)** | beide Türen gemessen zu, in vier Kombinationen; der Wächter existiert (`proof:layers` Abschnitt 7/8, 36/0 → **51/0**, selbst gefahren); die Reihenfolgezusage aus `unit-of-work.ts` ist gemessen (47.4) |
+| **A-A-129** | **erfüllt** | `min(heartbeatAt, now)` in `decideOrphanedTimer` (`packages/domain`), also an **einer** Stelle; Dialog, Stopp, „buchen" und die Verdrängung nennen gemessen dieselbe Zahl |
+| **A-A-130** | **erfüllt für `data-transfer.ts`, verletzt an zweiter Stelle (47.5)** | der Absatz ist durch den gemessenen Stand ersetzt, und seine vier Zeilen sind selbst nachgemessen wahr: Stopp **1 200 s**, Verdrängung **1 200 s** (Ende `06:20`), `idle/begin` `409`, `POST /timer/heartbeat` → `seenAt: null` und die Tabelle unverändert |
+| **A-A-127** | **unverändert offen und durch den Deckel nicht kleiner geworden** | 47.6 |
+
+### 47.3 Der Wächter mißt eine Schreibweise, nicht die Anforderung
+
+`proof:layers` Abschnitt 7 sagt zu: „Eine achte Tür ist damit rot, **bevor** jemand sie mißt."
+Diese Zusage ist nicht geglaubt, sondern gemessen worden — sechzehn eingesetzte Türen in einer
+vollständigen Arbeitsbaumkopie, jede einzeln gefahren:
+
+| Gestalt der achten Tür | Wächter |
+|---|---|
+| `await unit.timer.stop(note, wish)` roh in einem Anwendungsfall | **rot** (richtig) |
+| `await unit.timer.separateIdle(…)` roh | **rot** (richtig) |
+| `unit.timer.start(todoId, verdraengen, ts)` mit einer Variablen statt `false` | **rot** (richtig) |
+| `unit.timer.start(todoId, false, ts)` — kein Schließen | grün (richtig) |
+| `const p = unit.timer; await p.stop(…)` | **grün — übersehen** |
+| `const { stop } = unit.timer; await stop(…)` | **grün — übersehen** |
+| `await unit.timer["stop"](…)` | **grün — übersehen** |
+| dieselbe Zeile in einer **Routendatei** | **grün — übersehen** (zweite Wand: Abschnitt 3 verbietet Routen `inTransaction(` und `@takt/storage`) |
+| dieselbe Zeile in einer **Einstiegsdatei** (`src/runtime.ts`) | **grün — übersehen**, und hier gibt es **keine** zweite Wand: `main.ts` und `startup.ts` eröffnen Transaktionsklammern von Berufs wegen |
+| vierte `UPDATE time_entry SET ended_at …` in `repo-time.ts`, Großschreibung | **rot** (richtig) |
+| dieselbe in **Kleinschreibung** (`update time_entry set ended_at …`) | **grün — übersehen**; die Marke trägt kein `i` |
+| dieselbe mit `SET note = ?, ended_at = ?` | **grün — übersehen**; die Marke verlangt `ended_at` unmittelbar nach `SET` |
+| dieselbe Anweisung in einer **zweiten** Speicherungsdatei | **rot** (richtig, zwei Prüfsätze) |
+| `bookingEndOf` ohne `now` an `decideOrphanedTimer` | **rot** (richtig) |
+| ein **neuer** `decideOrphanedTimer`-Aufruf ohne `now` in einem Anwendungsfall | **rot** (richtig) |
+
+**Sieben von fünfzehn Gestalten bleiben grün.** Das entwertet den Wächter nicht — er ist die erste
+Messung dieser Menge überhaupt und fängt jede Gestalt, die im Bestand tatsächlich vorkommt; er hat
+beim ersten Lauf seines Erbauers zwei echte Stellen gefunden. Aber seine **Zusage** ist weiter
+gefaßt als seine Messung, und das ist genau der Fehler, den E-103 und A-A-75 benennen: Die Menge
+ist an einer **Schreibweise** aufgespannt (`.timer.stop(`, `UPDATE time_entry SET ended_at`) und
+nicht an der Anforderung („wer schreibt `ended_at`"). Der Satz im Kopf des Abschnitts muß entweder
+eingeengt oder die Messung erweitert werden — heute behauptet er mehr, als er leistet. **A-A-131.**
+
+Zwei der Lücken sind dabei schwerer als die anderen fünf: die **Einstiegsdateien** (neun Dateien,
+die Transaktionsklammern eröffnen dürfen und aus Abschnitt 7 herausfallen) und die **Kleinschreibung**
+in der Speicherung, weil beide keine ungewöhnliche Schreibweise brauchen, sondern nur einen
+gewöhnlichen Ort beziehungsweise eine gewöhnliche SQL-Gewohnheit.
+
+### 47.4 Die Reihenfolgezusage in `unit-of-work.ts` — jetzt gemessen
+
+Die offene Hälfte von A-A-128 („die Zusage hängt an zwei ungemessenen Zeilen") ist geschlossen,
+und zwar nicht durch den Kommentar, den T-371 dort hingeschrieben hat, sondern durch Fall F von
+T-375. Selbst gefahren, in der Arbeitsbaumkopie, jede Gegenfassung byte-identisch zurückgeschrieben:
+
+| Gegenfassung | `data-transfer-timer-recovery.test.ts` |
+|---|---|
+| Zwei-Transaktionen-Anordnung in `data-transfer.ts` (die früher verworfene) | **2 rot**, in **5 von 5** Wiederholungen |
+| `return queue` statt `return next` in `unit-of-work.ts` | **6 rot** (und im ganzen Bestand **86 rot** über 11 Dateien) |
+| `return queue.then(() => next)` — Rückgabewert richtig, Reihenfolge verschoben | **2 rot** |
+| `return next.then(async v => { await queue; return v; })` | **2 rot** |
+| `return new Promise(r => { void queue.then(() => next.then(r)); })` | **2 rot** |
+
+Die Zusage ist damit ein **gemessenes Verhalten** und kein typgesicherter Vertrag — das bleibt
+richtig gesagt. Aber sie hängt nicht mehr an einem Absatz.
+
+### 47.5 Zwei Sätze, die A-A-130 an zweiter Stelle verletzen
+
+Derselbe Fehler, den A-A-130 für `data-transfer.ts` festgestellt hat, steht seit T-371 in
+`packages/storage/src/sqlite/unit-of-work.ts` im Kommentarblock vor `const next = …`:
+
+> **Wer hier `return queue` schriebe, öffnete R-34 wieder, und nichts würde rot.** Ein Prüffall
+> dafür fehlt bis heute […] Bis er steht, ist dieser Absatz die einzige Wache.
+
+Beide Sätze sind gemessen falsch. `return queue` macht **86 Prüffälle in 11 Dateien** rot (von
+1 661) — es ist die lauteste Mutation, die dieser Bestand kennt, nicht eine stille. Und der
+Prüffall fehlt seit T-375 nicht mehr: Fall F fängt die tatsächlich befürchtete Regression, und
+zwar auch in den drei Gestalten, die den Rückgabewert **nicht** brechen (47.4). Ein Absatz, der
+sich selbst zur einzigen Wache erklärt, während daneben ein Prüffall steht, ist die
+Spiegelvariante von A-A-130 — und die zweite in derselben Freigaberunde. **A-A-132.**
+
+### 47.6 A-A-127 — der Deckel hat die Obergrenze nicht ersetzt, und das ist meßbar
+
+Der Deckel `min(heartbeatAt, now)` begrenzt das **Ende**, nicht die **Dauer**. Liegt der Anfang
+weit genug zurück, ist er wirkungslos:
+
+| Archiv | `GET /timer/orphaned` | `POST /timer/stop` |
+|---|---|---|
+| Start `1000-01-01`, Lebenszeichen `9999-12-31` | **32 399 545 500 s** | **32 399 545 500 s**, `export_status = open` |
+| Start `1000-01-01`, Lebenszeichen **ehrlich** (`06:20` desselben Tages) | **32 399 504 400 s** | — |
+| eine **abgeschlossene** Zeile direkt aus dem Archiv, `1000-01-01` → `9999-12-31` | — | **284 012 524 799 s** in `time_entry`, `export_status = open` |
+
+Die dritte Zeile ist die wichtige: Für eine Zeile, die das Archiv **fertig geschlossen**
+mitbringt, hat sich seit 46.4 **nichts** geändert — 2,84 × 10¹¹ s, unverändert. Der Deckel wirkt
+ausschließlich dort, wo dieser Lauf selbst ein Ende schreibt. `duration_seconds >= 1` bleibt die
+einzige Schranke der Speicherung, `MINIMUM_DURATION_SECONDS` die einzige der Domäne, E-008 rundet
+**auf**, und `foreign.ts` nimmt Sekunden aus einer fremden Datei weiterhin ohne obere Schranke.
+**A-A-127 ist unverändert offen und ist die einzige Auflage dieses Papiers, die eine Zahl in einer
+Rechnung nach oben begrenzen würde.**
+
+### 47.7 B-5 ist unverändert offen — und es ist nicht nur ein Dialog
+
+T-371 sagt, an B-5 sei nichts geändert. Das ist gemessen richtig, und die Messung geht einen
+Schritt weiter als die von 46.3: Nach einem Archiv mit **offener** `timer_idle`-Phase (Abwesenheit
+ab `06:05`, Lebenszeichen `06:20`, Zieluhr `17:45`) schließt `completeReturn` die Buchung korrekt
+gedeckelt auf **300 s** — und bietet daneben ein Zuordnungsfenster von `06:05 → 17:45` =
+**42 000 s** an. Ich habe dieses Fenster nicht nur gelesen, sondern **verteilt**:
+
+```
+POST /timer/idle/resolve  {allocations: [{todoId, seconds: 42000}]}
+  → recordedSeconds 42 000
+  → time_entry 06:05:00Z -> 17:45:00Z = 42 000 s, export_status = open
+```
+
+**Elf Stunden vierzig auf einer abrechenbaren Zeile**, aus einer **ehrlichen** Datensicherung, ohne
+Angreifer, mit genau einer ausdrücklichen Handlung des Benutzers. Es ist derselbe Schaden wie in
+R-34 und größer als jede Zahl, die heute noch durch eine der sieben Türen geht. Der Unterschied zu
+R-34 ist nicht die Größe, sondern daß der Benutzer zustimmt — auf einem Bildschirm, der ihm nicht
+sagt, daß diese Stunden aus der Uhr eines anderen Rechners stammen. Es gehört als **eigener,
+offener Eintrag** in `risks.md`, nicht als Fußnote unter einem geschlossenen.
+
+### 47.8 Neu gemessen: die Sackgasse aus einem Uhrversatz
+
+Trägt ein Archiv eine **offene** Inaktivitätsphase, deren `started_at` hinter der Wanduhr des
+Zielrechners liegt, sind nach dem Einspielen **alle vier** Ausgänge zu:
+
+```
+Zieluhr 17:45, timer_idle.started_at 17:55 (zehn Minuten Uhrversatz)
+  POST /timer/idle/return       validation_error   („Der Rückkehrzeitpunkt ist ungültig.")
+  POST /timer/stop              conflict           („Bestätigen Sie zuerst Ihre Rückkehr.")
+  GET  /timer/orphaned          null               (kein Dialog)
+  POST /timer/orphaned/resolve  conflict
+  time_entry: ein offener Eintrag, kein Weg ihn zu schließen
+```
+
+Das ist wörtlich die „echte Sackgasse", mit der `idle.ts` begründet, warum `completeReturn`
+deckelt statt abzuweisen — sie existiert trotzdem, nur eine Tür weiter. **Kein Angreifer nötig:**
+zehn Minuten Vorlauf auf der Uhr des Quellrechners genügen. Sie heilt sich selbst, sobald die
+Wanduhr den Zeitpunkt überholt — also nach der Dauer des Uhrversatzes; bei einem **präparierten**
+Archiv (`2099-01-01`) ist sie dauerhaft, und dann bleibt nur ein Datenbankeditor. Kein Geldpfad,
+aber eine Verfügbarkeitslücke derselben Familie, und der Ort ist derselbe wie B-5. **A-A-133.**
+
+### 47.9 Was unverändert hält — je Prüfpunkt des Auftrags
+
+- **Das Archiv bleibt eine fremde Datei.** Sechs ungültige Formen gegen einen eingespielten
+  Zustand: `schemaVersion: 99`, `0`, `6.5`, `"6"`, fremde Formatkennung, reiner Text — **je
+  `validation_error`**, und danach `bookableSeconds` 1 200 → 1 200, laufender Eintrag
+  zeichengleich, Todos 1 → 1 und **`timerRecovery.entryId` zeichengleich**. Die weiter gefaßte
+  Klammer hat daran nichts verschoben; sie hat eine Lesung dazubekommen, keinen Schreibvorgang.
+  `DATA_ARCHIVE_VERSION` steht unverändert auf `6`.
+- **Der Pfad reist weiterhin nicht mit, vor dem Schreiben und ohne Bytes.** Archiv mit **0**
+  Dateien und `target = C:\Users\anna\AppData\Roaming\de.takt.desktop\email\<32 Hexziffern>.eml` →
+  auf dem Zielrechner `<Anwendungsdatenverzeichnis>/email-attachments/<32 Hexziffern>.eml`.
+- **Die Rumpfgrenzen sind unberührt**: `MAX_BODY_BYTES` 1 MiB, `DATA_TRANSFER_MAX_BODY_BYTES`
+  64 MiB, `DATA_ARCHIVE_MAX_BODY_BYTES` 256 MiB, zeichengleich in `config.ts` und unverändert in
+  `app.ts` zugeordnet.
+- **E-001 unberührt.** In keinem der sieben Artefakte steht eine Adresse außerhalb von
+  `127.0.0.1`. `proof:release-safety` 158/0.
+- **`foundAtServiceStart` ist als Fläche harmlos.** Die Ausfuhr ist eine **Modulausfuhr**, kein
+  Pfad: Der einzige Produktivleser ist `idle.ts` (eine Zeile), `apps/local-api/src/index.ts`
+  führt nichts davon weiter, keine Route erreicht sie. Ihre Auskunft hängt ausschließlich an
+  `context.timerRecovery`, und den schreiben nur `captureTimerRecovery` (beim Hochlauf) und
+  `importDataArchive` (auf den Eintrag, den das Archiv selbst mitgebracht hat). Gemessen: eigener
+  Timer → `false`, fehlende Aufnahme → **`true`** (die billige Richtung), fremde Kennung →
+  `false`. Kein Eingabewert und keine Antwort verlegt sie.
+- **`decideOrphanedTimer.now` ist freiwillig, und die Ausfallrichtung ist die teure.** Ohne den
+  Wert bucht die Domäne gemessen **251 613 021 599 s**, mit ihm 42 300 s. Das ist die umgekehrte
+  Ausfallrichtung als bei `timerRecovery` und wird heute allein von `proof:layers` Abschnitt 7
+  getragen — der diese eine Gestalt gemessen zuverlässig fängt (47.3, beide `now`-Proben rot).
+  Solange es bei drei Aufrufstellen in einer Datei bleibt, ist das tragbar; es ist aber der Punkt,
+  an dem A-A-131 konkret Geld kostet, wenn der Wächter fällt.
+- **Der Todo-Vermerk und `WindowsUser`** sind von beiden Arbeiten nicht berührt.
+- **Hygiene.** Semgrep `p/typescript` + `p/secrets` über die zehn Artefakte beider Aufträge:
+  **10 Dateien, 0 Befunde, 0 Fehler**. Semgrep `p/secrets` über **729** versionierte Quell-,
+  Prüf-, Dokument- und Beschreibungsdateien: **0 Befunde** (ein Parsefehler auf
+  `takt-local-api.yaml`, kein Befund). Kein `nosemgrep`, kein `@ts-ignore`, kein `as any` in den
+  Diffs; keine echte Call-Nummer, kein Zugangsdatum. Die Prüfdaten von T-375 heißen „Rückruf",
+  „Anderes Todo", „Prüfrechner".
+- **Die OpenAPI-Beschreibung**: kein neuer Pfad, kein berührtes `security`-Element, ausschließlich
+  Beschreibungstexte, ein Beispiel und die genauere `409`-Angabe an einem bestehenden Pfad.
+  `proof:openapi` 115/0.
+- **42Crunch weiterhin nicht gefahren**, aus demselben Grund wie in 46.5: Ein Audit lüde die
+  Beschreibung des Dienstes zu einem fremden Dienst hoch — das ist die Grenze aus E-001. Gemeldet,
+  nicht grün.
+
+### 47.10 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-131** | **Ein Wächter, dessen Menge an einer Schreibweise hängt, darf nicht zusagen, jede achte Tür rot zu machen.** Entweder mißt `proof:layers` Abschnitt 7 auch die Einstiegsdateien, den Portalias, die Destrukturierung, den Klammerzugriff und `UPDATE time_entry SET …` ohne Rücksicht auf Groß-/Kleinschreibung und Spaltenreihenfolge — oder der Kopfabsatz nennt seine Grenzen und die Zusage wird auf das eingeengt, was er wirklich mißt. Beides ist tragbar; die heutige Lage nicht | sieben von fünfzehn eingesetzten achten Türen bleiben **grün**, darunter eine in `src/runtime.ts` und eine als `update time_entry set ended_at …` (47.3) |
+| **A-A-132** | **A-A-130 gilt in jeder Datei, auch in der, die auf die Lücke hingewiesen hat.** Der Kommentarblock in `unit-of-work.ts` behauptet, `return queue` wäre still und ein Prüffall fehle; beides ist seit T-375 falsch. Der Absatz gehört auf den gemessenen Stand gebracht und zeigt auf Fall F | `return queue` → **86 rot** in 11 Dateien; Fall F rot gegen **vier** verschiedene Gegenfassungen (47.4) |
+| **A-A-133** | **Ein Zeitpunkt aus einem Archiv, der hinter der Wanduhr liegt, darf keinen Zustand herstellen, aus dem der Benutzer nicht herauskommt.** Eine eingespielte `timer_idle`-Zeile mit `started_at > now` schließt alle vier Ausgänge. Entweder wird sie beim Einspielen auf die Wanduhr gezogen — dieselbe Bewegung, die `todo_attachment.target` schon macht — oder einer der vier Ausgänge bleibt offen | zehn Minuten Uhrversatz genügen: `return` `validation_error`, `stop` `conflict`, `orphaned` `null`, `resolve` `conflict` (47.8) |
+| **A-A-127** | **unverändert offen und dringlich** — es gibt weiterhin keine Obergrenze für eine Dauer | eine abgeschlossene Archivzeile `1000-01-01 → 9999-12-31` landet unverändert als **284 012 524 799 s** mit `export_status = open` in `time_entry` (47.6) |
+
+### 47.11 Urteil
+
+**T-371: freigegeben, mit drei Auflagen, von denen keine blockiert.** Die beiden Befunde, wegen
+derer ich T-363 nicht freigegeben habe, sind zu — und zwar so, wie eine Behebung aussehen soll:
+Die Regel steht weiterhin an **einer** Stelle, der gewöhnliche Fall ist gemessen zeichengleich
+(39 900 s gebucht, Folgetimer ohne Überlappung), die Menge ist von unten an der Speicherung
+aufgespannt und kommt unabhängig auf dieselben sieben, und der Unterschied zwischen Abweisen und
+Deckeln ist nicht bequem, sondern begründet entschieden. Die Entscheidung, `beginIdle` abzuweisen
+statt zu deckeln, halte ich für richtiger als meinen eigenen Vorschlag aus 46.3: Ein Deckel hätte
+die Buchung verkleinert und das Zuordnungsfenster stehengelassen — also genau die Hälfte behoben,
+die weniger kostet (47.7 zeigt, welche das gewesen wäre). Der Deckel nach oben liegt in
+`packages/domain`, wo A-A-129 ihn verlangt hat, und Dialog, Stopp, „buchen" und Verdrängung nennen
+gemessen dieselbe Zahl.
+
+**T-375: mitgelesen, und seine Berichtigung an mir trifft zu.** Ich habe beide Hälften selbst
+gefahren: `return queue` ist laut (86 rot), und Fall F fängt die wirklich stille Regression — auch
+in drei Gestalten, die T-375 nicht gebaut hat und die den Rückgabewert unversehrt lassen. Meine
+Zeile in 46.2 („wird von keinem Lauf gemessen") ist damit unwahr geworden, und das ist die
+angenehmste Art, in einem Prüfbericht widerlegt zu werden.
+
+**R-34 darf geschlossen werden — aber nicht in einem Zug.** Die Bedingung ist nicht eine weitere
+Messung, sondern eine Buchführung: **B-5 (47.7) und A-A-127 (47.6) gehören als eigene, offene
+Einträge in `risks.md`, bevor R-34 zugeht** — mit ihren eigenen Zahlen, nicht als Fußnote unter
+einem geschlossenen Eintrag. Der Grund steht in 47.7: Das A-24-Zuordnungsfenster trägt nach einer
+**ehrlichen** Datensicherung gemessen 42 000 s in eine abrechenbare Zeile, also mehr als jede Zahl,
+die heute noch durch eine der sieben Türen geht. Ein geschlossener Eintrag, unter dem der größere
+Rest als Nebensatz steht, wäre die vierte Behauptung in dieser Reihe — und die erste, die nicht
+einmal falsch wäre, sondern nur irreführend.
+
+**Der Satz, der aus dieser Prüfung bleibt.** Abschnitt 46 endete mit „die Frage lautet nicht,
+welche Routen kenne ich, sondern wer schreibt `ended_at`". T-371 hat genau das getan und die
+richtige Antwort bekommen. Der Wächter, den es daneben gebaut hat, stellt die Frage aber wieder
+anders: **„welche Zeichenfolge steht in der Zeile."** Eine Menge an der Anforderung aufzuspannen
+ist eine Denkarbeit; sie zu **messen** heißt, sie noch einmal aufzuspannen — und die zweite
+Aufspannung ist nicht dieselbe, nur weil sie dasselbe trifft.
+
+## Nachtrag Outlook-Mail-Zuordnung (15.09.2026)
+
+A-10.11–A-10.15 erlauben das Ergänzen vorhandener Todos über einen strikten Mail-Endpunkt.
+Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelten nun für
+**nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
+Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
+Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
+konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
+
+## Nachtrag: Zertifikatseinrichtung unter Linux und macOS (A-23)
+
+Die ausdrücklich angeforderte Plattformunterstützung erweitert den bestehenden
+Bestätigungsdialog. Es gibt keine neue IPC-Fläche für Pfade, Befehle oder Zieladressen.
+Unter Linux wird nur Peer-Vertrauen für das validierte localhost-Serverzertifikat
+(`P,,`) in den erkannten NSS-Benutzerspeichern hinterlegt. Keine Root-Rechte,
+keine systemweite CA. Die geprüften öffentlichen Bytes werden dem Importprogramm
+über stdin übergeben. Unter macOS gilt der Benutzer-Schlüsselbund; ein notwendiger
+Systemdialog bleibt erhalten. Geänderte Fingerabdrücke, CA-Zertifikate, zusätzliche
+Namen und ungeeignete Gültigkeit werden vor einem Import abgewiesen.
+
+NSS-Leseergebnis und TLS-Peer-Prüfung sind getrennte Nachweise. Ein Teilerfolg
+wird als solcher angezeigt und darf weder vollständiges Browservertrauen noch
+einen erfolgreichen HTTPS-Test vortäuschen. Werkzeugprozesse haben Fristen;
+Ausgaben sind begrenzt, Aufrufe benutzen keine Shell. Tests arbeiten ausschließlich
+mit temporären Zertifikaten und Zertifikatsspeichern. Siehe
+[Implementierung und Testgrenzen](outlook-certificate-setup.md).

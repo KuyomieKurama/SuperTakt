@@ -1,16 +1,7 @@
 import { DESIGN_THEMES } from '@takt/domain';
 /**
- * Takt — von der Zeile zum Domänenwert.
- *
- * Eine Zeile ist ein `Record<string, SqlValue>`; ein Domänenwert trägt
- * markierte Kennungen und feste Vereinigungen. Zwischen beidem liegt genau
- * diese Datei.
- *
- * Die Umwandlung ist absichtlich ausgeschrieben und nicht generisch. Ein
- * automatischer Abbilder von `snake_case` auf `camelCase` nähme jede Spalte
- * mit, die jemand später ergänzt — auch `todo_note.body`, wenn er sie je in
- * eine Abfrage zöge. Ausgeschriebene Zugriffe sind die Fassung von E-017 auf
- * der Leseseite: Was nicht dasteht, kommt nicht heraus.
+ * Felder ausdrücklich abbilden, damit neue Datenbankspalten nicht unbemerkt in Antworten oder
+ * Exportwerte gelangen.
  */
 
 import type {
@@ -100,6 +91,10 @@ export function toTodo(row: SqlRow, tagIds: readonly TagId[]): Todo {
      * nicht: Er wird gerechnet, nie gespeichert (E-070 Punkt 3), und diese
      * Datei liest, was gespeichert ist.
      */
+    dueTime: textOrNull(row, 'due_time'),
+    estimateMinutes: row['estimate_minutes'] == null ? null : integer(row, 'estimate_minutes'),
+    noExport: row['no_export'] === 1,
+    priorityId: textOrNull(row, 'priority_id'),
     dueDate: mapNullable(textOrNull(row, 'due_date'), brand<CalendarDay>),
     tagIds,
     createdAt: asTimestamp(text(row, 'created_at')),

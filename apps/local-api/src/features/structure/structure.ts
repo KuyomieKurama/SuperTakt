@@ -34,9 +34,7 @@ import type { Page, Pagination, PoolAxesResolution, UnitOfWork } from '@takt/sto
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
 
-// ---------------------------------------------------------------------------
 // Tags und Ordner (A-4.*)
-// ---------------------------------------------------------------------------
 
 /** A-10.4 — der vollständige Baum in **einem** Aufruf, beliebig tief. */
 export function loadTagTree(context: AppContext): Promise<TagTree> {
@@ -148,13 +146,11 @@ export function removeTagFolder(
   return context.transactions.inTransaction((unit) => unit.folders.remove(id));
 }
 
-// ---------------------------------------------------------------------------
 // Pools und Kanban-Spalten (A-3.*, A-5.*, E-054)
 //
 // Eine Entität, zwei Flächen. Wer eine Spalte anlegt, legt einen Pool mit
 // `placement: 'board'` an; es gibt hier keinen zweiten Satz Anwendungsfälle für
 // Spalten, weil er derselbe wäre. Das Board **liest** über `features/board/board.ts`.
-// ---------------------------------------------------------------------------
 
 /**
  * Eine Regel samt dem, was ihre Ordner ergeben (T-080).
@@ -401,6 +397,7 @@ export async function listPoolMembers(
   id: PoolId,
   includeCompleted: boolean,
   pagination: Pagination,
+  priorities: Pick<TodoFilter, "priorityIds" | "withoutPriority" | "sortByPriority"> = {},
 ): Promise<UseCaseResult<Page<Todo>>> {
   return context.transactions.inTransaction(async (unit) => {
     const pool = await unit.pools.load(id);
@@ -408,13 +405,11 @@ export async function listPoolMembers(
 
     const filter: TodoFilter =
       pool.completion !== 'any' ? {} : includeCompleted ? {} : { onlyOpen: true };
-    return ok(await unit.pools.members(id, filter, pagination));
+    return ok(await unit.pools.members(id, { ...filter, ...priorities }, pagination));
   });
 }
 
-// ---------------------------------------------------------------------------
 // Kanban-Spalten (A-5.*)
-// ---------------------------------------------------------------------------
 
 export function listStatuses(context: AppContext): Promise<readonly TodoStatus[]> {
   return context.transactions.inTransaction((unit) => unit.statuses.list());

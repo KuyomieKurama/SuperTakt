@@ -470,9 +470,7 @@ export function FormDialog({
   );
 }
 
-/* ==================================================================== */
 /* Textfeld in einer Zeile                                              */
-/* ==================================================================== */
 
 /**
  * Der zweite Verlust durch `noValidate`, und der stillere von beiden.
@@ -499,11 +497,13 @@ export function FormDialog({
  */
 const INCOMPLETE_INPUT_RULE: Record<TextFieldType, string | undefined> = {
   text: undefined,
+  time: "Stunde und Minute gehören dazu.",
+  number: "Eine gültige Zahl ist erforderlich.",
   date: "Tag, Monat und Jahr gehören dazu.",
   "datetime-local": "Datum und Uhrzeit gehören dazu.",
 };
 
-export type TextFieldType = "text" | "datetime-local" | "date";
+export type TextFieldType = "text" | "datetime-local" | "date" | "time" | "number";
 
 export interface TextFieldProps {
   readonly label: string;

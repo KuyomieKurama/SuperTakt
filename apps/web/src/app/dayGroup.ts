@@ -1,5 +1,6 @@
 import { errorMessage } from "../api/client";
-import { listTimeEntries, previewExport } from "../api/endpoints";
+import { listTimeEntries } from "../features/bookings/api";
+import { previewExport } from "../features/export/api";
 import type { CalendarDay, ExportNotExportableReason, ExportPreview, Id } from "../api/types";
 
 /**
@@ -96,9 +97,7 @@ export async function loadDayGroupInsight(
   }
 }
 
-/* ==================================================================== */
 /* Die Vorschau ueber alle offenen Buchungen einer Ansicht              */
-/* ==================================================================== */
 
 /**
  * Was eine Uebersicht ueber ihre offenen Buchungen erfahren hat.

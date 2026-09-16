@@ -43,9 +43,7 @@ const nameOf = (node) => {
   return null;
 };
 
-// ---------------------------------------------------------------------------
 // Typen der Oberfläche
-// ---------------------------------------------------------------------------
 
 /**
  * Baut aus einem Quelltext eine Aufstellung „Name → Feldnamen".
@@ -218,9 +216,7 @@ function resolveTypeName(name, index, seen) {
   return names;
 }
 
-// ---------------------------------------------------------------------------
 // Die Aufrufe
-// ---------------------------------------------------------------------------
 
 /**
  * Die Typnamen, die eine Typangabe nennt und die die Aufstellung auch führt

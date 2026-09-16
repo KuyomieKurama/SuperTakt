@@ -29,8 +29,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { TimeEntryId, Timestamp, TodoId } from '@takt/domain';
-import { openDatabase, type OpenedDatabase } from '@takt/storage';
 
+import { createTimerMachine as machine, type TimerMachine as Machine } from '../support/timer-machine.ts';
 import type { AppContext } from '../../src/context.ts';
 import { exportDataArchive, importDataArchive } from '../../src/features/data-transfer/data-transfer.ts';
 import { captureTimerRecovery, loadOrphanedTimer, loadRunningTimer, stopTimer, startTimer, touchHeartbeat } from '../../src/features/timer/timer.ts';
@@ -42,32 +42,8 @@ const HEARTBEAT_AT = '2026-09-13T06:20:00Z' as Timestamp; // T0 + 1200 s
 const TARGET_CLOCK = '2026-09-13T17:00:00Z' as Timestamp; // T0 + 39600 s
 const INACTIVE_SINCE = '2026-09-13T16:50:00Z' as Timestamp; // TARGET_CLOCK - 600 s
 
-interface Machine {
-  readonly database: OpenedDatabase;
-  readonly context: AppContext;
-  setClock(value: Timestamp): void;
-}
-
-async function machine(initial: Timestamp): Promise<Machine> {
-  let current = initial;
-  const database = openDatabase({ location: ':memory:', now: () => current });
-  await database.migrations.migrateToLatest();
-  const context = {
-    transactions: database.transactions,
-    clock: { now: () => current },
-    system: { windowsUser: () => 'Prüfrechner' },
-  } as unknown as AppContext;
-  return {
-    database,
-    context,
-    setClock(value: Timestamp) {
-      current = value;
-    },
-  };
-}
-
 function withTimerRecovery(context: AppContext, entryId: TimeEntryId | null): AppContext {
-  return { ...context, timerRecovery: { entryId } } as unknown as AppContext;
+  return { ...context, timerRecovery: { entryId } };
 }
 
 async function createTodo(m: Machine, title: string, now: Timestamp): Promise<TodoId> {

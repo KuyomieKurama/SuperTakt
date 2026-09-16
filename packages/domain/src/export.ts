@@ -1,15 +1,6 @@
 /**
- * Takt — Exportgrenze (A-7.2, A-7.4, A-8.*, E-005, E-012, E-017, R-06).
- *
- * Dieses Modul ist die einzige Verbindung zwischen der Domäne und dem
- * Vorlagen-Motor in `packages/export`. Es ist zugleich die Stelle, an der die
- * Datenschutzgrenze aus A-7.2 strukturell verankert ist.
- *
- * `packages/export` importiert ausschließlich aus `@takt/domain/export`, das
- * auf diese Datei zeigt. Weder `Todo` noch `TodoNote` sind von hier
- * erreichbar. Der Exportmotor kann den internen Vermerk also nicht lesen,
- * weil er keinen Typ und keinen Weg hat, ihn zu benennen — nicht, weil er es
- * unterlässt.
+ * Der Exportmotor darf ausschließlich diesen Einstiegspunkt verwenden; interne Todo-Vermerke sind
+ * darüber nicht erreichbar.
  */
 
 import type {
@@ -26,38 +17,15 @@ import type {
 import { resolveTimeZone, toCalendarDay } from './kernel.ts';
 import type { RoundingMode } from './rounding.ts';
 
-/**
- * Die Rundung wird hier **weitergereicht**, nicht nachgebaut.
- *
- * `packages/export` sieht ausschließlich `@takt/domain/export` (R-06). Ohne
- * diese Zeile hätte der Vorlagen-Motor keinen Weg, die Rundungsregel zu
- * benennen — und der einzige Ausweg wäre eine zweite Fassung derselben Regel
- * im Motor. Genau das verbietet der Kopfkommentar von rounding.ts: Die Regel
- * existiert einmal, und der Aufruf ist der vorgesehene Weg dorthin.
- *
- * Der Wächter `scripts/check-export-boundary.mjs` lässt in dieser Datei
- * ausschließlich `./kernel.ts` und `./rounding.ts` zu. Der Re-Export vergrößert
- * die Fläche also nicht: Was hier hinausgeht, kommt aus einem der beiden
- * Module, die die Exportfläche ohnehin kennen darf.
- */
+/** Die gemeinsame Rundung über den eingeschränkten Export-Einstiegspunkt erreichbar halten. */
 export { quarterHoursToExportNumber, roundToQuarterHours } from './rounding.ts';
 export type { RoundingMode, SecondsPerQuarterHour } from './rounding.ts';
 
-// ---------------------------------------------------------------------------
 // Der einzige Datensatz, den der Exportmotor zu sehen bekommt
-// ---------------------------------------------------------------------------
 
 /**
- * Eine offene Zeitbuchung, angereichert um die Todo-Felder, die exportierbar
- * sind. Entspricht Zeile für Zeile der Datenbanksicht `v_export_candidate`.
- *
- * Es gibt hier kein Feld für den internen Vermerk des Todos und keinen
- * Verweis, über den man ihn nachladen könnte. Die zugehörige Sicht in der
- * Speicherung enthält die Spalte ebenfalls nicht, sodass auch eine
- * handgeschriebene Abfrage im Exportpfad ins Leere greift.
- *
- * `bookingNote` ist die **Leistung** aus A-7.3 (E-016) und das einzige
- * Textfeld, das aus einer Buchung in die Abrechnung geht.
+ * Nur freigegebene Exportfelder; `bookingNote` ist die abrechenbare Leistung, niemals der interne
+ * Todo-Vermerk.
  */
 export interface ExportCandidate {
   readonly timeEntryId: TimeEntryId;
@@ -74,38 +42,11 @@ export interface ExportCandidate {
   readonly previouslyExported: boolean;
 }
 
-// ---------------------------------------------------------------------------
 // Gruppierung: eine Exportzeile je Todo und Kalendertag
-// ---------------------------------------------------------------------------
 
 /**
- * Alle noch offenen Buchungen eines Todos an einem Kalendertag.
- *
- * Das ist die Einheit, aus der genau eine Exportzeile entsteht (Entscheidung
- * des Auftraggebers vom 2026-08-31, nachgetragen in T-013). Erst wird über
- * `entries` summiert, dann wird die Summe gerundet — nicht umgekehrt. Zehn,
- * zwanzig und fünf Minuten am selben Tag ergeben eine Zeile mit 0,75 statt
- * dreier Zeilen mit zusammen 1,00.
- *
- * Regeln, die dieser Typ trägt und die T-007 und T-009 einhalten müssen:
- *
- *  1. `entries` enthält ausschließlich Buchungen mit `export_status = 'offen'`.
- *     Eine bereits exportierte Buchung desselben Tages gehört nicht in die
- *     Gruppe; sonst würde ihre Zeit ein zweites Mal abgerechnet (R-10). Eine
- *     Tagesgruppe kann deshalb weniger Buchungen enthalten, als am Tag
- *     erfasst wurden.
- *  2. `entries` ist nach `startedAt` aufsteigend sortiert und nie leer. Die
- *     Sortierung ist zugleich die Reihenfolge, in der die Leistungstexte
- *     zusammengeführt werden.
- *  3. `entries` trägt keinen Vermerk und keinen Weg zu einem. Die Zusicherung
- *     `ExportGroupHasNoTodoNote` unten bindet das an den Übersetzer.
- *  4. `day` ist der Tag, an dem der Timer gestartet wurde. Eine Buchung von
- *     23:40 bis 00:20 liegt vollständig in der Gruppe des Starttags; sie wird
- *     nicht geteilt und taucht in keiner zweiten Gruppe auf.
- *
- * Weder Summenbildung noch Rundung noch das Zusammenführen der Leistungstexte
- * stehen hier: Dieser Typ beschreibt die Eingabe, nicht das Ergebnis. Die
- * Fachlogik ist T-009, das Erzeugen der Zeile T-007.
+ * Nicht leere, nach Startzeit sortierte Gruppe ausschließlich offener Buchungen. Vor der Rundung
+ * summieren; es gilt der lokale Starttag.
  */
 export interface ExportGroup {
   readonly todoId: TodoId;
@@ -120,17 +61,7 @@ export interface ExportGroup {
   readonly previouslyExported: boolean;
 }
 
-/**
- * Trennzeichen beim Zusammenführen der Leistungstexte einer Tagesgruppe.
- *
- * Semikolon mit nachfolgendem Leerzeichen. Der Wert steht hier und nicht im
- * Vorlagen-Motor, damit Vorschau und Datei ihn zwangsläufig teilen (R-17).
- *
- * Zwei Regeln gehören dazu und sind in T-009 umzusetzen: Zusammengeführt wird
- * in der Reihenfolge von `ExportGroup.entries`, also nach Startzeit; leere
- * Texte werden übersprungen, damit keine leeren Abschnitte und keine
- * führenden oder doppelten Trenner entstehen.
- */
+/** Leere Texte überspringen und die Reihenfolge von `ExportGroup.entries` erhalten. */
 export type ExportNoteSeparator = '; ';
 
 /** Werte, die nicht aus der Buchung stammen, sondern aus dem System (E-010). */
@@ -141,33 +72,11 @@ export interface ExportSystemContext {
   readonly roundingMode: RoundingMode;
 }
 
-// ---------------------------------------------------------------------------
 // Quellenpfade — die abschließende Liste (E-005, E-017, R-06)
-// ---------------------------------------------------------------------------
 
 /**
- * Alles, was eine Exportvorlage als Feldquelle wählen darf.
- *
- * Abschließend. Ein Vorlagenfeld mit einem Wert außerhalb dieser Vereinigung
- * lässt sich weder übersetzen noch zur Laufzeit validieren; der Vorlagen-Motor
- * weist es mit `export_source_forbidden` ab. Nach E-017 ist jede Quelle eine
- * ausgeschriebene Zugriffsfunktion, kein ausgewerteter Pfad.
- *
- * `todo.note` fehlt hier und wird nie aufgenommen. Das ist die Umsetzung von
- * A-7.2 gegen R-06: Sobald der Benutzer Feldquellen frei wählen kann, ist die
- * Grenze nur so stark wie diese Liste — deshalb steht sie in der Domäne und
- * nicht im Vorlageneditor.
- *
- * **`booking.*` ist entfernt, nicht umgedeutet (E-033).** Seit E-020 erzeugt
- * eine Tagesgruppe die Exportzeile. Ein Pfad, der weiterhin `booking` hieße und
- * die Gruppe meinte, wäre genau der stille Bedeutungswechsel, den T-013
- * beseitigt hat: Ein entfernter Name bricht sichtbar, ein umgedeuteter bricht
- * still und erst in der Abrechnung. An seine Stelle treten `group.*`.
- *
- * Die Quelle für das Exportfeld `Zeit` ist `group.quarters` — die **gerundete**
- * Summe der Tagesgruppe (E-008, E-020). `group.durationSeconds` daneben ist die
- * ungerundete Summe; sie ist keine Abrechnungsgröße und steht nur für
- * Vorlagen zur Verfügung, die eine Kontrollspalte führen wollen.
+ * Geschlossene Quellenliste ohne internen Vermerk. Abgerechnet wird mit `group.quarters`;
+ * ungerundete Sekunden dienen nur Kontrollangaben.
  */
 export type ExportSourcePath =
   | 'todo.callNumber'
@@ -179,15 +88,7 @@ export type ExportSourcePath =
   | 'group.quarters'
   /** Ungerundete Summe der Gruppe. Keine Abrechnungsgröße. */
   | 'group.durationSeconds'
-  /**
-   * Die zusammengeführten **Leistungstexte** der Gruppe (A-7.3, E-016, E-026).
-   *
-   * Der Name trägt `bookingNotes` und nicht `note`. Das ist kein Zufall: Ein
-   * Quellenpfad namens `group.note` stünde im Vorlageneditor unmittelbar neben
-   * dem internen Vermerk des Todos, und die Verwechslung wäre eine Frage der
-   * Zeit (R-08). Die Zusicherung `NoSourceIsCalledPlainNote` unten hält das
-   * am Übersetzer fest.
-   */
+  /** `bookingNotes` unterscheidet die abrechenbare Leistung ausdrücklich vom internen Todo-Vermerk. */
   | 'group.bookingNotes'
   /** Beginn der ersten Buchung der Gruppe. */
   | 'group.startedAt'
@@ -198,22 +99,12 @@ export type ExportSourcePath =
   | 'system.windowsUser'
   | 'system.exportedAt';
 
-// ---------------------------------------------------------------------------
 // Typbehauptungen: die Notiz-Grenze am Übersetzer (R-06)
-// ---------------------------------------------------------------------------
 
 /** Reiner Typ, kein Laufzeitanteil. `Assert<false>` verletzt seine Randbedingung. */
 type Assert<T extends true> = T;
 
-/**
- * Übersetzungsfehler, sobald jemand einen Notizpfad in `ExportSourcePath`
- * aufnimmt.
- *
- * Wird `'todo.note'` oder `'todo.notiz'` ergänzt, ist `Extract<...>` nicht mehr
- * `never`, der bedingte Typ liefert `false`, und `Assert<false>` verletzt seine
- * Randbedingung. `pnpm typecheck` schlägt mit TS2344 fehl, bevor irgendein Test
- * läuft. Die Datenschutzgrenze ist damit an den Übersetzer gebunden.
- */
+/** Macht das Hinzufügen eines internen Notizpfads bereits zum Typfehler. */
 export type NoteBoundaryIsSealed = Assert<
   Extract<ExportSourcePath, `todo.note${string}` | `todo.notiz${string}`> extends never
     ? true
@@ -233,14 +124,8 @@ export type TodoSourcesAreCovered = Assert<
 >;
 
 /**
- * Kein Quellenpfad heißt schlicht „Notiz".
- *
- * `todo.note` ist über `NoteBoundaryIsSealed` gesperrt. Diese Behauptung geht
- * weiter und sperrt den Namen auf **jeder** Ebene: `group.note`,
- * `booking.note`, `system.notiz`. Auf einer Auswahlliste, die der Benutzer im
- * Vorlageneditor sieht, ist „Notiz" ohne Zusatz mehrdeutig — und genau diese
- * Mehrdeutigkeit ist der Bedienfehler aus R-08, der die Datenschutzgrenze aus
- * A-7.2 zu Fall bringt. Die Leistung heißt `group.bookingNotes`.
+ * Unqualifizierte Notiznamen auf jeder Ebene sperren, damit Leistung und interner Vermerk nicht
+ * verwechselt werden.
  */
 export type NoSourceIsCalledPlainNote = Assert<
   Extract<
@@ -281,14 +166,8 @@ export type GroupSourcesAreCovered = Assert<
 >;
 
 /**
- * Feldnamen, die auf keinem exportnahen Typ vorkommen dürfen, weil sie den
- * internen Vermerk des Todos benennen würden (A-7.2, E-016, R-06).
- *
- * Die deutschen Schreibweisen stehen hier nicht, weil sie erlaubt wären,
- * sondern damit der Übersetzer sie abfängt, falls jemand sie einführt. Ein
- * bloßes `note` ist ebenfalls gesperrt: Auf einem Typ, den der Exportmotor in
- * der Hand hält, ist „Notiz" ohne Zusatz mehrdeutig, und genau diese
- * Mehrdeutigkeit ist der Bedienfehler aus R-08.
+ * Auch deutsche und unqualifizierte Notiznamen sperren, falls sie später in exportnahen Typen
+ * auftauchen.
  */
 type ForbiddenNoteKey =
   | 'note'
@@ -315,9 +194,7 @@ export type ExportGroupHasNoTodoNote = Assert<
   Extract<keyof ExportGroup, ForbiddenNoteKey> extends never ? true : false
 >;
 
-// ---------------------------------------------------------------------------
 // Vorlagenhülle — Tabelle `export_template`
-// ---------------------------------------------------------------------------
 
 /**
  * Umschlag einer Exportvorlage, so wie die Speicherung sie führt.
@@ -337,27 +214,11 @@ export interface ExportTemplateEnvelope {
   readonly updatedAt: Timestamp;
 }
 
-// ---------------------------------------------------------------------------
 // Exportlauf (A-8.8) — Tabelle `export_run`
-// ---------------------------------------------------------------------------
 
 /**
- * Was ein Exportlauf hinterlässt. Anhängend und unveränderlich.
- *
- * `templateSnapshot` ist eine Kopie der Vorlage zum Zeitpunkt des Laufs. Ohne
- * sie würde eine spätere Änderung an der Vorlage rückwirkend die Geschichte
- * umschreiben, und man könnte nicht mehr feststellen, welche Felder tatsächlich
- * in der Abrechnung gelandet sind.
- *
- * `fileSha256` belegt, dass die Datei im Ordner dieselbe ist, die der Lauf
- * geschrieben hat. Der Ordner ist Benutzereingabe (E-011, R-11) und kann
- * zwischen zwei Läufen von außen verändert worden sein.
- *
- * `entryCount` zählt die enthaltenen **Buchungen**, `totalQuarters` ist die
- * Summe über die **Zeilen**. Seit der Gruppierung je Todo und Kalendertag sind
- * Buchungen und Zeilen zwei verschiedene Mengen; die Zeilen selbst stehen in
- * `ExportRunGroup` und lassen sich von dort zählen, statt hier ein zweites Mal
- * geführt zu werden.
+ * Vorlagensnapshot und Dateihash halten den historischen Export nachvollziehbar.
+ * `entryCount` zählt Buchungen, `totalQuarters` summiert die gerundeten Exportzeilen.
  */
 export interface ExportRun {
   readonly id: ExportRunId;
@@ -374,18 +235,8 @@ export interface ExportRun {
 }
 
 /**
- * Eine geschriebene Exportzeile, wie der Lauf sie hinterlässt.
- * Tabelle `export_run_group`. Anhängend und unveränderlich.
- *
- * Hier hängt der gerundete Wert, und nur hier. Bei 10, 20 und 5 Minuten in
- * einer Gruppe von 0,75 gibt es keine richtige Aufteilung auf die drei
- * Buchungen, nur mehrere falsche; eine willkürliche Aufteilung würde genau das
- * Protokoll verfälschen, das R-10 nachvollziehbar halten soll.
- *
- * `seconds` ist die ungerundete Tagessumme, `quarters` der Wert, der in die
- * Abrechnung ging. Die Differenz zwischen beiden ist der Aufschlag, den die
- * Rundung dieser Zeile hinzugefügt hat, und sie ist damit nachrechenbar statt
- * geschätzt.
+ * Der gerundete Wert gehört zur Tagesgruppe; eine Aufteilung auf einzelne Buchungen wäre
+ * willkürlich.
  */
 export interface ExportRunGroup {
   readonly id: ExportRunGroupId;
@@ -413,13 +264,8 @@ export interface ExportRunEntry {
 }
 
 /**
- * Auftrag für einen Exportlauf.
- *
- * `timeEntryIds` leer bedeutet: alle offenen Buchungen. Ist die Liste gesetzt,
- * werden ausschließlich diese exportiert — und nur, wenn sie sämtlich noch
- * offen sind. Eine bereits exportierte Buchung im Auftrag lässt den gesamten
- * Lauf scheitern, statt sie stillschweigend zu überspringen; sonst bliebe
- * unklar, was in der Datei steht.
+ * Leere Auswahl bedeutet alle offenen Buchungen. Bei expliziter Auswahl lässt ein bereits
+ * exportierter Eintrag den gesamten Lauf scheitern.
  */
 export interface ExportJob {
   readonly templateId: ExportTemplateId;
@@ -437,9 +283,7 @@ export interface ExportPreview {
   readonly previouslyExportedCount: number;
 }
 
-// ---------------------------------------------------------------------------
 // Umsetzung: Gruppierung je Todo und Kalendertag (T-009, E-020, E-025)
-// ---------------------------------------------------------------------------
 
 /** Zwischenstand beim Einsortieren. Nur innerhalb dieser Datei sichtbar. */
 interface CandidateBucket {
@@ -452,14 +296,8 @@ interface CandidateBucket {
 }
 
 /**
- * Sortierschlüssel einer Buchung: Startzeit, dann Kennung.
- *
- * Zeitstempel sind lexikographisch sortierbar (siehe `Timestamp` in kernel.ts),
- * ein Datumsobjekt braucht es dafür nicht. Die Kennung dahinter macht den
- * Schlüssel eindeutig — sie ist Primärschlüssel, zwei Buchungen können ihn
- * also nie teilen. Ohne diesen zweiten Teil hätten zwei zur selben Sekunde
- * begonnene Buchungen keine bestimmte Reihenfolge, und die zusammengeführten
- * Leistungstexte hüpften zwischen zwei Vorschauen.
+ * Die Kennung stabilisiert die Reihenfolge bei gleicher Startzeit und damit auch die
+ * zusammengeführten Leistungstexte.
  */
 const entrySortKey = (entry: ExportCandidate): string => entry.startedAt + entry.timeEntryId;
 
@@ -474,35 +312,9 @@ const entrySortKey = (entry: ExportCandidate): string => entry.startedAt + entry
 const groupSortKey = (group: ExportGroup): string => group.day + group.todoId;
 
 /**
- * Fasst offene Buchungen zu Tagesgruppen zusammen — eine Gruppe je Todo und
- * Kalendertag, und damit genau eine Exportzeile (E-020).
- *
- * **Was diese Funktion nicht tut, und warum das der wichtigste Teil ist.** Sie
- * filtert nicht nach Exportstatus. `ExportCandidate` ist per Vertrag eine
- * *offene* Buchung; die Sicht `v_export_candidate` filtert bereits in SQL. Eine
- * bereits exportierte Buchung desselben Tages kommt hier gar nicht an und darf
- * die Summe nicht erhöhen. Sind von drei Buchungen eines Tages zwei offen,
- * entsteht eine Gruppe aus zwei Buchungen — die dritte ist abgerechnet und
- * bleibt es. Eine Umsetzung, die an dieser Stelle „der Vollständigkeit halber"
- * alle Buchungen des Tages nachlädt, rechnet stillschweigend doppelt ab (R-10).
- *
- * **Der Kalendertag kommt aus der Startzeit, in Ortszeit** (E-025). Eine
- * Buchung von 23:40 bis 00:20 zählt vollständig zum Starttag und wird nicht
- * geteilt; `endedAt` geht in die Gruppierung nie ein. Umgekehrt liegen zwei
- * Buchungen um 23:50 und 00:10 zwanzig Minuten auseinander und trotzdem in zwei
- * Gruppen — der Sonderfall, den E-025 ausdrücklich in Kauf nimmt.
- *
- * Der Umweg über die Ortszeit ist keine Feinheit: Am Abend unterscheiden sich
- * lokales und UTC-Datum, und wer den Datumsanteil des Zeitstempels abschneidet,
- * legt Abendbuchungen auf den Folgetag.
- *
- * **Die Gruppe trägt keinen Vermerk.** Sie besteht ausschließlich aus
- * `ExportCandidate`-Werten, und die kennen den internen Vermerk des Todos nicht
- * — weder als Feld noch als Verweis (A-7.2, R-06). Die Typbehauptung
- * `ExportGroupHasNoTodoNote` oben hält das am Übersetzer fest.
- *
- * Rein: gleiche Eingabe, gleiche Ausgabe. Die Zeitzone ist überschreibbar,
- * damit die Regel ohne verstellte Umgebung prüfbar bleibt.
+ * Die SQL-Sicht liefert bereits ausschließlich offene Buchungen; keine weiteren Buchungen
+ * nachladen.
+ * Nach lokalem Starttag gruppieren, auch bei Buchungen über Mitternacht.
  */
 export const groupExportCandidates = (
   candidates: readonly ExportCandidate[],

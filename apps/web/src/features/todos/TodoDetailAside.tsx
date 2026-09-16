@@ -59,7 +59,7 @@ export function TodoDetailAside({
       */}
       <Card
         title="Frist"
-        description="Ein Tag, keine Uhrzeit. Sie ändert nichts an Pools, Spalten, Buchungen oder Export — und sie steht in keinem Export."
+        description="Ein Kalendertag mit optionaler Uhrzeit; sie steht in keinem Export."
         className="detail__deadline-card"
         actions={
           <IconButton
@@ -76,18 +76,23 @@ export function TodoDetailAside({
             hat schlicht keinen dieser Zustände.
           </p>
         ) : (
-          <DeadlineFlag dueDate={todo.dueDate} today={today} className="detail__deadline" />
+          <>
+            <DeadlineFlag dueDate={todo.dueDate} today={today} className="detail__deadline" />
+            {todo.dueTime ? <p className="detail__deadline-time">{todo.dueTime} Uhr · Ortszeit</p> : null}
+          </>
         )}
       </Card>
 
+      {todo.noExport ? <Card title="NoExport"><p>Zeit wird erfasst. Diese Aufgabe ist von Buchungen und Export ausgeschlossen.</p></Card> : null}
+      {todo.estimateMinutes ? <Card title="Zeitschätzung"><p>{todo.estimateMinutes} Minuten</p></Card> : null}
       <Card title="Erfasste Zeit">
         <div className="stat-grid stat-grid--tight">
           <StatTile
             label="Gesamt"
             value={formatDuration(totalSeconds)}
-            detail="Alle Buchungen, ungerundet."
+            detail={todo.noExport ? "Alle erfassten Zeiten, ungerundet." : "Alle Buchungen, ungerundet."}
           />
-          <StatTile
+          {todo.noExport ? null : <StatTile
             label="Noch offen"
             value={formatDuration(openSeconds)}
             tone="warning"
@@ -98,7 +103,7 @@ export function TodoDetailAside({
                   ? "Noch nicht exportiert."
                   : `Beim Export ergibt das ${formatQuarters(totalQuarters)} — über alle Tagesgruppen zusammen.`
             }
-          />
+          />}
         </div>
         {/*
           Ohne diesen Satz sähe die Liste darunter aus, als hätte
@@ -119,7 +124,7 @@ export function TodoDetailAside({
 
       <Card
         title="Tags"
-        description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt — aber nicht der einzige: Eine Regel fragt auch nach Status, „Erledigt“ und Exportstatus."
+        description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt."
       >
         {todo.tagIds.length === 0 ? (
           <p className="muted">

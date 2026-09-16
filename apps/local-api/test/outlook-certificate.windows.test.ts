@@ -58,7 +58,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
   afterEach(async () => {
     if (server !== null) { const active = server; server = null; await new Promise<void>((resolve) => active.close(() => resolve())); }
     if (trustedThumbprint !== null) {
-      // Only the generated test certificate; never clear or enumerate-delete a store.
+      // Nur das erzeugte Testzertifikat entfernen; den übrigen Speicher unangetastet lassen.
       await powershell(`
         $ErrorActionPreference = 'Stop'
         $id = [Console]::In.ReadToEnd() | ConvertFrom-Json
@@ -75,7 +75,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
   }, 75_000);
 
   it('rejects stale approval and headless trust, and validates HTTPS with a trusted test certificate', async () => {
-    // Trust-store mutation is limited to an explicitly enabled disposable CI runner.
+    // Speicheränderungen sind nur auf ausdrücklich freigegebenen Wegwerf-CI-Systemen erlaubt.
     directory = await mkdtemp(join(tmpdir(), "supertakt-zertifikat-ä-'"));
     const path = join(directory, 'taskpane-cert.pem');
     const pair = createSelfSignedCertificate();
@@ -89,13 +89,13 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     expect(await powershell(script, { path, action: 'trust', fingerprint: '0'.repeat(64) })).toEqual({ error: 'certificate_changed' });
     expect(await powershell(script, { path, action: 'trust', fingerprint: '../anything' })).toEqual({ error: 'certificate_changed' });
     if (process.env['SUPERTAKT_TEST_CERT_TRUST'] !== '1') return;
-    // The CI service cannot approve a native Windows dialog. This must fail
-    // closed; the interactive first-time import remains a manual desktop check.
+    // Ohne Dialogbestätigung muss der Import scheitern. Der interaktive Erstimport
+    // bleibt eine manuelle Desktopprüfung.
     expect(await powershell(script, { path, action: 'trust', fingerprint })).toEqual({ error: 'trust_failed' });
     expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ installed: false });
     trustedThumbprint = cert.fingerprint.replaceAll(':', '');
-    // Seed this generated fixture in the disposable CI machine store. This is
-    // test setup, not the application's CurrentUser import path or a UI test.
+    // Testaufbau im temporären CI-Maschinenspeicher; der interaktive Import
+    // in CurrentUser wird damit nicht geprüft.
     await powershell(`
       $ErrorActionPreference = 'Stop'
       $pem = [Console]::In.ReadToEnd() | ConvertFrom-Json

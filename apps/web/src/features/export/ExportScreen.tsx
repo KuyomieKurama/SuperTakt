@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { BookingsScreen } from "../bookings/BookingsScreen";
+import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../shared/ui/FilterBar";
+import { DateField } from "../../shared/ui/DateField";
+import { todayCalendarDay, shiftCalendarDay } from "../../lib/format";
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
 import { errorMessage } from "../../api/client";
 import {
   listExportTemplates,
   previewExport,
-} from "../../api/endpoints";
-import {
   getExportSources,
   listExportRuns,
   runExport,
@@ -64,7 +66,7 @@ import { ExportRunList } from "./ExportRunList";
 import { RunResult } from "./RunResult";
 import {
   ALL_EXCLUDED,
-  collectOpenEntries,
+  collectExportEntries,
   groupKeyOf,
   PAGE_SIZE,
   previewNote,
@@ -186,17 +188,31 @@ const DIRECTORY_PROBLEM: Readonly<
 type TotalsState =
   | { readonly kind: "idle" }
   | { readonly kind: "pending" }
-  | { readonly kind: "ready"; readonly value: ExportPreview }
+  | { readonly kind: "ready"; readonly value: ExportPreview; readonly selection: string; readonly templateId: string | null }
   | { readonly kind: "failed"; readonly message: string };
 
-export function ExportScreen() {
+export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<string, string>> }) {
   const structure = useStructure();
   const toasts = useToasts();
   const { version, bump } = useRefresh();
 
+  const [status, setStatus] = useState(query["status"] ?? "open");
+  const [todoId, setTodoId] = useState(query["todo"] ?? "");
+  const [fromDay, setFromDay] = useState(() => query["von"] ?? shiftCalendarDay(todayCalendarDay(), -6));
+  const [toDay, setToDay] = useState(() => query["bis"] ?? todayCalendarDay());
+  const [onlyPrevious, setOnlyPrevious] = useState(query["vorher"] === "1");
+  const [todoSearch, setTodoSearch] = useState(query["suche"] ?? "");
+  const filterKey = JSON.stringify([status, todoId, fromDay, toDay, onlyPrevious, todoSearch.trim()]);
+  const activeFilters: ActiveFilter[] = [];
+  if (todoId) activeFilters.push({ id: "todo", field: "Todo", value: "eingeschränkt", onRemove: () => setTodoId("") });
+  if (fromDay) activeFilters.push({ id: "from", field: "Ab", value: fromDay, onRemove: () => setFromDay("") });
+  if (toDay) activeFilters.push({ id: "to", field: "Bis", value: toDay, onRemove: () => setToDay("") });
+  if (onlyPrevious) activeFilters.push({ id: "previous", field: "Einengung", value: "schon einmal exportiert", onRemove: () => setOnlyPrevious(false) });
+  if (todoSearch.trim()) activeFilters.push({ id: "search", field: "Todo", value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
+  const resetFilters = () => { setStatus(""); setTodoId(""); setFromDay(""); setToDay(""); setOnlyPrevious(false); setTodoSearch(""); };
+
   const [templateId, setTemplateId] = useState<string>("");
-  const [excluded, setExcluded] = useState<ReadonlySet<Id>>(() => new Set());
-  const [deselected, setDeselected] = useState<ReadonlySet<string>>(() => new Set());
+  const [bookingSelection, setBookingSelection] = useState<ReadonlySet<Id> | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [layout, setLayout] = useState<readonly GroupLayout[]>([]);
   const [layoutError, setLayoutError] = useState<string | null>(null);
@@ -240,16 +256,23 @@ export function ExportScreen() {
 
   const data = useAsync(async () => {
     const [entries, todos, runs] = await Promise.all([
-      collectOpenEntries(),
-      listTodos({}, { limit: PAGE_SIZE }),
+      collectExportEntries({ ...(status === "open" || status === "exported" ? { exportStatus: status } : {}), ...(todoId ? { todoId } : {}), ...(fromDay ? { fromDay } : {}), ...(toDay ? { toDay } : {}), ...(onlyPrevious ? { onlyPreviouslyExported: true } : {}) }),
+      listTodos(todoSearch.trim() ? { search: todoSearch.trim() } : {}, { limit: PAGE_SIZE }),
       listExportRuns({ limit: 5 }),
     ]);
     const titles = new Map<Id, Todo>();
     for (const todo of todos.items) titles.set(todo.id, todo);
     const byId = new Map<Id, TimeEntry>();
     for (const entry of entries) byId.set(entry.id, entry);
-    return { entries, byId, titles, runs: runs.items };
-  }, [], [version]);
+    const search = todoSearch.trim().toLocaleLowerCase();
+    const matchingEntries = search === "" ? entries : entries.filter(entry => {
+      const todo = titles.get(entry.todoId);
+      return (todo?.title.toLocaleLowerCase().includes(search) ?? false)
+        || (todo?.callNumber?.toLocaleLowerCase().includes(search) ?? false);
+    });
+    return { entries: matchingEntries, byId, titles, runs: runs.items, filterKey };
+  }, [filterKey], [version]);
+  const filterReady = data.state.status === "ready" && data.state.value.filterKey === filterKey;
 
   /*
    * Kennungen als Zeichenkette in den Abhängigkeiten und nicht als Feld: Ein
@@ -258,9 +281,20 @@ export function ExportScreen() {
    */
   const allKey = useMemo(
     () =>
-      data.state.status === "ready" ? data.state.value.entries.map((entry) => entry.id).join(",") : "",
-    [data.state],
+      data.state.status === "ready" && filterReady ? data.state.value.entries.filter(entry => entry.exportStatus === "open").map((entry) => entry.id).join(",") : "",
+    [data.state, filterReady],
   );
+
+  const bookingIds = useMemo(() => {
+    if (bookingSelection === null) return new Set(allKey ? allKey.split(",") : []);
+    const visible = new Set(data.state.status === "ready" ? data.state.value.entries.map(entry => entry.id) : []);
+    return new Set([...bookingSelection].filter(id => visible.has(id)));
+  }, [bookingSelection, allKey, data.state]);
+  const setBookingIds = useCallback((next: SetStateAction<ReadonlySet<Id>>) => {
+    setBookingSelection(previous => typeof next === "function" ? next(previous ?? bookingIds) : next);
+  }, [bookingIds]);
+  const excluded = useMemo(() => new Set(allKey.split(",").filter(id => !bookingIds.has(id))), [allKey, bookingIds]);
+  const deselected = useMemo(() => new Set(layout.filter(group => group.entryIds.every(id => !bookingIds.has(id))).map(group => group.key)), [layout, bookingIds]);
 
   const activeTemplateId = templateId.length > 0 ? templateId : (settings?.activeExportTemplateId ?? null);
 
@@ -361,14 +395,15 @@ export function ExportScreen() {
   /** Die Buchungen, die tatsächlich in den Lauf gehen. */
   const selectedIds = useMemo<readonly Id[]>(() => {
     const out: Id[] = [];
+    const visibleIds = new Set(allKey.split(","));
     for (const group of layout) {
       if (deselected.has(group.key)) continue;
       const insight = insights.get(group.key);
       if (insight !== undefined && insight.blockedReason !== null) continue;
-      out.push(...group.entryIds.filter((id) => !excluded.has(id)));
+      out.push(...group.entryIds.filter((id) => visibleIds.has(id) && !excluded.has(id)));
     }
     return out;
-  }, [layout, deselected, insights, excluded]);
+  }, [layout, deselected, insights, excluded, allKey]);
 
   /*
    * Die Auswahl steht als Zeichenkette in den Abhaengigkeiten und nicht als
@@ -387,7 +422,7 @@ export function ExportScreen() {
     setTotalsState({ kind: "pending" });
     void previewExport(activeTemplateId, ids)
       .then((preview) => {
-        if (live) setTotalsState({ kind: "ready", value: preview });
+        if (live) setTotalsState({ kind: "ready", value: preview, selection: selectedKey, templateId: activeTemplateId });
       })
       .catch((cause: unknown) => {
         if (live) setTotalsState({ kind: "failed", message: errorMessage(cause) });
@@ -514,6 +549,11 @@ export function ExportScreen() {
     return !data.state.value.runs.some((run) => isPathInsideDirectory(run.filePath, target));
   }, [data.state, settings?.exportDirectory]);
 
+  const rowCount = totals?.rows.length ?? 0;
+  const blockedCount = layout.filter(group => insights.get(group.key)?.blockedReason != null).length;
+
+  const previewCurrent = filterReady && totalsState.kind === "ready" && totalsState.selection === selectedKey && totalsState.templateId === activeTemplateId;
+
   const doExport = useCallback(() => {
     /*
       Ohne bekannte Zeilenzahl wird nicht geschrieben. Die Schaltfläche ist in
@@ -521,7 +561,7 @@ export function ExportScreen() {
       hier trotzdem noch einmal, weil er die Bedingung ist, unter der der
       folgende Aufruf überhaupt eine ehrliche Rückmeldung geben kann.
     */
-    if (totalsState.kind !== "ready") return;
+    if (!previewCurrent || totalsState.kind !== "ready") return;
     const plannedRows = totalsState.value.rows.length;
     setRunning(true);
     setRunError(null);
@@ -546,13 +586,13 @@ export function ExportScreen() {
       })
       .catch((cause: unknown) => setRunError(errorMessage(cause)))
       .finally(() => setRunning(false));
-  }, [activeTemplateId, bump, selectedIds, toasts, totalsState]);
+  }, [previewCurrent, activeTemplateId, bump, selectedIds, toasts, totalsState]);
 
   return (
     <section className="screen">
       <ScreenHeader
         title="Export"
-        lead="Eine Zeile je Todo und Kalendertag. Was hier steht, steht auch in der Datei."
+        lead="Buchungen prüfen, bearbeiten und exportieren. Die Dateivorschau fasst Zeiten je Todo und Tag zusammen."
         refreshing={data.state.status === "ready" && data.state.refreshing}
         /*
           Gesperrt, solange nicht feststeht, was geschrieben würde (A-8.6). Bis
@@ -564,7 +604,7 @@ export function ExportScreen() {
             variant="primary"
             iconStart="download"
             disabled={
-              selectedIds.length === 0 ||
+              !previewCurrent || selectedIds.length === 0 ||
               directoryProblem !== null ||
               totalsState.kind !== "ready"
             }
@@ -585,6 +625,7 @@ export function ExportScreen() {
         }
       >
         <ExportTabs active="export" />
+
       </ScreenHeader>
 
       {/*
@@ -729,6 +770,80 @@ export function ExportScreen() {
           <ExportDirectoryTraitList traits={directoryTraits} state={directoryState} />
         </Card>
 
+        {layout.length > 0 && filterReady ? <>
+                <div className="export-summary" role="status" aria-live="polite">
+                  <span className="export-summary__count">
+                    {plural(selectedIds.length, "Buchung", "Buchungen")}
+                    {totalsState.kind === "ready"
+                      ? ` in ${plural(rowCount, "Exportzeile", "Exportzeilen")}`
+                      : null}
+                  </span>
+                  {totalsState.kind === "pending" ? (
+                    <span className="export-summary__pending">
+                      <Spinner size={13} label="Zeilen und Stunden werden gerechnet" />
+                      <span>Zeilen und Stunden werden gerechnet …</span>
+                    </span>
+                  ) : null}
+                  {totalsState.kind === "failed" ? (
+                    <span className="export-summary__danger">
+                      <Icon name="alert-triangle" size={14} />
+                      Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet
+                    </span>
+                  ) : null}
+                  <span className="export-summary__total tabular">
+                    {totals === null ? "—" : formatQuarters(totals.totalQuarters)}
+                    <span className="export-summary__unit"> h</span>
+                  </span>
+                  {totals !== null && totals.previouslyExportedCount > 0 ? (
+                    <span className="export-summary__warn">
+                      <Icon name="rotate-ccw" size={14} />
+                      {plural(
+                        totals.previouslyExportedCount,
+                        "Zeile enthält eine schon einmal exportierte Buchung",
+                        "Zeilen enthalten schon einmal exportierte Buchungen",
+                      )}
+                    </span>
+                  ) : null}
+                  {blockedCount > 0 ? (
+                    <span className="export-summary__warn">
+                      <Icon name="alert-triangle" size={14} />
+                      {plural(blockedCount, "Gruppe bleibt stehen", "Gruppen bleiben stehen")} —
+                      ohne Leistung kein Export
+                    </span>
+                  ) : null}
+                </div>
+
+                {blockedCount > 0 ? (
+                  <details className="export-legend">
+                    <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
+                    <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
+                    <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
+                    <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
+                  </details>
+                ) : null}
+
+        </> : null}
+
+        <FilterBar label="Export filtern"
+          resultLabel={filterReady && data.state.status === "ready" ? plural(data.state.value.entries.length, "Buchung", "Buchungen") : "wird geladen …"}
+          activeFilters={activeFilters} onResetAll={resetFilters}
+          controls={<>
+            <Select label="Exportstatus" value={status} options={[{ value: "", label: "Alle" }, { value: "open", label: "Offen" }, { value: "exported", label: "Exportiert" }]}
+              onChange={setStatus} />
+            <FilterToggle label="Nur schon einmal exportierte" pressed={onlyPrevious} onChange={setOnlyPrevious} />
+            <DateField label="Ab Tag" value={fromDay} onChange={setFromDay} />
+            <DateField label="Bis Tag" value={toDay} onChange={setToDay} />
+            <Button size="sm" variant="ghost" onClick={() => { const today = todayCalendarDay(); setFromDay(shiftCalendarDay(today, -6)); setToDay(today); }}>Letzte 7 Tage</Button>
+            <SearchField label="Todo einschränken" value={todoSearch} onChange={setTodoSearch} placeholder="Todo oder Call suchen …" />
+          </>} />
+
+        {data.state.status === "ready" && filterReady ? <BookingsScreen query={{}} embedded={{
+          entries: data.state.value.entries, titles: data.state.value.titles,
+          selected: bookingIds, setSelected: setBookingIds, resetFilters,
+        }} /> : null}
+
+        <details className="export-preview-details">
+          <summary>Exportvorschau nach Todo und Tag</summary>
         <AsyncBoundary
           state={data.state}
           label="Offene Buchungen werden geladen"
@@ -758,8 +873,8 @@ export function ExportScreen() {
                 <EmptyState
                   icon="check-circle"
                   title="Nichts zu exportieren"
-                  description="Alle erfassten Zeiten sind bereits exportiert. Neue Buchungen erscheinen hier von selbst."
-                  action={
+                  description={activeFilters.length > 0 ? "Keine offenen Buchungen passen zu diesen Filtern." : "Es liegen keine offenen Buchungen für den Export vor."}
+                  action={activeFilters.length > 0 ? <Button variant="secondary" onClick={resetFilters}>Filter zurücksetzen</Button> :
                     <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
                       Zur Zeiterfassung
                     </Button>
@@ -816,8 +931,6 @@ export function ExportScreen() {
               layout.map((group) => group.key).filter((key) => !deselected.has(key)),
             );
 
-            const rowCount = totals?.rows.length ?? 0;
-            const blockedCount = models.filter((model) => model.blockedReason !== null).length;
 
             return (
               <>
@@ -850,69 +963,17 @@ export function ExportScreen() {
                   </InlineMessage>
                 ) : null}
 
-                <div className="export-summary" role="status" aria-live="polite">
-                  <span className="export-summary__count">
-                    {plural(selectedIds.length, "Buchung", "Buchungen")}
-                    {totalsState.kind === "ready"
-                      ? ` in ${plural(rowCount, "Exportzeile", "Exportzeilen")}`
-                      : null}
-                  </span>
-                  {totalsState.kind === "pending" ? (
-                    <span className="export-summary__pending">
-                      <Spinner size={13} label="Zeilen und Stunden werden gerechnet" />
-                      <span>Zeilen und Stunden werden gerechnet …</span>
-                    </span>
-                  ) : null}
-                  {totalsState.kind === "failed" ? (
-                    <span className="export-summary__danger">
-                      <Icon name="alert-triangle" size={14} />
-                      Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet
-                    </span>
-                  ) : null}
-                  <span className="export-summary__total tabular">
-                    {totals === null ? "—" : formatQuarters(totals.totalQuarters)}
-                    <span className="export-summary__unit"> h</span>
-                  </span>
-                  {totals !== null && totals.previouslyExportedCount > 0 ? (
-                    <span className="export-summary__warn">
-                      <Icon name="rotate-ccw" size={14} />
-                      {plural(
-                        totals.previouslyExportedCount,
-                        "Zeile enthält eine schon einmal exportierte Buchung",
-                        "Zeilen enthalten schon einmal exportierte Buchungen",
-                      )}
-                    </span>
-                  ) : null}
-                  {blockedCount > 0 ? (
-                    <span className="export-summary__warn">
-                      <Icon name="alert-triangle" size={14} />
-                      {plural(blockedCount, "Gruppe bleibt stehen", "Gruppen bleiben stehen")} —
-                      ohne Leistung kein Export
-                    </span>
-                  ) : null}
-                </div>
-
-                {blockedCount > 0 ? (
-                  <details className="export-legend">
-                    <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
-                    <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
-                    <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
-                    <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
-                  </details>
-                ) : null}
-
                 <ExportGroupList
                   models={models}
                   selectedGroupIds={selectedGroupIds}
                   expandedGroupIds={expanded}
-                  onToggleGroup={(groupId) =>
-                    setDeselected((previous) => {
-                      const next = new Set(previous);
-                      if (next.has(groupId)) next.delete(groupId);
-                      else next.add(groupId);
-                      return next;
-                    })
-                  }
+                  onToggleGroup={groupId => setBookingIds(previous => {
+                    const ids = layout.find(group => group.key === groupId)?.entryIds ?? [];
+                    const next = new Set(previous);
+                    const remove = ids.every(id => next.has(id));
+                    for (const id of ids) { if (remove) next.delete(id); else next.add(id); }
+                    return next;
+                  })}
                   onToggleExpanded={(groupId) =>
                     setExpanded((previous) => {
                       const next = new Set(previous);
@@ -921,14 +982,11 @@ export function ExportScreen() {
                       return next;
                     })
                   }
-                  onToggleEntry={(_groupId, entryId) =>
-                    setExcluded((previous) => {
-                      const next = new Set(previous);
-                      if (next.has(entryId)) next.delete(entryId);
-                      else next.add(entryId);
-                      return next;
-                    })
-                  }
+                  onToggleEntry={(_groupId, entryId) => setBookingIds(previous => {
+                    const next = new Set(previous);
+                    if (next.has(entryId)) next.delete(entryId); else next.add(entryId);
+                    return next;
+                  })}
                   onEditEntry={(_groupId, entryId) => {
                     const entry = value.entries.find((candidate) => candidate.id === entryId);
                     if (entry !== undefined) setEditEntry(entry);
@@ -949,6 +1007,7 @@ export function ExportScreen() {
             );
           }}
         </AsyncBoundary>
+        </details>
 
         {templates.state.status === "loading" ? <Spinner size={14} label="Vorlagen werden geladen" /> : null}
       </ScreenBody>
@@ -968,7 +1027,7 @@ export function ExportScreen() {
       */}
       {totalsState.kind === "ready" ? (
         <ConfirmDialog
-          open={confirmOpen}
+          open={confirmOpen && previewCurrent}
           title="Export ausführen?"
           description={`${plural(selectedIds.length, "Buchung wird", "Buchungen werden")} in ${plural(totalsState.value.rows.length, "Exportzeile", "Exportzeilen")} geschrieben — zusammen ${formatQuarters(totalsState.value.totalQuarters)} Stunden.`}
           consequence={

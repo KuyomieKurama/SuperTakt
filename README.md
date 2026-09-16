@@ -22,14 +22,14 @@ Bildschirm und im Code unterschiedlich heißen könnten, aber es nicht tun solle
 Der sichtbare Produktname lautet SuperTakt. Bestehende Datenpfade (`Takt` unter Windows,
 `takt` unter Linux), die Anwendungskennung `de.takt.desktop`, interne `@takt/*`-Pakete
 und Schnittstellenkennungen bleiben kompatibel. Die Erzeugerkennung `Takt` im
-versionierten Datenarchiv bleibt erhalten. SuperTakt liest Archivfassungen 1, 2 und 3;
-neue Sicherungen verwenden Fassung 3 und benötigen diese oder eine neuere App-Version.
+versionierten Datenarchiv bleibt erhalten. Die aktuelle Archivfassung, lesbare Vorgänger
+und Kompatibilitätsregeln sind in [docs/datenarchiv.md](docs/datenarchiv.md) beschrieben.
 
-Unter **Einstellungen → Darstellung** lässt sich zwischen **Klassisch** (bisheriges
-Layout) und **Klar** (ruhigere Navigation und Arbeitsfläche) wählen. Farbmodus und
-Zeilendichte sind separat einstellbar und werden ebenfalls dauerhaft gespeichert.
-Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl. Eine gespeicherte Auswahl bleibt erhalten. Die Gestaltung ist in
-`docs/design/supertakt-layout.md` beschrieben.
+Unter **Einstellungen → Darstellung** lassen sich Gestaltung, Farbmodus und
+Zeilendichte einstellen. **Klassisch** ist die Vorgabe; die frühere Auswahl
+`clear` bleibt kompatibel und wird klassisch dargestellt. Die verfügbaren
+Gestaltungen stehen in der Anwendung und in
+[`packages/domain/src/settings.ts`](packages/domain/src/settings.ts).
 
 ## Timer und Leistung
 
@@ -42,19 +42,22 @@ wird dauerhaft gespeichert und ist zunächst eingeschaltet.
 
 Unter **Einstellungen → Timer** ist die Inaktivitätserkennung einstellbar:
 zunächst nach **5 Minuten**, abschaltbar und zwischen 1 und 120 Minuten wählbar.
-Die automatische Erkennung benötigt die Windows-Desktop-App. Maus- und
-Tastatureingaben in anderen Programmen zählen ebenfalls als Aktivität; es werden
-keine Eingabeinhalte aufgezeichnet.
+Die automatische Erkennung benötigt die Desktop-App und eine unterstützte
+Systemschnittstelle unter Windows, macOS oder Linux. Maus- und Tastatureingaben
+in anderen Programmen zählen ebenfalls als Aktivität; es werden keine
+Eingabeinhalte aufgezeichnet. Im Browser steht diese Erkennung nicht bereit.
 
-Bei einer längeren Abwesenheit hält SuperTakt den Timer an. Bei der Rückkehr
-können Sie die Zeit als Pause auslassen, einer Aufgabe zuordnen oder auf mehrere
-Aufgaben und Pausen aufteilen. **Rest übernehmen** füllt den verbleibenden Anteil.
-Die gesamte Zeit muss genau verteilt sein, bevor gespeichert wird.
+Standardmäßig läuft der Timer während der Abwesenheit weiter. Bei der Rückkehr
+trennt SuperTakt die aktive Zeit von der inaktiven Phase und führt den Timer ab
+der Rückkehr fort. Alternativ lässt sich **Timer bei Inaktivität** auf Pausieren
+stellen. Die inaktive Zeit kann als Pause ausgelassen, einer Aufgabe zugeordnet
+oder auf mehrere Aufgaben und Pausen verteilt werden. Vor dem Speichern muss sie
+vollständig zugeordnet sein.
 
 Offene Zuordnungen bleiben nach einem Neustart erhalten. **Später zuordnen**
-lässt den Timer angehalten. Auf Wunsch startet er nach dem Speichern erneut auf
-der ursprünglichen Aufgabe; die Zeit zum Ausfüllen des Dialogs wird nicht gebucht.
-Datenarchive verwenden hierfür Fassung 4; Fassungen 1 bis 3 bleiben einlesbar.
+lässt die Zuordnung offen; ein bereits fortgeführter Timer läuft weiter.
+Die Archivhistorie einschließlich der offenen Inaktivitätsphasen steht in
+[docs/datenarchiv.md](docs/datenarchiv.md).
 
 Die Bedienidee orientiert sich an [Super Productivitys Inaktivitätsdialog](https://github.com/super-productivity/super-productivity/tree/master/src/app/features/idle).
 
@@ -134,10 +137,10 @@ niemand aufrief, und deshalb ist eine Fassung ausgeliefert worden, die nicht sta
 pnpm check
 ```
 
-Das ist die vollständige Kette: Typprüfung über alle acht Pakete, erlaubte Importe zwischen den
-Paketen, Kontrastmessung der Oberfläche gegen WCAG 2.2 AA, Abgleich der OpenAPI-Beschreibung des
-lokalen Dienstes gegen sein tatsächliches Verhalten, die vollständige Testsuite mit
-Abdeckungsschwelle, und der Bau aller Pakete.
+Die verbindliche Zusammensetzung und Reihenfolge steht im Skript `check` der
+[Wurzel-package.json](package.json). Es schließt `proof:all`, den Nachweis am gebauten
+Sidecar (`verify:bundle`), Abdeckung, Rust-Tests, Bau und Audit ein. Die Voraussetzungen
+und getrennten Prüfwege stehen im [Entwicklerhandbuch](docs/entwicklerhandbuch.md#befehle).
 
 Einzeln aufrufbar, unter anderem:
 
@@ -149,13 +152,10 @@ pnpm boundaries     # erlaubte Importe zwischen den Paketen
 pnpm contrast       # Farbpaare der Oberfläche gegen WCAG 2.2 AA
 ```
 
-Daneben bestehen in `apps/local-api` und `apps/outlook-addin` neun weitere Nachweispfade
-(`proof:access`, `proof:export`, `proof:export-api`, `proof:taskpane`, `proof:addin-wiring`,
-`proof:route-policy`, `proof:template-fields`, `proof:db-permissions`, `proof:addin`), die
-zusammen mit `pnpm proof:openapi` die zehn Nachweispfade des Projekts bilden. Sie stehen nicht alle
-in `pnpm check`, weil ein Teil von ihnen den lokalen Dienst auf seinem festen Port startet und
-deshalb nicht neben einem bereits laufenden SuperTakt bestehen kann. Details dazu im
-Entwicklerhandbuch.
+Die Nachweisläufe sind über `proof:all` und die einzelnen `proof:*`-Skripte der
+[Wurzel-package.json](package.json) auffindbar; die Paketskripte verweisen auf die
+jeweilige Implementierung. `proof:engines` läuft separat, weil es zusätzliche
+Browser- und WebKitGTK-Abhängigkeiten benötigt.
 
 Ende-zu-Ende-Tests laufen mit Playwright:
 
@@ -165,21 +165,20 @@ pnpm test:e2e
 
 ### Der Nachweis gegen das Erzeugnis
 
-`pnpm check` prüft den **Quelltext**. Es gibt eine zweite Kette, die die **gebaute
-Sidecar-Binärdatei** startet und ihr zwanzig Fragen stellt — von „kommt sie ohne Startgeheimnis
-gar nicht erst hoch" bis „findet sie ihr Bündel des Aufgabenbereichs neben sich":
+`verify:bundle` ist Teil von `pnpm check` und startet die **gebaute
+Sidecar-Binärdatei**. Die einzelnen Prüfaussagen stehen in
+[verify-sidecar.mjs](apps/desktop/scripts/verify-sidecar.mjs).
 
 ```bash
 pnpm verify:bundle   # baut den Sidecar und führt den Nachweis aus
 pnpm sidecar:verify  # nur den Nachweis, gegen die zuletzt gebaute Datei
 ```
 
-Sie steht bewusst **nicht** in `pnpm check`: Sie braucht die Rust-Toolchain, baut rund 120 MiB und
-belegt dabei die Ports 17843 und 17844, kann also nicht neben einem laufenden SuperTakt bestehen.
-`pnpm check` soll schnell und oft laufen.
+Der Nachweis benötigt freie Ports 17843 und 17844 und kann deshalb nicht neben einem
+laufenden SuperTakt bestehen. Der erste Sidecar-Bau benötigt außerdem den Download der
+festgelegten Node-Laufzeit; Voraussetzungen stehen in [apps/desktop/README.md](apps/desktop/README.md).
 
-Sie gehört trotzdem vor jede Auslieferung und in jeden Durchlauf, der die Hülle, den lokalen Dienst
-oder den Speicherweg anfasst. Der Grund steht in T-053: Elf Nachweispfade, 556 Testfälle und 28
+Historischer Anlass für diesen Nachweis war T-053: Elf Nachweispfade, 556 Testfälle und 28
 Ende-zu-Ende-Fälle liefen an einer Anwendung vorbei, die nicht startete, weil sie alle aus dem
 Quelltext laufen und keiner das Erzeugnis ausführte. `pnpm desktop` und `pnpm desktop:build` führen
 den Nachweis seither selbst mit.

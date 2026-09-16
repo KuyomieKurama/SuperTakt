@@ -126,4 +126,4 @@ coverage*/
 # Bildschirmabzüge der Prüfläufe: Arbeitsmaterial, nicht Bestand.
 # Die gemessenen Zahlen stehen in den Berichten daneben; die Bilder kosten
 # 20 MB und lassen sich aus den Vorrichtungen jederzeit neu erzeugen.
-.claude/team/reports/*-screens/
+.claude/team/reports/*

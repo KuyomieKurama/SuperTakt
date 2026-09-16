@@ -1,41 +1,11 @@
-/**
- * Takt — die Zeitbuchung und die Timer-Regel (A-6.1 bis A-6.8, A-7.3, A-7.4,
- * A-2.5, E-036).
- *
- * Die Buchung selbst (Tabelle `time_entry`), was ein Start und ein Stopp
- * entscheiden und was eine Buchung am Todo bewirkt.
- *
- * **Der Exportstatus wechselt nebenan** (`export-status.ts`, seit T-261). Der
- * Wert `ExportStatus` steht hier, weil er eine Spalte dieser Tabelle ist;
- * seine drei Übergänge, die Sperre und das Protokoll `export_audit` stehen
- * dort. Die Richtung ist einseitig: `export-status.ts` liest diese Datei,
- * diese Datei liest `export-status.ts` nicht.
- *
- * `note` ist die Buchungsnotiz aus A-7.3, auf dem Bildschirm **Leistung**
- * (E-016). Sie geht in die Abrechnung (A-7.4). Der interne Vermerk des Todos
- * aus A-7.2 kommt in keinem Typ dieser Datei vor — siehe `TodoNote` in
- * todo.ts und R-06.
- */
+/** Die Buchungsnotiz wird exportiert; der interne Todo-Vermerk bleibt davon getrennt. */
 
 import type { Seconds, Timestamp, TimeEntryId, TodoId } from './kernel.ts';
 import { secondsBetween } from './kernel.ts';
 
-// ---------------------------------------------------------------------------
 // Exportstatus (A-6.5, A-6.9)
-// ---------------------------------------------------------------------------
 
-/**
- * Zweiwertig, nie leer, nie mehrdeutig (A-6.9).
- *
- * Es gibt keinen dritten Wert, keinen Zwischenzustand „wird gerade exportiert"
- * und kein `null`. Der Exportlauf ist eine Transaktion (A-8.8); zwischen
- * `open` und `exported` liegt kein beobachtbarer Zustand. Die Speicherung
- * erzwingt das über NOT NULL plus CHECK, nicht über eine Zusicherung im Code.
- *
- * Die Werte sind englisch und stehen so auch in `time_entry.export_status`. Die
- * Beschriftung auf dem Bildschirm — „offen" und „exportiert" — bildet die
- * Oberfläche darauf ab; sie gehört nicht in die Datenbank.
- */
+/** Der Exportstatus wechselt transaktional; es gibt keinen beobachtbaren Zwischenstatus. */
 export type ExportStatus = 'open' | 'exported';
 
 /** Woher die Buchung stammt. Für die Oberfläche, ohne Einfluss auf den Export. */
@@ -78,19 +48,9 @@ export interface RunningTimeEntry {
   readonly source: 'timer';
 }
 
-// ---------------------------------------------------------------------------
 // Timer-Regel (A-6.8, A-2.5)
-// ---------------------------------------------------------------------------
 
-/**
- * Wunsch, einen Timer zu starten.
- *
- * `stopRunning` ist die Antwort des Benutzers auf die Rückfrage aus A-6.8.
- * Ohne dieses Feld verweigert der Start, wenn bereits ein Timer läuft.
- * Die Rückfrage ist damit nicht Höflichkeit der Oberfläche, sondern Bedingung
- * des Vertrags: es gibt keinen Weg, einen laufenden Timer stillschweigend zu
- * beenden.
- */
+/** Ein laufender Timer darf nur nach ausdrücklicher Zustimmung beendet werden. */
 export interface TimerStartRequest {
   readonly todoId: TodoId;
   readonly stopRunning: boolean;
@@ -111,19 +71,8 @@ export type TimerStartResult =
       /** Der vorher laufende Timer, falls einer gestoppt wurde. */
       readonly stopped: TimeEntry | null;
       /**
-       * A-2.5: war das Todo erledigt und wurde durch den Start wieder aktiv?
-       *
-       * Es gibt kein Feld für eine neue Spalte. Der Start hebt nur das
-       * Erledigt-Kennzeichen auf. **Ob die Karte dadurch eine Spalte wechselt,
-       * entscheidet die Regel** (E-055): Eine Kanban-Spalte fragt seit E-054
-       * auch nach „Erledigt" und nach dem Exportstatus, und genau diese beiden
-       * Achsen legt ein Start um. Die Bewegung, die daraus folgt, liefert
-       * `poolMovement` an der Route; der Satz dazu steht in
-       * `poolMovementSentence` (`pool-movement.ts`).
-       *
-       * Bis T-101 stand hier „die Karte bleibt, wo sie ist" — derselbe Satz,
-       * den E-058 an vier Flächen als falsch begraben hat, drei Dateien neben
-       * der Funktion, die ihn ersetzt (R-2a W-2).
+       * Der Start hebt „Erledigt“ auf; mögliche Spaltenwechsel ergeben sich daraus über die
+       * Poolregeln.
        */
       readonly doneCleared: boolean;
     }
@@ -136,23 +85,8 @@ export type TimerStartResult =
     };
 
 /**
- * Regel für den Start eines Timers auf einem erledigten Todo (A-2.5).
- *
- * Rein und ohne laufenden Dienst prüfbar. Sie entscheidet nur, was zu tun ist;
- * das Schreiben übernimmt der Anwendungsfall in einer einzigen Transaktion.
- *
- * Die Regel ist knapp, weil Erledigt und Kanban-Spalte getrennt sind: Der
- * Start hebt `completed_at` auf und rührt `status_id` nicht an. Es gibt keine
- * gemerkte und keine konfigurierte Rückkehr-Spalte, weil das Erledigen die
- * Spalte nie verändert hat.
- *
- * Wieder in seinem Pool erscheint das Todo dadurch von selbst: Die
- * Pool-Zugehörigkeit ergibt sich aus den Tags und ist nicht gespeichert
- * (A-3.4); ausgeblendet war es allein über `IsVisibleInPool` in pool.ts. Fällt
- * das Kennzeichen, fällt die Ausblendung.
- *
- * Der eigene Typ bleibt trotz der kurzen Regel bestehen: Er ist die eine
- * Stelle, an der A-2.5 steht, und die eine Stelle, an der T-010 dagegen prüft.
+ * Der Anwendungsfall setzt die Wiederöffnung zusammen mit dem Timerstart in einer Transaktion um;
+ * `statusId` bleibt unverändert.
  */
 export type DetermineReopen = (input: {
   readonly isDone: boolean;
@@ -173,7 +107,6 @@ export type MinimumDurationSeconds = 1;
 export type TimerStopResult =
   | { readonly kind: 'recorded'; readonly entry: TimeEntry }
   | { readonly kind: 'discarded'; readonly reason: 'timer_too_short'; readonly durationSeconds: number };
-// ---------------------------------------------------------------------------
 // Entwürfe: was eine reine Regel über eine Buchung sagen kann (T-009)
 //
 // Eine reine Funktion kann keine Kennung vergeben — dafür bräuchte sie Zufall
@@ -184,7 +117,6 @@ export type TimerStopResult =
 //
 // Das ist kein Umweg, sondern die Trennung aus E-001 an einer konkreten
 // Stelle: Die Domäne entscheidet, der Adapter schreibt.
-// ---------------------------------------------------------------------------
 
 /** Ein neuer, noch nicht gespeicherter laufender Timer. */
 export interface RunningTimeEntryDraft {
@@ -248,44 +180,14 @@ export type TimerStartDecision =
       readonly running: RunningTimeEntry;
     };
 
-// ---------------------------------------------------------------------------
 // Umsetzung (T-009)
-// ---------------------------------------------------------------------------
 
-/**
- * Regel für den Start eines Timers auf einem erledigten Todo (A-2.5, E-023).
- *
- * Der Vertrag ist absichtlich so schmal: ein Feld hinein, ein Feld hinaus. Es
- * gibt keine Kanban-Spalte im Ergebnis, weil der Start keine anfasst. Erledigt
- * und Spalte sind zwei Achsen; das Erledigen hat die Spalte nie verändert, also
- * gibt es beim Wiederaufnehmen nichts wiederherzustellen.
- *
- * `clearDone: false` bei einem nicht erledigten Todo ist kein Leerlauf, sondern
- * eine Aussage: Der Anwendungsfall schreibt dann nicht auf `completed_at` und
- * berührt die Zeile nicht ohne Grund.
- */
+/** Bei `clearDone: false` soll der Anwendungsfall den Erledigt-Zeitpunkt nicht unnötig schreiben. */
 export const determineReopen: DetermineReopen = ({ isDone }) => ({ clearDone: isDone });
 
 /**
- * Was das **Abschließen** einer Buchung am Zustand eines Todos ändert (E-032).
- *
- * Eine Achse und nur eine: `export_status` ist zweiwertig und beginnt bei
- * `open` (E-032). Sobald eine Buchung ein Ende hat, gibt es an diesem Todo
- * etwas Abzurechnendes, und jede Regel mit `exportState: 'open'` — „was habe
- * ich noch nicht abgerechnet" — nimmt es damit auf.
- *
- * **Ein laufender Timer zählt nicht.** Er trägt `ended_at IS NULL` und ist
- * nichts, was man abrechnen könnte; `v_export_candidate` führt ausschließlich
- * abgeschlossene Buchungen.
- *
- * Das ist die Wirkung von `POST /timer/stop` und von
- * `POST /timer/orphaned/resolve` mit `book_until_heartbeat`: Beide schließen
- * eine Buchung ab, die schon da war, und **beide fassen das
- * Erledigt-Kennzeichen nicht an** — das tut allein der Start (A-2.5). Wer hier
- * {@link BOOKING_EFFECT} nähme, behauptete eine Aufhebung, die nicht
- * stattfindet: Ein Todo, das während des laufenden Timers von Hand auf erledigt
- * gesetzt wurde, bliebe erledigt, und der Satz nennte trotzdem jede Spalte mit
- * `completion: 'open'`.
+ * Nur abgeschlossene Buchungen zählen als offene Einträge. Ein Stopp hebt ein zwischenzeitlich
+ * gesetztes Erledigt-Kennzeichen nicht auf.
  */
 export interface EntryClosedEffect {
   /** E-032 — es gibt jetzt mindestens eine abgeschlossene, offene Buchung. */
@@ -296,54 +198,8 @@ export interface EntryClosedEffect {
 export const ENTRY_CLOSED_EFFECT: EntryClosedEffect = Object.freeze({ hasOpenEntries: true });
 
 /**
- * Was eine **Buchung auf ein Todo** an dessen Zustand ändert
- * (A-2.5, E-032, E-061 Punkt 1).
- *
- * ---------------------------------------------------------------------------
- * Warum das eine Größe der Domäne ist und nicht eine Zeile im Anwendungsfall
- * ---------------------------------------------------------------------------
- *
- * Bis T-101 stand dieses Paar an **vier** Stellen ausgeschrieben: zweimal in
- * den Add-in-Routen (Ankündigung und Bestätigung derselben Buchung), einmal in
- * `timer/start` und einmal in `timer/stop` samt `orphaned/resolve`. Vier
- * Abschriften einer Fachaussage sind vier Gelegenheiten, Verschiedenes über
- * dieselbe Handlung zu behaupten — und die Ankündigung, die etwas anderes
- * verspricht, als die Bestätigung berichtet, ist Befund C-03 aus T-025.
- *
- * Deshalb steht die **Wirkung** hier, in der Domäne, und die **Rechnung** im
- * Anwendungsfall (`apps/local-api/src/pool-movement.ts`). Diese
- * Konstante kennt weder Buchungen im Speicher noch Pools noch Regeln; sie sagt
- * allein, welche zwei Achsen eine Buchung umlegt.
- *
- * ---------------------------------------------------------------------------
- * Die beiden Achsen, und warum es genau diese zwei sind
- * ---------------------------------------------------------------------------
- *
- *  - `completedAt: null` — **Buchen hebt „Erledigt" auf** (A-2.5). Das gilt für
- *    jeden Weg, auf dem eine Buchung auf einem Todo **entsteht**: der
- *    Timerstart (`timer.start` schreibt `completed_at = NULL`) und die Buchung
- *    aus dem Aufgabenbereich des Add-ins (`clearDone` in derselben
- *    Transaktion). Seit T-038 gibt es keinen Schalter mehr, der das verhindern
- *    könnte. War das Todo nicht erledigt, stand dort ohnehin `null`, und der
- *    Wert ändert nichts.
- *  - `hasOpenEntries: true` — {@link ENTRY_CLOSED_EFFECT}, siehe dort.
- *
- * **Nicht die Wirkung eines Stopps.** Der Stopp schließt eine Buchung ab, die
- * schon da war; er legt nur die zweite Achse um. Dafür steht
- * {@link ENTRY_CLOSED_EFFECT}, und der Unterschied ist keine Feinheit: Er ist
- * der Fall „während des laufenden Timers von Hand auf erledigt gesetzt".
- *
- * **Nicht dabei sind Tags, Status und der Exportstatus vorhandener Buchungen.**
- * Eine Buchung fasst keine davon an; wer sie hier aufnähme, behauptete eine
- * Wirkung, die es nicht gibt. Das Spreizen über den Zustand von vorher
- * (`{ ...before, ...BOOKING_EFFECT }`) ist deshalb der richtige Weg: Kommt eine
- * sechste Achse hinzu, geht sie unverändert mit, statt still zu fehlen.
- *
- * **Nicht dasselbe wie „ein Timer läuft".** Ein laufender Timer trägt
- * `ended_at IS NULL` und ist nichts, was man abrechnen könnte; er setzt
- * `hasOpenEntries` **nicht**. Am Timerstart gilt diese Wirkung deshalb nur
- * dann vollständig, wenn er einen Timer **desselben** Todos verdrängt und dabei
- * eine Buchung abschließt; sonst fällt allein das Kennzeichen.
+ * Nur beim Entstehen einer abgeschlossenen Buchung mit Wiederöffnung verwenden. Ein regulärer
+ * Timerstart setzt noch keine offene Buchung; ein Stopp hebt „Erledigt“ nicht auf.
  */
 export interface BookingEffect extends EntryClosedEffect {
   /** A-2.5 — das Kennzeichen fällt. */
@@ -357,14 +213,8 @@ export const BOOKING_EFFECT: BookingEffect = Object.freeze({
 });
 
 /**
- * Stopp-Regel (A-6.2, A-6.4).
- *
- * Liegt die Laufzeit unter der Mindestdauer, entsteht keine Buchung. Das ist
- * der Doppelklick auf „Start", nicht geleistete Arbeit — und die Speicherung
- * ließe eine Zeile mit Dauer 0 ohnehin nicht zu (CHECK auf `duration_seconds`).
- *
- * Rein: Ende und Dauer folgen ausschließlich aus den übergebenen Zeitstempeln.
- * Die Uhr liest der Aufrufer, nicht diese Funktion.
+ * Unterhalb der Mindestdauer wird keine Buchung angelegt; die Speicherung erlaubt keine Dauer von
+ * null.
  */
 export const decideTimerStop = (input: {
   readonly running: RunningTimeEntry;
@@ -392,22 +242,8 @@ export const decideTimerStop = (input: {
 };
 
 /**
- * Start-Regel: höchstens ein Timer gleichzeitig (A-6.8).
- *
- * Läuft bereits einer und hat der Benutzer nicht ausdrücklich zugestimmt, ihn
- * zu stoppen, liefert die Regel `confirmation_required` — und zwar **bevor**
- * irgendetwas geschrieben wird. Es gibt keinen Weg durch diese Funktion, der
- * einen laufenden Timer stillschweigend beendet, und keinen, der zwei Timer
- * gleichzeitig entstehen lässt.
- *
- * Der strukturelle Schutz in der Speicherung (`ux_time_entry_running`, ein
- * eindeutiger Partialindex auf `ended_at IS NULL`) ersetzt diese Regel nicht,
- * sondern sichert sie ab: Der Index verhindert den zweiten Timer, diese Regel
- * sorgt dafür, dass der Benutzer vorher gefragt wird, statt einen Fehler zu
- * sehen.
- *
- * `todoIsDone` und `note` sind optional, weil der häufige Fall — aktives Todo,
- * leerer Leistungstext — ohne sie auskommt.
+ * Vor jedem Schreibzugriff die Zustimmung zum Stoppen einholen. Der eindeutige Index sichert die
+ * Ein-Timer-Regel zusätzlich ab.
  */
 export const decideTimerStart = (input: {
   readonly running: RunningTimeEntry | null;
@@ -442,70 +278,17 @@ export const decideTimerStart = (input: {
 };
 
 /**
- * Der frühere zweier Zeitpunkte.
- *
- * Nicht exportiert und absichtlich klein: Sie trägt die eine Rechenart, mit
- * der {@link decideOrphanedTimer} seinen Deckel bildet. Verglichen wird über
- * `Date.parse` und nicht lexikographisch — ein Zeitstempel aus einer fremden
- * Datei hält sich nicht zwangsläufig an die feste Breite, mit der die
- * Speicherung rechnet (`calendarDayBounds` in kernel.ts sagt, warum das dort
- * anders sein darf).
+ * Fremde Zeitstempel müssen nicht dieselbe Breite haben; deshalb zeitlich statt lexikografisch
+ * vergleichen.
  */
 const earlierOf = (a: Timestamp, b: Timestamp): Timestamp =>
   Date.parse(a) <= Date.parse(b) ? a : b;
 
 /**
- * Was mit einer verwaisten Buchung geschieht (E-036).
- *
- * Verwaist ist eine Buchung ohne Ende, die beim Start der Anwendung vorgefunden
- * wird: Absturz, Abmeldung, Stromausfall. Sie wird **nie** stillschweigend bis
- * jetzt weitergezählt — ein über Nacht vergessener Timer bucht sonst vierzehn
- * Stunden, und nach der Aufrundung aus E-008 landet das in einer Rechnung.
- *
- * Gebucht wird höchstens bis zum letzten Lebenszeichen. Der Schaden ist damit
- * auf ein Schreibintervall gedeckelt. Fehlt das Lebenszeichen ganz, ist die
- * Dauer 0 und die Buchung fällt als zu kurz heraus — es gibt nichts zu buchen,
- * was jemand bezeugen könnte.
- *
- * Bis der Benutzer geantwortet hat, bleibt die Buchung unvollständig und geht
- * in keinen Export: Sie hat kein `ended_at`, und `v_export_candidate` führt
- * ausschließlich abgeschlossene Buchungen.
- *
- * ---------------------------------------------------------------------------
- * Der Deckel greift in **beide** Richtungen (T-371, R-34, A-24)
- * ---------------------------------------------------------------------------
- *
- * Bis T-371 fing diese Regel nur das zu **kleine** Ende ab: „höchstens bis zum
- * Lebenszeichen". Das Lebenszeichen reist im selben Archiv wie `started_at`
- * (`timer_heartbeat` steht in `DATA_ARCHIVE_TABLES`) und trägt deshalb die Uhr
- * eines **fremden** Rechners. Geht sie vor, liegt `heartbeatAt` hinter der
- * Wanduhr des fragenden Laufs, und der Deckel hob die Buchung, statt sie zu
- * begrenzen. Gemessen in T-370 über den echten Einspielweg: Start
- * `2026-09-13`, Lebenszeichen `9999-12-31` → **251 613 021 599 s** in einer
- * Buchung mit `export_status = 'open'`, Exportzeile `"Zeit": 69 892 506`.
- *
- * Deshalb `now`: die Wanduhr des Laufs, der fragt. Gebucht wird bis
- * `min(heartbeatAt, now)` — nie bis zu einem Zeitpunkt, den dieser Rechner
- * noch nicht erreicht hat. Zwei Folgen, die keine Nebenwirkungen sind, sondern
- * der Zweck:
- *
- *  - **Keine Buchung in der Zukunft.** Eine Zeile, deren `ended_at` hinter der
- *    Wanduhr liegt, ist nicht nur falsch abgerechnet; sie überlappt auch mit
- *    allem, was dieser Lauf danach noch startet (A-24, „ohne Überlappung").
- *    Genau das hatte `startTimer` seit T-363: geschlossene Buchung
- *    `06:00 → 18:00` neben einem laufenden Eintrag ab `17:00`.
- *  - **Eine rückwärts laufende Uhr verwirft.** Liegt `now` vor `startedAt`,
- *    rechnet {@link decideTimerStop} eine negative Dauer und gibt
- *    `timer_too_short`. Die billige Richtung: keine Buchung statt einer
- *    erfundenen.
- *
- * `now` ist **freiwillig**, und das ist eine Vorsichtsmaßnahme mit Preis. Ohne
- * den Wert gibt es keinen Deckel nach oben — die teure Ausfallrichtung. Ein
- * Pflichtfeld wäre die ehrlichere Zusage, ist aber heute nicht schreibbar,
- * ohne sechs vorbestehende Prüffälle in `packages/domain/test/timer.test.ts`
- * zu `tsc`-Fehlern zu machen, und Prüffälle gehören dem unit-tester. Alle drei
- * Aufrufstellen des Erzeugnisses übergeben ihn (`features/timer/timer.ts`);
- * `proof:layers` Abschnitt 7 mißt das gegen die Platte, statt es zu behaupten.
+ * Nur nach Bestätigung bis höchstens min(Lebenszeichen, jetzt) buchen. Ohne Lebenszeichen oder bei
+ * rückwärts laufender Uhr wird die Buchung zu kurz.
+ * `now` muss im Produktivaufruf gesetzt sein; ohne diesen optionalen Wert fehlt die obere Grenze
+ * gegen zukünftige Archivzeitstempel.
  */
 export const decideOrphanedTimer = (input: {
   readonly running: RunningTimeEntry;

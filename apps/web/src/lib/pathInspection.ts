@@ -29,9 +29,7 @@
  * heißt „nichts gefunden", nicht „unbedenklich" (T-039).
  */
 
-/* ==================================================================== */
 /* Zerlegung                                                            */
-/* ==================================================================== */
 
 /**
  * Die Bestandteile eines Pfades, ohne leere Stücke.
@@ -109,9 +107,7 @@ export function shapeOf(path: string): PathShape {
   return { kind: "relative", anchor: "", rest: segmentsOf(path) };
 }
 
-/* ==================================================================== */
 /* Namen                                                                */
-/* ==================================================================== */
 
 /**
  * Namen von Synchronisierungsordnern (B-5.3 Punkt 3, R-13).

@@ -1,7 +1,5 @@
 import { useState } from "react";
-import {
-  listTimeEntries,
-} from "../api/endpoints";
+import { listTimeEntries } from "../features/bookings/api";
 import {
   listTodos,
 } from "../features/todos/api";
@@ -9,7 +7,6 @@ import { DoneFlag } from "../shared/ui/DoneFlag";
 import { ExportStatusBadge, exportDisplayState } from "../shared/ui/ExportStatus";
 import { Icon } from "../shared/ui/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
-import { TimerDisplay } from "../features/timer/Timer";
 import { TagChip } from "../shared/ui/Tag";
 import { previewOpenEntries } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
@@ -21,8 +18,6 @@ import { useToday } from "./useToday";
 import {
   formatDuration,
   formatQuarters,
-  formatStopwatch,
-  formatTime,
   formatTimeRange,
   plural,
 } from "../lib/format";
@@ -181,28 +176,6 @@ export function DashboardScreen() {
         Standardfenster.
       */}
       <ScreenBody label="Dashboard">
-        <Card title="Timer">
-          {timer.running === null ? (
-            <div className="timer-panel timer-panel--idle">
-              <TimerDisplay state="idle" display="00:00:00" size="md" />
-              <p className="timer-panel__hint">
-                Kein Timer läuft. Wählen Sie unten ein Todo oder gehen Sie in die Zeiterfassung.
-              </p>
-            </div>
-          ) : (
-            <div className="timer-panel timer-panel--running">
-              <TimerDisplay
-                state="running"
-                size="md"
-                display={formatStopwatch(timer.elapsedSeconds)}
-                todoTitle={timer.running.todoTitle}
-                detail={`seit ${formatTime(timer.running.entry.startedAt)} Uhr`}
-                onStop={timer.requestStop}
-              />
-            </div>
-          )}
-        </Card>
-
         <AsyncBoundary state={data.state} label="Dashboard wird geladen" rows={4} onRetry={data.reload}>
           {(value) => {
             const todaySeconds = value.todayEntries.reduce(

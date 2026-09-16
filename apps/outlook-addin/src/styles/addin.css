@@ -1030,3 +1030,26 @@ bdi {
   white-space: nowrap;
   border: 0;
 }
+
+.mail-create-fields { border: 0; min-width: 0; display: grid; gap: var(--space-3); }
+.mail-option { display: flex; align-items: flex-start; gap: var(--space-2); margin-block: var(--space-2); overflow-wrap: anywhere; }
+.mail-option input { flex-shrink: 0; margin-top: 0.25em; }
+.offer { min-width: 0; padding: var(--space-3); border: 1px solid var(--border-default); }
+
+/* One selection surface combines chips, search and the folder hierarchy. */
+.tagpicker { gap: 0; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--bg-surface); overflow: hidden; }
+.tagpicker__control { display: grid; gap: var(--space-2); padding: var(--space-2); }
+.tagpicker__control .input { border: 0; background: transparent; box-shadow: none; min-width: 0; }
+.tagpicker__count { padding: 0 var(--space-3) var(--space-2); }
+.tagpicker__tree { max-height: 18rem; overflow: auto; border-top: 1px solid var(--border-subtle); }
+.tagpicker__list { max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; }
+.tagpicker__folder { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--row-height); padding: var(--space-2); text-align: start; border: 0; background: var(--bg-subtle); color: var(--text-primary); font-weight: var(--weight-semibold); cursor: pointer; overflow-wrap: anywhere; }
+.tagpicker__folder:hover { background: var(--bg-hover); }
+.tagpicker__folder svg { flex-shrink: 0; }
+.tagpicker__hint { padding: var(--space-2); }
+.tagrow + .tagrow { border-top: 0; }
+.offer > fieldset { border-radius: var(--radius-md); }
+
+.tagpicker { scroll-margin-block: 5rem; }
+.tagpicker:focus-within { border-color: var(--accent-bg); }
+.chip__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

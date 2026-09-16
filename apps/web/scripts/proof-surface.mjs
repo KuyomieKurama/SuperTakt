@@ -1,103 +1,5 @@
-/**
- * Takt — der ausführbare Nachweis über die **Bauart** der Oberfläche (T-191).
- *
- * Aufruf:  pnpm --filter @takt/web proof:surface
- *
- * ===========================================================================
- * Warum es diese Datei gibt
- * ===========================================================================
- *
- * Zwei Zusagen der Oberfläche sind an keinem einzelnen Ort zu Hause, und genau
- * deshalb sind sie beide mehrfach gebrochen worden, ohne daß ein Lauf rot
- * wurde:
- *
- *  1. **Eine Meldefläche steht immer im Baum, auch leer** (B-5 aus T-116). Ein
- *     `role="alert"`, das erst zusammen mit seinem Inhalt entsteht, wird von
- *     vielen Vorlesehilfen übergangen: Sie melden Änderungen an einer Region,
- *     die sie in diesem Augenblick noch nicht kennen — und eine Meldung, die
- *     **während** einer stehenden Fläche entsteht, bleibt stumm (SC 4.1.3).
- *     Behoben in `ConfirmDialog` (T-118), in `TextField` (T-162, O-DA), im
- *     Aufgabenbereich des Add-ins (T-158) und in `NoteField` (T-186, O-FX) —
- *     und **danach viermal von Hand wiedergefunden** (T-191, O-GQ). Dieser
- *     Lauf hat beim ersten Durchgang **fünf weitere** genannt, die niemand
- *     aufgeschrieben hatte, dazu eine sechste im Stilblatt. Das ist keine
- *     Sorgfaltsfrage mehr, das war eine fehlende Messung.
- *  2. **Takt siezt** (E-080). Der Wächter dafür steht seit T-190 im Add-in und
- *     kennt dort beide Formen — das Fürwort und den Imperativ ohne Fürwort.
- *     `apps/web` war gegen keine von beiden gemessen (O-GW). Dieselbe Zusage
- *     in zwei Schärfegraden ist eine halbe Zusage.
- *
- * ===========================================================================
- * Warum ein eigener Lauf und nicht `proof:foreign`
- * ===========================================================================
- *
- * `proof:foreign` beantwortet **eine** Frage — kommt fremder Text ungebändigt
- * auf den Schirm — und beantwortet sie über den Typprüfer. Die zwei Fragen
- * hier haben mit fremdem Text nichts zu tun; sie in dieselbe Datei zu legen
- * hieße, einen Lauf zu führen, dessen Name nicht mehr sagt, was er mißt. Der
- * Bestand hält es überall so: ein Lauf, ein Gegenstand.
- *
- * **Der Preis steht dazu, damit ihn niemand übersieht:** Dieser Lauf ist erst
- * dann Teil von `pnpm check`, wenn `proof:surface` in der Wurzel-`package.json`
- * steht und in `proof:all` aufgenommen ist. Beides gehört dem Orchestrator.
- * Bis dahin ist er ein Wächter, den man von Hand ruft — und das ist genau die
- * Sorte Zusage, die dieser Lauf sonst mißt.
- *
- * ===========================================================================
- * Was dieser Nachweis sieht — und was nicht
- * ===========================================================================
- *
- * **Er sieht** (jede Regel mit ihren Gegenproben in Abschnitt 7):
- *
- *  - **Regel A** — ein Knoten, der eine Live-Rolle **im Quelltext trägt**
- *    (`role="alert"`, `role="status"`, `role="log"`, ein `aria-live`, oder ein
- *    `<output>`), und der aus einem Bedingungsausdruck entsteht, ohne daß ein
- *    umschließendes JSX-Element dazwischenliegt. Das ist die Bauart des
- *    Befundes, nicht seine Stelle: `{x ? <p role="alert">{x}</p> : null}`.
- *  - **Regel B** — ein HTML-Knoten, dessen Klassenname auf `error` oder
- *    `failure` endet, der weder selbst eine Live-Rolle trägt noch in einer
- *    steht. Das ist die zweite Hälfte von O-GQ: `TemplateFields` hatte gar
- *    keine Rolle, und Regel A allein hätte darüber geschwiegen.
- *  - **Regel C** — ein Stilblatt, das einer Live-Region `display: none` oder
- *    `visibility: hidden` gibt, solange sie leer ist. Das hebt Regel A wieder
- *    auf, nur eine Ebene tiefer: Ein Element mit `display: none` steht nicht
- *    im Baum der Vorlesehilfe, die Region entsteht für sie also doch erst mit
- *    ihrer ersten Meldung. Gefunden in genau dieser Gestalt an
- *    `.dirfield__announce` (T-191).
- *  - **Regel D** — die Anrede „du" und der Imperativ ohne Fürwort in jedem
- *    sichtbaren Text der Oberfläche (E-080). Beide Ausdrücke sind
- *    **zeichengleich** aus `apps/outlook-addin/scripts/proof-addin.mjs`
- *    übernommen; siehe {@link ANREDE_DU_QUELLE}.
- *  - **Regel E** — dieselbe Zusage, gegen den anderen Lauf gemessen (E-086).
- *    Der Anredewächter steht in zwei Dateien; Regel E hält sie zeichengleich
- *    und schickt außerdem eine Falltafel durch **beide** Seiten. Bewegt sich
- *    eine Hälfte allein, wird dieser Lauf rot und sagt, welche.
- *
- * **Er sieht nicht:**
- *
- *  - Einen **Baustein**, der die Live-Rolle in sich trägt und selbst bedingt
- *    erscheint — `{fehler === null ? null : <InlineMessage …/>}`. Regel A mißt
- *    die Bauart dort, wo die Rolle **steht**; an der Aufrufstelle steht sie
- *    nicht. Das ist eine echte Lücke und keine Nachlässigkeit: Sie zu
- *    schließen hieße, jeder der heute bedingten Meldungen einen dauerhaften
- *    Wirt zu geben, und das ist eine Produktentscheidung und keine Zeile. Die
- *    gemessene Zahl steht im Bericht zu T-191.
- *  - Den **Tausch eines ganzen Teilbaums**: `{x ? <div><p role="alert">…</p>
- *    </div> : null}`. Dort liegt ein umschließendes JSX-Element zwischen
- *    Bedingung und Region, und genau daran hört Regel A auf — sonst meldete
- *    sie jeden Zweig, der eine Fläche gegen eine andere tauscht (der Zweig
- *    „mit Hülle / ohne Hülle" in `ExportDirectoryField` ist so einer).
- *  - Eine Region, die eine **Funktion** bedingt zurückgibt (`if (x === null)
- *    return null;`). Das ist dieselbe Klasse wie der Baustein oben.
- *  - Ob die Region das **Richtige** sagt. Wortlaut, Höflichkeit und Länge sind
- *    Sache von E-078 und der Textdurchgänge, nicht dieses Laufs.
- *  - Alles außerhalb von `apps/web/src`. Das Add-in hat seinen eigenen Lauf
- *    (`proof:addin`), die Hülle ihren (`proof:shell-surface`).
- *
- * Und die ehrliche Grenze zum Schluß: Dieser Lauf liest **den Quelltext**,
- * nicht den Bildschirm. Daß eine Vorlesehilfe die Änderung tatsächlich
- * ansagt, mißt er nicht und kann er nicht messen.
- */
+/** Prüft beständige Live-Regionen, Fehlerrollen, sichtbare CSS-Regeln und die Anrede in `apps/web/src`.
+ * Bedingt eingebundene Komponenten, ganze Teilbäume und Funktionsrückgaben werden nicht vollständig erfasst. Tatsächliche Ansagen erfordern eine Vorlesehilfe. */
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -113,9 +15,7 @@ const srcRoot = requireDirectory(
   'den Quellbaum, über den dieser Nachweis urteilt',
 );
 
-/* ==================================================================== */
 /* 0  Werkzeug                                                          */
-/* ==================================================================== */
 
 let passed = 0;
 let failed = 0;
@@ -194,9 +94,7 @@ const walk = (node, visit) => {
   ts.forEachChild(node, (child) => walk(child, visit));
 };
 
-/* ==================================================================== */
 /* 1  Regel A — die Live-Region entsteht nicht mit ihrem Inhalt         */
-/* ==================================================================== */
 
 /**
  * Die Rollen, die eine Live-Region erklären.
@@ -327,9 +225,7 @@ const findLiveRegionsBornWithContent = (file) => {
   return findings;
 };
 
-/* ==================================================================== */
 /* 2  Regel B — der Fehlertext ohne Ansage                              */
-/* ==================================================================== */
 
 /**
  * Ein Klassenname, der eine Meldung beschriftet: `field__error`,
@@ -462,9 +358,7 @@ const findMessagesWithoutAnnouncement = (file) => {
   return findings;
 };
 
-/* ==================================================================== */
 /* 3  Regel C — kein `display: none` auf einer leeren Live-Region       */
-/* ==================================================================== */
 
 /** Die Klassennamen, die im Bestand eine Live-Region tragen. */
 const liveRegionClasses = () => {
@@ -517,9 +411,7 @@ const findHiddenLiveRegions = (name, text, classes) => {
   return findings;
 };
 
-/* ==================================================================== */
 /* 4  Regel D — Takt siezt, auch hier (E-080, O-GW)                     */
-/* ==================================================================== */
 
 /**
  * **Zeichengleich aus `apps/outlook-addin/scripts/proof-addin.mjs`** (T-190).
@@ -664,9 +556,7 @@ const visibleTexts = () => {
 const withoutExceptions = (text) =>
   ANREDE_AUSNAHMEN.reduce((rest, { satz }) => rest.split(satz).join(' '), text);
 
-/* ==================================================================== */
 /* 5  Regel E — dieselbe Regel steht in zwei Laeufen (E-086)            */
-/* ==================================================================== */
 
 /**
  * Der Anredewaechter steht zweimal: hier und in
@@ -857,9 +747,7 @@ const kunstWaechter = ({
       '`;',
   ].join('\n');
 
-/* ==================================================================== */
 /* 6  Regel F — jedes direkte Kind von `.app` trägt eine Rasterzuordnung */
-/* ==================================================================== */
 
 /**
  * ## Warum diese Regel und nicht nur die Berichtigung von T-214 (O-JH)
@@ -1099,9 +987,7 @@ const zielIstDokumentkoerper = (node) =>
   node.expression.text === 'document' &&
   node.name.text === 'body';
 
-/* ==================================================================== */
 /* 5a  Der Name `createPortal` — gegen seine Einfuhr aufgelöst (A-A-112) */
-/* ==================================================================== */
 
 /**
  * ## Warum hier eine Einfuhr gelesen wird und nicht ein Name verglichen
@@ -1522,9 +1408,7 @@ const KUNST_CSS = [
   '.woanders .fremd { grid-area: fremd; }',
 ].join('\n');
 
-/* ==================================================================== */
 /* 7  Regel G — jede gezeichnete Abdunklung hängt am Dokumentkörper     */
-/* ==================================================================== */
 
 /**
  * ## Warum diese Regel neben Regel F steht und nicht in ihr
@@ -2834,9 +2718,7 @@ const kunstQuelle = (quelltext) => [parse('kunst.tsx', `${KUNST_EINFUHR}${quellt
 /** Die Menge, gegen die die Gegenproben von Regel G messen. */
 const KUNST_ABDUNKLUNGEN = new Set([SCRIM_CLASS]);
 
-/* ==================================================================== */
 /* 7a Regel H — Abbrechen ist nie Zustimmung (A-25.6, T-347 G-6)        */
-/* ==================================================================== */
 
 /**
  * ## Der fünfte Teilsatz, und warum er eine eigene Regel braucht
@@ -3201,9 +3083,7 @@ const findDismissThatConfirms = (quellen) => {
   return { wege, befunde };
 };
 
-/* ==================================================================== */
 /* 8  Die Prüfungen über den Bestand                                    */
-/* ==================================================================== */
 
 process.stdout.write(
   `Takt — die Bauart der Oberfläche (T-191)\n` +
@@ -3620,9 +3500,7 @@ check('kein Absageweg erreicht einen Zustimmungsrückruf', () => {
   );
 });
 
-/* ==================================================================== */
 /* 9  Die Gegenproben — jede Regel gegen eine eingesetzte Verletzung    */
-/* ==================================================================== */
 
 /*
  * Ein Wächter, der nie rot war, ist eine Behauptung über einen Wächter. Jede
@@ -4925,9 +4803,7 @@ check('die Menge aus dem Stilblatt trifft die Eigenschaft und nicht den Namen (T
   );
 });
 
-/* ==================================================================== */
 /* 10  Ergebnis                                                         */
-/* ==================================================================== */
 
 process.stdout.write(`\n${'═'.repeat(58)}\n`);
 if (failed > 0) {

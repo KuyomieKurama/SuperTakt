@@ -1,5 +1,5 @@
-//! Native Linux session APIs. Never use XWayland's partial input history for
-//! a Wayland session. No subprocesses, input events or clipboard access.
+//! Native Sitzungs-APIs verwenden; XWayland erfasst die Aktivität einer Wayland-Sitzung nur teilweise.
+//! Keine Unterprozesse, Eingabeereignisse oder Zwischenablagezugriffe.
 use super::{now_ms, observe, sample, unavailable, Activity};
 use std::{
     os::fd::{AsFd, AsRawFd},
@@ -125,8 +125,7 @@ fn run_wayland(shared: Arc<Mutex<Activity>>) -> Result<(), Box<dyn std::error::E
     };
     queue.roundtrip(&mut state)?;
     let notifier = state.notifier.as_ref().ok_or("No idle notification protocol")?;
-    // A normal desktop session has one seat. Refuse an ambiguous multi-seat
-    // session rather than report absence while another seat is active.
+    // Mehrere Sitzplätze sind uneindeutig: Ein anderer könnte noch aktiv sein.
     if state.seats.len() != 1 {
         return Err("No unambiguous session seat".into());
     }
@@ -151,7 +150,7 @@ fn run_wayland(shared: Arc<Mutex<Activity>>) -> Result<(), Box<dyn std::error::E
                 events: libc::POLLIN,
                 revents: 0,
             };
-            // Bounded wait so the sampled duration advances without input.
+            // Begrenzt warten, damit die Dauer auch ohne Eingaben aktualisiert wird.
             let ready = unsafe { libc::poll(&mut fd, 1, 2000) };
             if ready < 0 {
                 let error = std::io::Error::last_os_error();

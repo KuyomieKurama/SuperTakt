@@ -1,94 +1,5 @@
-/**
- * Takt — Ankerpunkte im Quellbaum statt fester Pfade (T-249-4).
- *
- * ===========================================================================
- * Warum diese Datei in der Wurzel liegt und nur einmal
- * ===========================================================================
- *
- * In T-249-1 und T-249-2 entstand dieselbe Idee **viermal**: einmal unter
- * `apps/web/scripts`, einmal unter `apps/desktop/scripts` (zeichengleich zur
- * ersten), einmal als `apps/local-api/scripts/source-resolve.mjs` und einmal
- * als „Landkarte" im Nachweis des Aufgabenbereichs. Vier Abschriften einer
- * Regel ohne Wächter, der sie zusammenhält — genau die Bauart, die E-063
- * Punkt 4 verurteilt und die am 2026-09-10 schon einmal zugeschlagen hat: Die
- * Regel über den Ablageort des Anwendungsdatenverzeichnisses stand an fünf
- * Stellen, und drei davon vergaßen eine Plattform.
- *
- * Deshalb **eine** Fassung, und zwar hier. `scripts/` in der Wurzel ist
- * absichtlich **kein Arbeitsbereichspaket**: Der Arbeitsbereich umfaßt
- * `apps/*` und `packages/*`, dieser Ordner liegt daneben. Keine
- * `package.json`, kein Eintrag in `pnpm-workspace.yaml`, keine
- * Abhängigkeitskante — eingebunden wird über einen relativen Pfad. Der
- * Grenzwächter (`pnpm boundaries`) prüft ausschließlich `packages/domain` und
- * sieht Bauskripte nicht an; das ist gemessen, nicht vermutet.
- *
- * Diese Datei enthält **Bausteine, keine Fachlichkeit.** Wer einen Helfer
- * braucht, den nur ein einziger Lauf kennt — den Einstiegspunkt des lokalen
- * Dienstes, das Migrationsverzeichnis, den Quellbaum eines bestimmten Pakets —,
- * baut ihn dort, wo er gebraucht wird, und setzt ihn auf diese Bausteine auf.
- * Eine gemeinsame Datei, die alles aufnimmt, was irgendwo gebraucht wird, ist
- * der Sammelordner, den der Auftraggeber ausgeschlossen hat.
- *
- * ---------------------------------------------------------------------------
- * Warum es diese Datei überhaupt gibt
- * ---------------------------------------------------------------------------
- *
- * `apps/web/src` wird featureweise umgebaut: `features/board`, `features/todos`,
- * `features/timer`, … dazu `shared/` und ein schlankes `app/`. Die Ordner
- * `screens/`, `components/`, `lib/` und `api/` verschwinden dabei als Ordner.
- * **Jeder Nachweis, der eine Quelldatei über ihren heutigen Pfad liest, urteilt
- * danach über eine Datei, die es nicht mehr gibt** — und die entscheidende
- * Frage ist nicht, ob er das merkt, sondern **wie** er es merkt.
- *
- * Die Lage ist gemessen und nicht befürchtet. In T-247-7 verglich
- * `proof:foreign` unter Windows Pfade aus `ts.SourceFile.fileName`
- * (Schrägstriche) mit Pfaden aus `node:path` (Rückstriche). Der Vergleich traf
- * nie, der Lauf urteilte über **129 Dateien, ohne eine gesehen zu haben**, und
- * ohne die Zählwächter wäre er **grün** gewesen. Ein Umzug erzeugt dieselbe
- * Lage — nur auf jedem Betriebssystem gleichzeitig.
- *
- * ===========================================================================
- * Die Regel, die diese Datei durchsetzt
- * ===========================================================================
- *
- * **Nicht gefunden ist ein Fehlschlag der Messung, nie ein bestandener
- * Prüfsatz.** Ein fehlendes Verzeichnis, eine leere Datei und ein fehlendes
- * Merkmal enden hier als Abbruch mit einem Satz, der den gesuchten Gegenstand
- * **beim Namen nennt** — nicht als `ENOENT` aus dem Inneren von `node:fs`, und
- * erst recht nicht als leere Fundliste, die eine Prüfung leer wahr macht.
- *
- * Drei Zusagen, die ein Aufrufer daraus ableiten darf:
- *
- *  - {@link readTreeSync} liest **rekursiv**. Ein Umzug von `styles/foo.css`
- *    nach `features/board/foo.css` ändert die Menge nicht, und eine neue Ebene
- *    lässt keine Datei stillschweigend hinausfallen.
- *  - {@link locateSingleSource} sucht über ein **Merkmal** (Dateiname oder
- *    Inhalt), nicht über einen Pfad, und besteht auf **genau einem** Treffer.
- *    Zwei Treffer sind so wenig eine Antwort wie keiner: Bei zweien wüsste der
- *    Aufrufer nicht, über welche der beiden Dateien er gerade urteilt.
- *  - {@link locateWorkspacePackage} sucht über den **Paketnamen** und liest die
- *    erlaubten Orte aus `pnpm-workspace.yaml`, statt sie abzuschreiben.
- *
- * ---------------------------------------------------------------------------
- * Warum hier geworfen und nicht beendet wird
- * ---------------------------------------------------------------------------
- *
- * `source-resolve.mjs` beendete den Prozeß mit einer Zeile `FEHL` und
- * Rückgabewert 1, weil seine Auflösungen auf der obersten Ebene eines Laufs
- * stehen und eine Stapelspur dort wie ein Absturz des Werkzeugs aussähe. Das
- * ist richtig — aber es ist die Entscheidung des **Laufs**, nicht die des
- * Bausteins. Ein Baustein, der `process.exit` ruft, läßt sich nicht
- * gegenprüfen: Eine Prüfung, die den Abbruch messen will, stürbe mit ihm.
- * Deshalb wirft diese Datei {@link MissingSourceError}, und ein Lauf, der die
- * knappe Ausgabe will, fängt ihn ab:
- *
- * ```js
- * try { … } catch (fehler) {
- *   if (!(fehler instanceof MissingSourceError)) throw fehler;
- *   scheitern('Quelldatei auflösen', fehler.message);
- * }
- * ```
- */
+/** Quellen rekursiv anhand eindeutiger Merkmale auflösen. Fehlende, leere oder mehrdeutige Treffer müssen die Prüfung abbrechen.
+ * Helfer werfen `MissingSourceError`; über Ausgabe und Prozessabbruch entscheidet der aufrufende Prüflauf. */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -243,9 +154,7 @@ export const requireAtLeast = (items, atLeast, what, where) => {
   return items;
 };
 
-/* ==================================================================== */
 /* Der Arbeitsbereich — Wurzel und Pakete                               */
-/* ==================================================================== */
 
 /** @type {string | null} */
 let cachedWorkspaceRoot = null;
@@ -450,9 +359,7 @@ export const locateWorkspacePackage = (repoRoot, packageName) => {
   );
 };
 
-/* ==================================================================== */
 /* Quelldateien über ein Merkmal                                        */
-/* ==================================================================== */
 
 /**
  * **Genau eine** Datei unter `root`, die das Merkmal trägt — oder ein Abbruch.

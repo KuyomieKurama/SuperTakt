@@ -143,9 +143,7 @@ export const ADDIN_TAG_IDS_MAX = 200;
  */
 export const ADDIN_TAG_NAMES_MAX = 50;
 
-// ---------------------------------------------------------------------------
 // Die Anhänge aus der E-Mail (A-19.22 bis A-19.33, E-108) — T-304
-// ---------------------------------------------------------------------------
 
 /*
  * ===========================================================================
@@ -267,6 +265,24 @@ export const emailAttachmentsSchema = z.object({
   items: z.array(emailAttachmentItemSchema).max(ADDIN_ATTACHMENTS_MAX).default([]),
 });
 
+export const mailMetadataSchema = z.object({
+  identity: z.string().min(1).max(4096),
+  subject: z.string().max(4096),
+  sender: z.string().max(2048),
+  receivedAt: z.string().datetime({ offset: true }).nullable(),
+  internetMessageId: z.string().max(2048).nullable(),
+  outlookLink: attachmentUrlSchema.nullable(),
+  excerpt: z.string().max(4000).nullable(),
+}).strict();
+
+export const appendMailSchema = z.object({
+  requestId: id,
+  callNumber: z.string().min(1).max(ADDIN_CALL_NUMBER_MAX_LENGTH),
+  mail: mailMetadataSchema,
+  note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
+  attachments: emailAttachmentsSchema.nullable().default(null),
+}).strict();
+
 export const createTodoSchema = z.object({
   /**
    * Der Titel — **dasselbe Schema wie `POST /todos`** (T-114, Befund T-112-1).
@@ -324,6 +340,11 @@ export const createTodoSchema = z.object({
    * und der Nachweispfad hält beide Zahlen gegeneinander.
    */
   title: titleSchema,
+  requestId: id.optional(),
+  mail: mailMetadataSchema.optional(),
+  mode: z.enum(['auto', 'new']).default('new'),
+  dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().default(null),
+  estimateMinutes: z.number().int().min(1).max(525600).nullable().default(null),
   callNumber: z.string().max(ADDIN_CALL_NUMBER_MAX_LENGTH).nullable().default(null),
   statusId: id.nullable().default(null),
   tagIds: z.array(id).max(ADDIN_TAG_IDS_MAX).default([]),
@@ -611,6 +632,7 @@ export type BookBody = z.infer<typeof bookSchema>;
  */
 export const REQUEST_SCHEMAS = Object.freeze({
   createAddinTodo: createTodoSchema,
+  appendAddinMail: appendMailSchema,
   createAddinTimeEntry: bookSchema,
 });
 

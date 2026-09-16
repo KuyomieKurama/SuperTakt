@@ -1,0 +1,12 @@
+/* @theme {"label":"Catppuccin Frappé","mode":"dark","hint":"Sanfte Pastellfarben auf Rauchblau","order":16} */
+:root[data-design-theme="catppuccin-frappe"] {
+  --preset-canvas: #303446;
+  --preset-surface: #292c3c;
+  --preset-ink: #c6d0f5;
+  --preset-muted: #a7afd0;
+  --preset-accent: #ca9ee6;
+  --preset-link: #ca9ee6;
+  --preset-on: #101010;
+  --preset-accent-hover: #cda4e7;
+  --preset-accent-active: #cfa8e8;
+}

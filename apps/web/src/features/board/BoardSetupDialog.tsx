@@ -1,7 +1,7 @@
 import { countPoolRuleConditions } from "@takt/domain";
 import { useState } from "react";
 import { errorMessage } from "../../api/client";
-import { updatePool } from "../../api/endpoints";
+import { updatePool } from "../structure/api";
 import type { Id, Pool } from "../../api/types";
 import { useRefresh } from "../../app/RefreshContext";
 import { useStructure } from "../../app/StructureContext";

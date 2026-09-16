@@ -2,7 +2,7 @@ import { themePreset } from "./themePresets";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { errorMessage } from "../../api/client";
-import { updateSettings } from "../../api/endpoints";
+import { updateSettings } from "./api";
 import { useDensity, useDesignTheme, useThemePreference, type Density, type DesignTheme, type ThemePreference } from "./theme";
 import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
@@ -48,7 +48,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const [idleDetectionEnabled, setIdleDetectionEnabledLocal] = useState(true);
   const [idleThresholdMinutes, setIdleThresholdMinutesLocal] = useState(5);
   const [saving, setSaving] = useState(false);
-  // The ref also guards two events in the same render, before controls disable.
+  // Die Referenz sperrt auch weitere Ereignisse vor dem nächsten Rendern.
   const inFlight = useRef(false);
 
   const settings = structure.state.status === "ready" ? structure.state.value.settings : null;

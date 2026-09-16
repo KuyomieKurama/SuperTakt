@@ -55,6 +55,37 @@ export function trackedMilliseconds(value: unknown): Record<string, number> {
   return days;
 }
 
+/** SP zählt Kinderzeiten auch an der Elternaufgabe; nur deren eigener Rest wird gebucht. */
+export function ownTaskTimeByDay(
+  taskId: string,
+  rawTime: Readonly<Record<string, number>>,
+  childIds: readonly string[],
+  tasksById: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+): { secondsByDay: Record<string, number>; parentDays: number; shortDays: number } {
+  const childTime: Record<string, number> = {};
+  for (const childId of childIds) {
+    if (childId === taskId) continue;
+    const trackedTime = trackedMilliseconds(tasksById.get(childId)?.['timeSpentOnDay']);
+    for (const [day, milliseconds] of Object.entries(trackedTime)) {
+      childTime[day] = (childTime[day] ?? 0) + milliseconds;
+    }
+  }
+
+  const secondsByDay: Record<string, number> = {};
+  let parentDays = 0;
+  let shortDays = 0;
+  for (const [day, milliseconds] of Object.entries(rawTime)) {
+    const ownMilliseconds = Math.max(0, milliseconds - (childTime[day] ?? 0));
+    if (ownMilliseconds < milliseconds) parentDays += 1;
+    if (ownMilliseconds >= 1000) {
+      secondsByDay[day] = Math.floor(ownMilliseconds / 1000);
+    } else if (ownMilliseconds > 0) {
+      shortDays += 1;
+    }
+  }
+  return { secondsByDay, parentDays, shortDays };
+}
+
 export function outlookBridgeBillingNotes(notes: string, trackedDays: readonly string[]): {
   readonly byDay: Readonly<Record<string, string>>;
   readonly unassigned: number;

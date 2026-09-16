@@ -162,9 +162,7 @@ const webSrcDir = requireDirectory(
 const buildScriptFile = join(desktopDir, 'scripts', 'build-app.mjs');
 const cargoManifestFile = join(tauriDir, 'Cargo.toml');
 
-/* ==================================================================== */
 /* Die zugesagten Werte — hier und sonst nirgends                       */
-/* ==================================================================== */
 
 /**
  * Die vier Marken, die `connect-src` tragen darf. **Vier, nicht drei**
@@ -247,9 +245,7 @@ const OPEN_CALL_SITES = [
 /** Die eine Adresse, die im Rust-Anteil außerhalb von `127.0.0.1` stehen darf. */
 const RELEASE_TAG_PREFIX = 'https://github.com/KuyomieKurama/SuperTakt/releases/tag/v';
 
-/* ==================================================================== */
 /* Werkzeug: JSON5 ohne Kommentare                                      */
-/* ==================================================================== */
 
 /**
  * Entfernt Kommentare aus `tauri.conf.json`, ohne in Zeichenketten
@@ -318,9 +314,7 @@ function stripJsonComments(text) {
   return out;
 }
 
-/* ==================================================================== */
 /* Werkzeug: Rust ohne Kommentare und ohne Zeichenkettenrümpfe          */
-/* ==================================================================== */
 
 /**
  * Ein Zeichenliteral von Rust — **an einer Stelle für beide Werkzeuge**
@@ -710,9 +704,7 @@ function directives(csp) {
   return map;
 }
 
-/* ==================================================================== */
 /* Prüfung 1 — keine Shell-Berechtigung (A-V-17)                        */
-/* ==================================================================== */
 
 /**
  * @param {ReadonlyArray<{ name: string, text: string }>} files
@@ -774,9 +766,7 @@ export function checkCapabilities(files) {
   return findings;
 }
 
-/* ==================================================================== */
 /* Prüfung 2 — die CSP bleibt zu (A-V-18, T-136-2)                      */
-/* ==================================================================== */
 
 /**
  * @param {string} configText Der Inhalt von `tauri.conf.json`, mit Kommentaren.
@@ -868,10 +858,8 @@ export function checkContentSecurityPolicy(configText) {
   return findings;
 }
 
-/* ==================================================================== */
 /* Prüfung 3 — die Aufruforte, namentlich und mit ihrer Prüfung          */
 /*             (T-136-1, A-V-16, A-A-9, Befund T-145-7)                  */
-/* ==================================================================== */
 
 /**
  * Drei Aussagen in einem Durchgang, und keine davon ist eine Zahl:
@@ -1014,9 +1002,7 @@ export function checkOpenCallSites(sources) {
   return findings;
 }
 
-/* ==================================================================== */
 /* Prüfung 3b — die Fassung im Bauskript (Befund T-143 S-2)              */
-/* ==================================================================== */
 
 /**
  * `build-app.mjs` ist die **dritte** Stelle, an der ein führendes `v` fällt und
@@ -1070,9 +1056,7 @@ export function checkBuildVersionShape(buildText, domainText, domainName = 'die 
   return findings;
 }
 
-/* ==================================================================== */
 /* Prüfung 4 — die angezeigte Adresse ist die geöffnete (A-18.6, E-065)  */
-/* ==================================================================== */
 
 /**
  * Der Dialog zeigt die Release-Seite als **Text** an; das erlaubt A-V-18
@@ -1184,9 +1168,7 @@ export function checkWebAddress(webSources, rustPrefix) {
   return findings;
 }
 
-/* ==================================================================== */
 /* Der Lauf                                                             */
-/* ==================================================================== */
 
 /**
  * **Ein** Leser für alle drei Bäume, rekursiv, mit Pfad im Namen (Befunde
@@ -1257,9 +1239,7 @@ const domainVersionText = domainVersionSource.text;
 /** Wie die Datei der Domäne heute heißt — für jeden Befund von Prüfung 4. */
 const domainVersionName = `packages/domain/src/${domainVersionSource.name}`;
 
-/* ==================================================================== */
 /* Prüfung 7 — gegen welche Sprache die Formenliste gelesen wurde       */
-/* ==================================================================== */
 
 /**
  * **Die Fassung, gegen die {@link RUST_LEXICAL_FORMS} gelesen ist** (A-A-49,
@@ -1350,9 +1330,7 @@ export function checkRustLanguageBaseline(text) {
   return findings;
 }
 
-/* ==================================================================== */
 /* Prüfung 5 — der Leser selbst (Befunde T-143 B-1 und B-2)              */
-/* ==================================================================== */
 
 /**
  * **Der Leser wird gegen einen echten Baum gemessen, nicht gegen eine Liste.**
@@ -1456,9 +1434,7 @@ for (const run of runs) {
   }
 }
 
-/* ==================================================================== */
 /* Die Gegenprobe                                                       */
-/* ==================================================================== */
 
 /**
  * Ein ganz gewöhnliches Zeichenliteral, das ein Anführungszeichen enthält.

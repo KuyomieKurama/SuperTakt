@@ -36,14 +36,13 @@ export const runPattern = (request: EvaluateRequest): EvaluateResponse => {
     };
   }
 
+  if (expression.test('')) {
+    return { id: request.id, kind: 'invalid', message: 'Dieser Ausdruck trifft auch auf leeren Text zu und wurde nicht gespeichert.' };
+  }
   const found = expression.exec(request.text);
   if (found === null) {
     return { id: request.id, kind: 'no_match' };
   }
 
-  // **Gruppe 1, nicht der Gesamttreffer** (B-4.3 Punkt 1). Ein Muster ohne
-  // Erfassungsgruppe kommt an dieser Stelle gar nicht mehr an; `checkPattern`
-  // hat es abgelehnt. Kommt es doch — etwa aus einer alten Einstellung —, ist
-  // der Wert `undefined` und wird zu `null`, also zu „nicht erkannt".
-  return { id: request.id, kind: 'match', group: found[1] ?? null };
+  return { id: request.id, kind: 'match', group: found[1] ?? found[0] ?? null };
 };

@@ -1,14 +1,7 @@
+import { todayAt } from './support/local-time';
 /**
- * TP-NOTE-01, TP-NOTE-02, TP-NOTE-03 (docs/testplan.md, Abschnitt 3)
- *
- * Der wichtigste Sicherheitstest des Projekts: Der Vermerk (Todo-Notiz, A-7.2)
- * darf im Export **nirgends** erscheinen — weder im Klartext noch
- * base64-kodiert —, egal welche Vorlage aktiv ist. Die Leistung (Buchungsnotiz,
- * A-7.4) muss dagegen auffindbar sein, je nach Vorlage im Klartext oder
- * base64-kodiert. Geprüft wird gegen die Standardvorlage UND gegen mindestens
- * eine frei konfigurierte, abweichende Vorlage (R-06) — nie nur die
- * Standardvorlage, damit ein Bruch nicht deshalb unentdeckt bliebe, weil nur
- * eine Vorlage geprüft wurde.
+ * Interne Vermerke dürfen auch in frei konfigurierten Vorlagen weder im Klartext noch
+ * Base64-kodiert erscheinen.
  */
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -17,12 +10,6 @@ import { createTemplate, createTimeEntry, createTodo, listTimeEntriesByTodo } fr
 import { runExportFromScreen, readResultFilePath } from './support/actions';
 import { gotoExport, gotoTemplates } from './support/nav';
 import { E2E_EXPORT_DIR } from './support/session';
-
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 /** Base64-Kodierung wie der Dienst sie erzeugt (A-8.4) — UTF-8 vor Base64. */
 function b64(text: string): string {

@@ -3,9 +3,7 @@ import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
 import { runAreaSurface } from "./ScreenBody";
 
-/* ==================================================================== */
 /* Knopf                                                                */
-/* ==================================================================== */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ControlSize = "sm" | "md" | "lg";
@@ -141,9 +139,7 @@ export function IconButton({
   );
 }
 
-/* ==================================================================== */
 /* Karte und Panel                                                      */
-/* ==================================================================== */
 
 export interface CardProps {
   /** Ankerziel, damit die Karte direkt verlinkbar ist. */
@@ -231,9 +227,7 @@ export function Card({
   );
 }
 
-/* ==================================================================== */
 /* Ladezustaende                                                        */
-/* ==================================================================== */
 
 export interface SpinnerProps {
   readonly size?: number;
@@ -300,9 +294,7 @@ export function LoadingBlock({ label, rows = 3, className }: LoadingBlockProps) 
   );
 }
 
-/* ==================================================================== */
 /* Leerzustand                                                          */
-/* ==================================================================== */
 
 export interface EmptyStateProps {
   readonly icon?: IconName;
@@ -334,9 +326,7 @@ export function EmptyState({
   );
 }
 
-/* ==================================================================== */
 /* Hinweise und Fehler                                                  */
-/* ==================================================================== */
 
 export type MessageTone = "info" | "success" | "warning" | "danger";
 
@@ -397,9 +387,7 @@ export function InlineMessage({
   );
 }
 
-/* ==================================================================== */
 /* Werkzeugleiste                                                       */
-/* ==================================================================== */
 
 export interface ToolbarProps {
   readonly label: string;

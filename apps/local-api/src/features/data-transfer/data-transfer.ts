@@ -1,3 +1,4 @@
+import { isMailMetadata, emailType } from '@takt/domain';
 /**
  * Takt — die vollständige Datensicherung (A-20.1 bis A-20.6, A-24.7).
  *
@@ -71,10 +72,10 @@ export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
  * Sie könnte mit den Dateien nichts anfangen und würde Anhänge einspielen,
  * deren Bytes sie wegwirft.
  */
-export const DATA_ARCHIVE_VERSION = 6 as const;
+export const DATA_ARCHIVE_VERSION = 10 as const;
 
 /** Die Fassungen, die eingelesen werden. Alles andere wird abgewiesen, nicht geraten. */
-const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6]);
+const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
 /** Die Fassungen **ohne** `data.files` — sie kennen die Bytes der Anhänge nicht. */
 const VERSIONS_WITHOUT_FILES = Object.freeze([1, 2, 3, 4, 5]);
@@ -220,7 +221,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
     !READABLE_VERSIONS.includes(version) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 bis 6.') };
+    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 bis 10.') };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
@@ -244,13 +245,13 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
   if (VERSIONS_WITHOUT_FILES.includes(version) && declaresFiles) {
     return { ok: false, error: taktError('validation_error', `Ein SuperTakt-Datenarchiv der Fassung ${version} kann keine übernommenen Dateien enthalten.`) };
   }
-  if (version === DATA_ARCHIVE_VERSION && !Array.isArray(rawFiles)) {
+  if (version >= 6 && !Array.isArray(rawFiles)) {
     return { ok: false, error: taktError('validation_error', 'Das SuperTakt-Datenarchiv ist unvollständig.') };
   }
 
   const tables = {} as Record<(typeof DATA_ARCHIVE_TABLES)[number], readonly ArchiveRow[]>;
   for (const table of DATA_ARCHIVE_TABLES) {
-    const rows = table === 'timer_idle' && version <= 3 ? [] : rawTables[table];
+    const rows = (table === 'todo_priority' && version < 10) || ((table === 'todo_mail' || table === 'addin_mail_receipt') && version < 7) || (table === 'timer_idle' && version <= 3) ? [] : rawTables[table];
     if (!Array.isArray(rows) || rows.length > 250_000) {
       return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ fehlt oder ist zu groß.`) };
     }
@@ -260,8 +261,39 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       if (item === null || !Object.values(item).every(isScalar)) {
         return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ enthält eine ungültige Zeile.`) };
       }
+      if (table === 'todo_mail') {
+        let mail: unknown;
+        try { mail = JSON.parse(String(item['metadata'])); } catch { mail = null; }
+        if (!isMailMetadata(mail) || !('todoId' in mail) || mail.todoId !== item['todo_id'] || mail.identity !== item['identity']
+          || !('kind' in mail) || mail.kind !== emailType(mail.subject)
+          || ('attachmentIds' in mail && (!Array.isArray(mail.attachmentIds) || !mail.attachmentIds.every(id => typeof id === 'string')))
+          || !('personalNote' in mail) || typeof mail.personalNote !== 'string' || mail.personalNote.length > 4000) {
+          return { ok: false, error: taktError('validation_error', 'Das Datenarchiv enthält ungültige Mail-Einträge.') };
+        }
+      }
       // Defaults are added only for fields missing from the declared version.
-      let upgraded = item;
+      let upgraded = table === 'todo' && version < 7 ? { ...item, due_time: null, estimate_minutes: null } : item;
+      if (table === 'timer_idle' && version < 9) upgraded = { ...upgraded, previous_periods: '[]' };
+      if (table === 'timer_idle') {
+        let history: unknown;
+        try { history = JSON.parse(String(upgraded['previous_periods'])); } catch { history = null; }
+        let previousEnd = -Infinity;
+        const validHistory = Array.isArray(history) && history.length <= 127 && history.every(raw => {
+          const period = record(raw);
+          if (period === null || Object.keys(period).sort().join(',') !== 'id,note,returnedAt,startedAt,todoId' ||
+              typeof period['id'] !== 'string' || typeof period['todoId'] !== 'string' || typeof period['note'] !== 'string' ||
+              typeof period['startedAt'] !== 'string' || typeof period['returnedAt'] !== 'string') return false;
+          const start = Date.parse(period['startedAt']);
+          const end = Date.parse(period['returnedAt']);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || start % 1000 !== 0 || end % 1000 !== 0 ||
+              start < previousEnd || end <= start || end > Date.parse(String(upgraded['started_at']))) return false;
+          previousEnd = end;
+          return true;
+        });
+        if (!validHistory) return { ok: false, error: taktError('validation_error', 'Das Datenarchiv enthält ungültige Inaktivitätsphasen.') };
+      }
+      if (table === 'todo' && version < 10) upgraded = { ...upgraded, priority_id: null };
+      if (table === 'todo' && version < 8) upgraded = { ...upgraded, no_export: 0 };
       if (table === 'todo_attachment') {
         /*
          * Die vier Spalten aus Migration 0023 (A-A-84, A-A-97) — **ohne**

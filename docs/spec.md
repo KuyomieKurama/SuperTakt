@@ -228,7 +228,7 @@ Das UI-Konzept umfasst mindestens diese Ansichten:
 | S-03 | Todo-Detailansicht |
 | S-04 | Kanban-Board |
 | S-05 | Time-Tracking-Ansicht |
-| S-06 | Übersicht aller Zeitbuchungen |
+| S-06 | Übersicht aller Zeitbuchungen direkt im Reiter „Export“, ohne separaten Buchungsreiter. Filter, Sortierung, Einzel- und Sammelbearbeitung, Verlauf, Nichtabrechnen und Exportstatus-Rücksetzung stehen dort zur Verfügung. Bisherige Direktlinks öffnen dieselbe Ansicht mit ihren Filtern. |
 | S-07 | Export-Ansicht |
 | S-08 | Tag- und Ordnerverwaltung |
 | S-09 | Einstellungen |
@@ -340,7 +340,7 @@ in dem sie erlaubt ist.
 | A-18.5 | Liegt keine neuere Fassung vor, sagt Takt nichts und tut nichts. |
 | A-18.6 | Liegt eine neuere Fassung vor, zeigt Takt sie an, und zwar mindestens: die installierte Fassung, die verfügbare Fassung und den Verweis auf die offizielle Release-Seite dieser Fassung. |
 | A-18.7 | Takt fragt ausdrücklich, ob der Benutzer installieren oder überspringen möchte. Es gibt keine Vorauswahl, die eine der beiden Antworten für ihn trifft. |
-| A-18.8 | Wählt der Benutzer „Installieren", öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
+| A-18.8 | Wählt der Benutzer „Release-Seite öffnen“, öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
 | A-18.9 | Takt lädt zu keinem Zeitpunkt eine Datei herunter und installiert zu keinem Zeitpunkt etwas. Herunterladen und Installieren löst ausschließlich der Benutzer aus, außerhalb von Takt. |
 | A-18.10 | Wählt der Benutzer „Überspringen", wird genau diese Fassung übersprungen. Für sie erscheint der Hinweis nicht wieder; eine spätere, neuere Fassung wird wieder gemeldet. |
 | A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen **im selben Prüflauf**. Der gewöhnliche Takt bleibt davon unberührt — der nächste Versuch folgt frühestens nach dem Mindestabstand von einer Stunde. Ein Fehlschlag beendet die Prüfung **nicht** für die Laufzeit der Anwendung. Der Mindestabstand gilt **innerhalb eines Laufs**: Ein Programmstart fragt immer einmal, gleich wann zuletzt gefragt wurde. Der Grund steht im Protokoll. |
@@ -493,10 +493,10 @@ Bestätigung des Zertifikats; keine Bereitstellung über eine Domain.
 | ID | Anforderung |
 |---|---|
 | A-23.1 | Einstellungen → Outlook-Add-in zeigt den lokalen Zertifikatsinhaber, Aussteller, SHA-256-Fingerabdruck, Gültigkeit und den HTTPS-Zustand. |
-| A-23.2 | Erst nach ausdrücklicher Bestätigung darf die Desktop-Hülle das angezeigte Zertifikat in CurrentUser/Root unter Windows hinterlegen. Die zusätzliche Windows-Sicherheitsabfrage bleibt erhalten; für ihre Bestätigung stehen drei Minuten zur Verfügung. Keine automatische Installation, keine Rechteerhöhung, keine Änderung von Unternehmensrichtlinien. |
+| A-23.2 | Erst nach ausdrücklicher Bestätigung darf die Desktop-Hülle das angezeigte Zertifikat im Benutzerkonto hinterlegen: CurrentUser/Root unter Windows, NSS-Browser-Zertifikatsspeicher unter Linux oder Benutzerschlüsselbund unter macOS. Die zusätzliche Windows-Sicherheitsabfrage bleibt erhalten; für ihre Bestätigung stehen drei Minuten zur Verfügung. Keine automatische Installation, keine Rechteerhöhung, keine Änderung von Unternehmensrichtlinien. |
 | A-23.3 | Die Hülle bestimmt den Zertifikatspfad selbst. Der Auftrag enthält nur den bestätigten Fingerabdruck. Geänderte, ungültige, abgelaufene oder nicht lokale Zertifikate werden abgewiesen; CA-Zertifikate und zusätzliche DNS-Namen sind ausgeschlossen. Der private Schlüssel verlässt seine Datei nicht. |
-| A-23.4 | Nach der Bestätigung wird die Add-in-Seite über Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats geprüft. Ein Eintrag im Zertifikatsspeicher allein gilt nicht als erfolgreicher HTTPS-Test. |
-| A-23.5 | Fehler, nicht erreichbare Seiten und nicht unterstützte Betriebsarten werden sichtbar erklärt. Browserbetrieb und andere Betriebssysteme behaupten keine Windows-Vertrauensprüfung. Manifestimport und Tokenverbindung bleiben explizite nächste Schritte. |
+| A-23.4 | Nach der Bestätigung wird die Add-in-Seite über Loopback mit Zertifikats-, Gültigkeits- und Hostnamenprüfung sowie Abgleich des Serverzertifikats geprüft. Unter Linux werden die NSS-Vertrauenseinträge getrennt von der gegen das bestätigte Zertifikat geprüften TLS-Verbindung nachgewiesen. Ein Eintrag im Zertifikatsspeicher allein gilt nicht als erfolgreicher HTTPS-Test. |
+| A-23.5 | Fehler, nicht erreichbare Seiten und nicht unterstützte Betriebsarten werden sichtbar erklärt. Browserbetrieb bietet keinen nativen Import; Windows, Linux und macOS verwenden ihre jeweilige native Einrichtung. Fehlende Werkzeuge und teilweise fehlgeschlagene Importe werden angezeigt. Linux installiert keine systemweite CA und verlangt keine Rechteerhöhung. Manifestimport und Tokenverbindung bleiben explizite nächste Schritte. |
 
 ---
 
@@ -514,6 +514,7 @@ angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
 | A-24.5 | Die Summe muss sekundengenau dem gesamten Zeitraum entsprechen. „Rest übernehmen“ ergänzt einen Abschnitt. Keine negativen/überzähligen Zeiten, keine überlappenden Teilstücke. Alle Buchungen entstehen atomar; ein Fehler erhält den offenen Zustand, Wiederholungen buchen nicht doppelt. Abrechnungsrundung bleibt ausschließlich Sache des Exports. |
 | A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Der Timer läuft während des Dialogs und nach „Später“ weiter. Die Zuordnung verändert keinen inzwischen gewechselten oder manuell gestoppten Timer. Timerwechsel sind nach der Rückkehr auch bei offener Zuordnung möglich. Der Dialog zeigt Dauer und die drei Optionen Pause, Gearbeitet und Aufteilen; weitere Felder erscheinen nur bei Bedarf. |
 | A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Ab Archivfassung 4 enthält das Archiv Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. *Die Fassung wird hier nicht mehr beziffert — sie stand am 2026-09-10 auf 4 im Papier und auf 5 im Code (T-245-2). Die führende Angabe ist `DATA_ARCHIVE_VERSION`; was jede Fassung enthält, steht in A-20 und in `docs/datenmodell.md`.* |
+| A-24.8 | Mehrere noch nicht zugeordnete Inaktivitätsphasen werden in einem Dialog gesammelt, auch wenn zwischenzeitlich nur in anderen Anwendungen gearbeitet wurde. Die aktive Zeit zwischen den Phasen bleibt unverändert. Der Dialog öffnet unmittelbar für eine vorgemerkte Phase; bei der Rückkehr aktiviert die native Hülle das Hauptfenster auch aus dem Hintergrund. Ein Hinweis ersetzt den Dialog erst nach „Später“. Tatsächliche Eingabe in der App bestätigt die Rückkehr auch bei verzögerter nativer Erkennung. Frühere Phasen werden zusammen mit der aktuellen Phase dauerhaft gespeichert. |
 
 ---
 
@@ -558,3 +559,111 @@ gelesen.**
 - Die zwei Referenzbilder für das Outlook-Add-in aus Abschnitt 10.
 
 Das Timerverhalten bei Inaktivität ist unter Einstellungen → Timer wählbar: Weiterlaufen (Standard) oder bis zur Zuordnung pausieren. Im Pausenmodus bleibt der Timer auch bei „Später“ pausiert und startet nach dem Speichern der Zuordnung wieder.
+
+## 25. Outlook-Angleichung an SP-OutlookBridge (Auftrag vom 15.09.2026)
+
+**A-10.11 — verbindlicher Ersatz der bisherigen Hinweisregel.** Bei genau einem
+passenden strukturierten Call ergänzt die geöffnete E-Mail die vorhandene Aufgabe.
+Mehrdeutige Treffer verlangen Auswahl; bewusste Neuanlage bleibt möglich. Ein echter
+Outlook-Funktionsbefehl „Schnell in Inbox“ und „Aufgabe erstellen“ mit Seitenleiste
+verwenden dieselbe Erkennungs- und Speicherlogik. Kein Mail-Auszug im Schnellweg.
+
+**A-10.12 — getrennte Daten und enges Recht.** Mail-Metadaten und optionale Auszüge
+werden getrennt von persönlichen Aufgabenvermerken gespeichert und in SuperTakt
+als Verlauf, neueste zuerst, angezeigt. Das Ergänzen verändert keine Aufgabenfelder,
+Erledigt-Kennzeichen, Timer, Zeitbuchungen oder Exportzustände. Es gibt nur einen
+engen Mail-Zuordnungsendpunkt; kein allgemeines Ändern mit Add-in-Token.
+
+**A-10.13 — Wiederholungen und Anhänge.** Mailidentität und persistente Anfragekennung
+verhindern doppelte Aufgaben, Mail-Einträge und Dateien bei Wiederholung/Parallelität.
+Sammeln, Fortschritt, Abbruch, EML/Nachbau, validierte Cloudlinks, Größen- und
+Dateisicherheitsregeln bleiben erhalten. Die Dateiauswahl ist standardmäßig aktiviert
+und bewusst abwählbar. Teilfehler werden anhand der Serverbestätigung ausgewiesen.
+
+**A-10.14 — Formular und Einstellungen.** Editierbarer Betreff (leer: „E-Mail bearbeiten“),
+Status-/Tag-Zielvorgaben, echte verschachtelte Tagordner, neue Tagnamen, eigene Notizen,
+Auszug-Option und auswahlerhaltendes Neuladen. Keine beschreibbare Poolzugehörigkeit.
+Frist als Kalendertag, optionale Ortszeit und Zeitschätzung in ganzen Minuten werden
+in allen Schichten gespeichert und in der Hauptanwendung angezeigt/bearbeitet.
+Darstellung Automatisch/Hell/Dunkel und Vorgaben werden lokal gespeichert.
+
+**A-10.15 — Call-Erkennung.** Eigenständige Ziffernfolgen ab fünf Stellen, CALL-Nähe
+bevorzugt, keine Teilnummern aus buchstabenverbundenen IDs. Benutzerdefiniert Gruppe 1,
+sonst Gesamttreffer. Leeres, ungültiges oder erfolgloses Muster fällt auf die Basis zurück;
+ungültige Muster werden erklärt. Worker-Isolation und harte Laufzeitbegrenzung bleiben.
+
+Diese Anforderungen ersetzen widersprechende aktuelle Verbote in A-10.9, A-19.19,
+A-19.27 und B-4.3 sowie die reinen Datumsbeschränkungen von A-19.2/A-19.3. Historische
+Begründungen bleiben als Verlauf lesbar. Details, Identitätsfallback, Migration und
+Nachweispfade: [Outlook-Angleichung](outlook-bridge-alignment.md).
+
+
+**A-10.16 — Korrektur des Add-in-Ablaufs (15.09.2026).** Bei vorhandenen Aufgaben
+bleibt das Neuanlageformular verborgen; erst „Stattdessen neue Aufgabe erstellen“
+blendet es ein. Das Add-in hängt die E-Mail als EML (gegebenenfalls Nachbau) an die
+gewählte Aufgabe an. Es bietet keine Zeiterfassung oder Zeitschätzung; die Schätzung
+bleibt in SuperTakt bearbeitbar (ersetzt die Add-in-Formularvorgabe aus A-10.14).
+Tags, Auswahl und Suche bilden eine gemeinsame Fläche mit aufklappbaren verschachtelten
+Ordnern. Suchtreffer behalten ihre Ordnerhierarchie. Die Manifest-Symbole werden
+cachefähig ausgeliefert; HTML und Skripte bleiben ungecacht.
+
+**A-10.17 — E-Mail-Beschriftung und Outlook-Einstieg (15.09.2026).** Der einzelne
+Menübandbefehl „E-Mail anhängen“ öffnet den Aufgabenbereich (ShowTaskpane) mit
+vorhandener Zielaufgabe oder Neuanlage. Er ersetzt den Schnellbefehl. EML-Anhänge
+heißen in der Anzeige beispielsweise „Antwort – 13.07.2026, 14:09:15“;
+Weiterleitungen und normale E-Mails werden entsprechend bezeichnet. Sortierung
+aufsteigend nach Mail-Zeitpunkt, zugehörige Dateien bleiben bei ihrer Nachricht.
+Die Zuordnung der gespeicherten Anhangskennungen zur Mail wird atomar mitgespeichert.
+Alte Anhänge ohne Zuordnung verwenden den Hinzufügezeitpunkt und kennzeichnen ihn.
+Originaldateiname, Endung und Nachbau-Kennzeichnung bleiben in der Öffnen-Prüfung erhalten.
+
+## 26. Aufgaben ohne Abrechnung (NoExport)
+
+**A-26.1.** Aufgaben besitzen das dauerhaft gespeicherte Flag `NoExport`, standardmäßig
+false. Es ist beim Anlegen und Bearbeiten schaltbar und in der Aufgabe erkennbar.
+**A-26.2.** Timer und manuelle Zeiterfassung bleiben uneingeschränkt nutzbar. Die
+Zeiten bleiben an der Aufgabe und in der Zeiterfassung sichtbar, fehlen aber in der
+Buchungsübersicht einschließlich Filter, Seitenzählung und Auswahl.
+**A-26.3.** Exportvorschau, Kandidaten, Summen und neue Exportläufe schließen NoExport
+serverseitig aus, auch bei expliziten Buchungskennungen und nach einer älteren Vorschau.
+Das Flag ändert weder Zeitbuchungen noch bestehende Exporthistorie. Beim Ausschalten
+werden noch offene Zeiten wieder für Buchungsübersicht und Export verfügbar.
+**A-26.4.** Migration 0026 ergänzt den Standard false für bestehende Aufgaben.
+Datenarchivfassung 8 sichert das Flag; ältere Fassungen 1–7 werden mit false übernommen.
+
+**Darstellungspräzisierung (16.09.2026, A-19.4/A-26.1):** Überfällige
+Fristmarkierungen zeigen Warnsymbol und Datum in der bestehenden roten Gestaltung.
+Das Wort „Überfällig“ entfällt sichtbar; der zugängliche Name benennt weiterhin den
+Zustand und das Datum. NoExport erscheint als beschrifteter Schalter mit gemeinsamem
+Hilfetext in einer Auswahlzeile. Die Anhangsarten erscheinen als gleich breite
+Symbol-Auswahlflächen; der Dateiwähler steht neben dem Pfadfeld. Doppelte Hinweise
+und leerer reservierter Rückmeldungsabstand entfallen.
+
+### Filter im Export (Ergänzung zu A-8.4 und S-06/S-07)
+
+Die Filterleiste steht direkt über der Exporttabelle, unter Zusammenfassung und Legende. Beim Öffnen ist der Zeitraum auf die letzten sieben Kalendertage einschließlich heute gesetzt; beide Datumsfelder zeigen diese Grenzen. Die Exportvorschau bietet Zeitraum, „Letzte 7 Tage“, Todo-/Call-Suche und die Einschränkung auf bereits früher exportierte Buchungen. Filter begrenzen sowohl Vorschau als auch Exportauswahl; ausgeblendete Buchungen werden nicht mitexportiert. Der Statuswechsel auf „Alle“ oder „Exportiert“ filtert dieselbe Tabelle auf derselben Exportseite. Nur ausgewählte offene Buchungen kommen in die Exportvorschau. Die nach Todo und Tag gruppierte Vorschau ist unter der Buchungstabelle aufklappbar.
+
+Die Datumsfilter in Export und Buchungen verwenden eine gemeinsame, im App-Design gestaltete Kalenderkomponente mit deutscher Anzeige, Tastaturbedienung und Löschfunktion statt der betriebssystemspezifischen Datumsauswahl.
+
+## 27. Konfigurierbare Todo-Prioritäten
+
+| ID | Anforderung |
+|---|---|
+| A-27.1 | Einstellungen → Prioritäten verwaltet benannte Prioritäten mit frei vergebbarer ganzzahliger Gewichtung. Größere Zahlen bedeuten höhere Wichtigkeit. Auch 0 und negative Werte sind zulässig. Namen sind eindeutig. |
+| A-27.2 | Ein Todo kann genau eine Priorität oder keine haben. Auswahl beim Anlegen und Bearbeiten. Löschen einer Priorität entfernt nach Bestätigung nur die Zuordnung; die Todos bleiben bestehen. |
+| A-27.3 | Kanban filtert nach Priorität oder „Ohne Priorität“. Standard-Sortierung: höchste Gewichtung zuerst, ohne Priorität zuletzt. Alternativ bleibt „Zuletzt geändert“ verfügbar. Filter und Sortierung greifen vor der Seitenbegrenzung; gleiche Gewichte erhalten eine stabile Reihenfolge. |
+| A-27.4 | Kanban fasst Tags wie die Todo-Übersicht als Zähler zusammen. Überfahren, Fokus und Klick öffnen die vorhandene Tag-Fläche einschließlich Ordnerpfaden. |
+| A-27.5 | Todo-Anlage und -Bearbeitung verwenden die gemeinsame Datumskomponente im App-Design. Leeren entfernt die Frist; Tastaturbedienung und Texteingabe bleiben möglich. |
+| A-27.6 | Prioritäten und Zuordnungen überleben Neustart und Datensicherung. Archive vor Fassung 10 enthalten keine Prioritäten; ihre Todos werden ohne Priorität übernommen. |
+
+**A-27.7:** Im Todo-Dialog stehen Datum und Uhrzeit in einem gemeinsamen Frist-Feld. Eine gesetzte Frist verwendet 00:00 als Uhrzeit, solange diese nicht ausdrücklich geändert wurde. Vorhandene Uhrzeiten bleiben erhalten. Ohne Datum bleibt die Frist leer; das Entfernen des Datums entfernt auch die Uhrzeit.
+
+**A-27.8:** Ein Klick in das Datumsfeld öffnet den Kalender. Eine eigene Uhrzeitkomponente öffnet beim Anklicken die minutengenaue Auswahl von Stunde und Minute im App-Design, mit Tastaturbedienung. Die Frist-Kachel zeigt Datum und Warnsymbol platzsparend in derselben Zeile.
+
+**A-27.9:** „Zeit von Hand“ steht im Kopf des Buchungsbereichs der Todo-Details. Die gespeicherte Ortszeit steht innerhalb der Frist-Kachel; die bestehende tagesbezogene Fristbewertung bleibt unverändert. Kanban bündelt Filter und Sortierung in einer eigenen Werkzeugleiste, bietet breitere lesbare Spalten (auch bei nur einer Spalte), und lädt weitere Karten über die Werkzeugzeile statt am unteren Fensterrand.
+
+**A-27.10:** Die Hauptnavigation enthält keinen eigenen Tags-Eintrag. Einstellungen → Tags bündelt Standard-Tags sowie die vollständige Tag- und Ordnerverwaltung. Einstellungen → Regeln verwaltet Pools und Kanban-Regeln unabhängig davon. Alte Tags-Adressen und der bisherige Standard-Tags-Bereich führen zur neuen Tag-Einstellung.
+
+**A-27.11:** Die Oberfläche liest das lokale Versionsprüfergebnis in der ersten Minute alle fünf Sekunden, solange noch keines bekannt ist; danach bei unbekanntem Ergebnis minütlich, bei bekanntem Ergebnis alle fünf Minuten. Rückkehr zur sichtbaren Anwendung und wiederhergestellte Netzwerkverbindung aktualisieren den lokalen Stand mit mindestens fünf Sekunden Abstand. Verborgene Fenster pausieren Abfragen; parallele Abfragen und Wirkungen nach dem Schließen sind ausgeschlossen. Ein bereits bekanntes Update bleibt bei vorübergehenden lokalen Fehlern erhalten. Der Dienst behält seinen begrenzten GitHub-Prüftakt; mehrfache Start-Aufrufe setzen ihn nicht zurück.
+
+**A-27.12:** Automatische Update-Hinweise erscheinen auch beim Start ohne modalen Dialog; erst „Ansehen“ öffnet die Details. Übersprungene Versionen werden vor der Anzeige mit den geladenen Einstellungen abgeglichen. Download und Installation erfolgen weiterhin über die offizielle Release-Seite.

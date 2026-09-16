@@ -39,7 +39,7 @@ export function installTextEditing(): () => void {
     if (history.entries[history.index]?.value === field.value) return;
     history.entries = [...history.entries.slice(0, history.index + 1), snapshot(field)].slice(-100);
     history.index = history.entries.length - 1;
-    // Keep accepted/normalized values, including controlled React inputs.
+    // Den vom Eingabefeld normalisierten Wert übernehmen, auch bei React-Steuerung.
     queueMicrotask(() => {
       if (field.isConnected && histories.get(field) === history) history.entries[history.index] = snapshot(field);
     });

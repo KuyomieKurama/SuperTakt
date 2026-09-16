@@ -1,27 +1,4 @@
-/**
- * Takt — Migrationsverfahren (E-003, ecc:database-migrations).
- *
- * Die Typen des Verfahrens **und** die Gestalt seines Fehlschlags. Der Läufer
- * steht in `sqlite/migration-runner.ts`; das Verfahren ist in
- * docs/datenmodell.md Abschnitt 8 beschrieben und in
- * `packages/storage/migrations/*.sql` abgelegt.
- *
- * ---------------------------------------------------------------------------
- * Warum der Fehlschlag hier steht und nicht beim Läufer (T-132)
- * ---------------------------------------------------------------------------
- *
- * Weil er zur **Zusage des Ports** gehört. Ein Aufrufer, der migrieren lässt,
- * muss den Ausgang unterscheiden können, ohne eine Meldung zu lesen — sonst
- * bleibt ihm nur, den Text zu zergliedern, und dann hängt sein Verhalten an
- * einer Formulierung. `apps/local-api/src/main.ts` hat bis T-132 die andere
- * Antwort gegeben: `catch {}` ohne Bindung, und übrig blieb eine Meldung, die
- * die Folge nannte und nicht die Ursache.
- *
- * Der Grund ist deshalb ein **Wert** mit benannten Feldern, und er trägt
- * ausschließlich Zahlen und Schlüssel aus geschlossenen Vorräten. Kein
- * Dateipfad, kein Benutzername, kein Inhalt des Bestands — B-2.4 verbietet den
- * Pfad in einer Meldung, nicht den Grund.
- */
+/** Migrationsfehler enthalten nur geschlossene Fehlergründe und Kennzahlen, keine Pfade oder Bestandsdaten. */
 
 import type { Timestamp } from '@takt/domain';
 
@@ -63,9 +40,7 @@ export type MigrationState =
   /** Eine bereits gelaufene Migrationsdatei wurde nachträglich verändert. */
   | { readonly kind: 'checksum_mismatch'; readonly version: number };
 
-// ---------------------------------------------------------------------------
 // Der Fehlschlag, unterscheidbar (T-132)
-// ---------------------------------------------------------------------------
 
 /**
  * Warum eine Migration nicht gelaufen ist.

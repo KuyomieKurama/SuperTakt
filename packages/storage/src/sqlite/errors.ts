@@ -1,33 +1,6 @@
 /**
- * Takt — SQLite-Meldungen in fachliche Fehler übersetzen
- * (architektur.md 5.4, ecc:error-handling).
- *
- * ```
- *    Speicherung             Domäne                      HTTP
- *    RAISE(ABORT,'…')    ►   TaktError                ►  Statuscode
- *    UNIQUE ux_…_running     'timer_already_running'     409
- *    CHECK duration          'validation_error'          422
- * ```
- *
- * Die Übersetzung geschieht an **genau einer** Stelle. Genau deshalb tragen die
- * Trigger im Schema absichtlich dieselben Zeichenketten wie die Fehlerkennungen
- * der Domäne (`time_entry_locked`, `append_only`,
- * `builtin_template_immutable`): Der Weg von der Datenbank bis in die Antwort
- * ist damit ohne Übersetzungstabelle nachvollziehbar.
- *
- * ---------------------------------------------------------------------------
- * Was hier **nicht** passiert
- * ---------------------------------------------------------------------------
- *
- * Die ursprüngliche SQLite-Meldung wird nie weitergereicht. Sie enthält
- * Tabellen-, Spalten- und Indexnamen, also Innenleben der Datenbank, und
- * B-2.4 verbietet das in einer Antwort. Sie geht in `details` nicht ein und in
- * `message` nicht: Die Texte hier sind Konstanten.
- *
- * Was nicht zugeordnet werden kann, wird `storage_error` — und zwar mit
- * demselben Text wie jede andere unbekannte Störung. Ein „unbekannter
- * Constraint XY" in einer Antwort wäre eine Einladung, das Schema von außen
- * abzutasten.
+ * Nur festgelegte Fehlertexte ausgeben; rohe SQLite-Meldungen verraten Schema- und
+ * Bestandsdetails. Unbekannte Störungen bleiben allgemein.
  */
 
 import type { TaktError, TaktErrorCode } from '@takt/domain';
@@ -141,6 +114,12 @@ const UNIQUE_INDEX: readonly {
   readonly code: TaktErrorCode;
   readonly message: string;
 }[] = Object.freeze([
+  {
+    index: 'ux_todo_priority_name',
+    columns: ['todo_priority.name'],
+    code: 'name_conflict',
+    message: 'Eine Priorität mit diesem Namen existiert bereits.',
+  },
   {
     index: 'ux_time_entry_running',
     columns: [],

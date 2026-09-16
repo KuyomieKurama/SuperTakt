@@ -1,86 +1,15 @@
 /**
- * Takt — Anhänge am Todo (A-19.8 bis A-19.15, A-19.17, E-071, E-072,
- * A-A-13 bis A-A-18).
- *
- * ===========================================================================
- * Drei Arten, und sie unterscheiden sich nicht im Etikett
- * ===========================================================================
- *
- * | Art | Was Takt hält | Was „öffnen" heißt |
- * |---|---|---|
- * | Verweis | eine **Adresse** in Normalform | der Browser (A-A-2, A-A-3) |
- * | Datei | einen **Pfad** | die Standardanwendung des Systems (A-A-4 bis A-A-6) |
- * | Bild | eine **Kopie** im Anwendungsdatenverzeichnis | nichts (E-072 Punkt 2) |
- *
- * Verweis und Datei speichern eine Zeichenkette, kein Byte (E-071 Punkt 1).
- * Ein Bild wird kopiert (E-071 Punkt 2), und diese Datei sagt, **woran** eine
- * Datei als Bild erkannt wird — an ihrer Kopfsignatur und nicht an ihrer
- * Endung (A-A-16).
- *
- * ===========================================================================
- * Der eigentliche Angriff ist die Normalisierung, nicht das Schema
- * ===========================================================================
- *
- * Bedrohungsmodell 20.2, gemessen: Der Zerleger einer Adresse **normalisiert**.
- * Er entfernt führenden Leerraum, Tabulator und Zeilenumbruch an jeder Stelle,
- * er wandelt Homoglyphen nach Punycode, er läßt eine Nullbreite im Wirtsnamen
- * verschwinden, und er macht aus `http:/\example.org/` ein
- * `http://example.org/`.
- *
- * Wer die **Rohfassung** anzeigt und die **Normalform** öffnet, hat einen
- * Verweis gebaut, der etwas anderes tut, als er sagt. Der Benutzer liest
- * `ht<TAB>tps://exam<ZWSP>ple.org` und Takt öffnet `https://example.org/`.
- *
- * Die Antwort ist A-A-3, und sie hat zwei Hälften:
- *
- *  1. **Normalisiert wird einmal**, beim Anlegen, und gespeichert wird die
- *     Normalform — {@link normalizeAttachmentLink}, und zwar **hier** und
- *     nirgends sonst (A-A-13, dieselbe Begründung wie beim führenden `v` der
- *     Fassung, E-066 Punkt 3).
- *  2. **Der Öffnen-Befehl der Hülle verlangt einen Festpunkt** — er
- *     normalisiert nicht, er weist ab. Diese Hälfte liegt in Rust
- *     (`apps/desktop/src-tauri`), weil zwischen Speichern und Öffnen der
- *     Bestand liegt (E-072 Punkt 2, VG-1 und VG-3).
- *
- * Gemessen mit Node (WHATWG `URL`) gegen die Tabelle aus Bedrohungsmodell 20.2,
- * die mit Rust `url 2.5.8` entstanden ist: **alle 23 Zeilen stimmen überein**,
- * einschließlich `xn--exmple-4nf.org`, `%E2%80%AE` und der drei Zeilen, die
- * sich gar nicht zerlegen lassen. Beide setzen den WHATWG-URL-Standard um;
- * das ist der Grund, und deshalb ist es kein Zufall, auf den man sich verläßt,
- * sondern eine Eigenschaft, gegen die man prüft.
- *
- * ===========================================================================
- * Was hier **nicht** steht
- * ===========================================================================
- *
- *  - **Kein Export.** Weder eine Frist noch ein Anhang wird je eine Feldquelle
- *    (A-19.17, A-A-20). `ExportSourcePath` in `export.ts` bleibt bei zwölf
- *    Werten; `ExportCandidate` und `ExportGroup` tragen kein Anhangsfeld. Der
- *    Schutz ist derselbe wie beim internen Vermerk und aus demselben Grund
- *    ein **Typ** und keine Filterliste (R-06).
- *  - **Kein Öffnen.** Diese Datei prüft Formen. Sie ruft nichts auf, sie
- *    startet nichts, und sie kennt weder `open` noch eine Hülle.
- *  - **Keine Endungs-Verbotsliste für ausführbare Dateien.** Die wäre unter
- *    Windows über `PATHEXT` benutzerbestimmt, sie ist nicht abzählbar, und sie
- *    lehrt das Umbenennen (Bedrohungsmodell 20.1). Abgewiesen werden fünf
- *    **Umleitungen** — siehe {@link INDIRECT_EXTENSIONS} —, und die aus einem
- *    anderen Grund.
- *
- * Rein: gleiche Eingabe, gleiche Ausgabe, kein Zugriff auf Uhr, Datei, Netz
- * oder Datenbank. Diese Datei benutzt `URL` aus der Laufzeit — dieselbe
- * Rechtfertigung wie `Intl` in `kernel.ts`: ein Standard der Plattform, keine
- * Fremdbibliothek (B-18.7).
+ * Links werden beim Anlegen normalisiert; die Hülle verlangt beim Öffnen dieselbe Normalform.
+ * Bilder werden an ihrer Signatur erkannt und intern angezeigt. Anhänge sind keine Exportquellen.
  */
 
 import type { CodePointRange } from './characters.ts';
-import { hasForbiddenNameCharacter } from './characters.ts';
+import { hasForbiddenNameCharacter, isCodePointInRanges } from './characters.ts';
 import type { Branded, TodoId, Timestamp } from './kernel.ts';
 
 export type AttachmentId = Branded<'AttachmentId'>;
 
-// ---------------------------------------------------------------------------
 // Die Arten
-// ---------------------------------------------------------------------------
 
 /**
  * Die drei Arten aus A-19.9.
@@ -114,37 +43,8 @@ export function isAttachmentKind(value: string): value is AttachmentKind {
 }
 
 /**
- * Führt der Bestand **genau** die Arten, die dieses Erzeugnis kennt? (A-A-36.)
- *
- * ---------------------------------------------------------------------------
- * Die Frage ist nicht „ist jede Art bekannt", sondern „ist die Menge dieselbe"
- * ---------------------------------------------------------------------------
- *
- * Migration 0015 hat die Arten mit Absicht zu **Daten** gemacht und nicht zu
- * einer Schemaklausel: Eine vierte Art soll ein `INSERT` sein und kein Umbau.
- * Der Preis dieser Freiheit ist, daß eine Datenbank Arten führen kann, von
- * denen dieses Erzeugnis nichts weiß — und jede Stelle, die über Arten
- * **rechnet**, statt sie nur anzuzeigen, rechnet dann falsch.
- *
- * Der Anlaß ist gemessen (Bedrohungsmodell 23.3.3): Der Aufräumlauf für
- * verwaiste Bildkopien fragt den Bestand mit `kind = 'image'` und liest eine
- * **leere** Antwort als Beweis, daß eine Datei keinen Eigentümer hat. Eine
- * vierte Art, die ebenfalls eine Kopie im Bildverzeichnis hält, wäre in dieser
- * Antwort nicht enthalten — und der nächste Start entfernte Kundenmaterial,
- * das einen Eigentümer hat.
- *
- * Deshalb **Gleichheit** und nicht Teilmenge, und zwar in beide Richtungen:
- *
- *  - **Zu viel** im Bestand heißt, dieses Erzeugnis kennt eine Art nicht und
- *    darf über sie nicht rechnen.
- *  - **Zu wenig** heißt, der Bestand ist älter als dieses Erzeugnis oder eine
- *    Zeile fehlt. Auch das ist ein Zustand, in dem niemand etwas löschen soll.
- *
- * Doppelte Einträge kann es nicht geben — `kind` ist der Primärschlüssel der
- * Nachschlagetabelle. Die Zählung darüber steht trotzdem hier, weil diese
- * Funktion eine Liste bekommt und keine Tabelle.
- *
- * **Rein.** Sie fragt keinen Bestand; sie bekommt, was er geantwortet hat.
+ * Vor Bereinigungen müssen bekannte und gespeicherte Anhangsarten exakt übereinstimmen. Sonst
+ * könnten Kopien unbekannter Arten fälschlich gelöscht werden.
  */
 export function isKnownAttachmentKindSet(kinds: readonly string[]): boolean {
   const seen = new Set(kinds);
@@ -153,32 +53,11 @@ export function isKnownAttachmentKindSet(kinds: readonly string[]): boolean {
   return ATTACHMENT_KINDS.every((kind) => seen.has(kind));
 }
 
-// ---------------------------------------------------------------------------
 // Herkunft — die Eigenschaft am Anhang (A-A-84)
-// ---------------------------------------------------------------------------
 
 /**
- * Woher ein Anhang stammt.
- *
- * **Zweiwertig, nie leer, nie mehrdeutig** — dieselbe Bauart wie der
- * Exportstatus, und aus demselben Grund: Eine Eigenschaft, an der eine
- * Rückfrage vor einem Programmstart hängt (A-A-85), darf nicht „unbekannt"
- * sein können.
- *
- *  - `user` — der Benutzer hat den Anhang selbst eingetragen. Er weiß, woher
- *    die Datei kommt, weil er sie gewählt hat. Das ist der Zustand jedes
- *    Anhangs, den es vor A-19.23 gab, und deshalb der Vorgabewert der
- *    Migration.
- *  - `email` — der Anhang ist beim Anlegen eines Todos aus einer E-Mail
- *    entstanden (A-19.22, A-19.23). Ab dieser Fassung ist der **häufigste**
- *    Dateianhang einer, den ein Fremder geschickt hat, und der Benutzer sieht
- *    ihn Tage später zwischen seinen eigenen (Bedrohungsmodell 39.5.2).
- *
- * **Warum das hier steht und nicht in `email-attachment.ts`:** Es ist ein Feld
- * von {@link Attachment}, so wie {@link AttachmentKind} eines ist. Es dort zu
- * führen ergäbe einen Kreis zwischen den beiden Dateien für einen Typ, der zu
- * dieser gehört. Die Richtung ist damit eindeutig: `email-attachment.ts` liest
- * hier, nicht umgekehrt.
+ * Die gespeicherte Herkunft bestimmt den Hinweis vor dem Öffnen; bestehende Benutzeranhänge gelten
+ * als `user`.
  */
 export type AttachmentOrigin = 'user' | 'email';
 
@@ -202,25 +81,11 @@ export function isAttachmentOrigin(value: string): value is AttachmentOrigin {
   return Object.prototype.hasOwnProperty.call(ATTACHMENT_ORIGIN_PRESENCE, value);
 }
 
-// ---------------------------------------------------------------------------
 // Der Wert
-// ---------------------------------------------------------------------------
 
 /**
- * Ein Anhang, so wie ihn jede Antwort und jede Anzeige sieht.
- *
- * `target` ist die eine Zeichenkette, die die Art bestimmt:
- *
- *  - `link` — die **Normalform** der Adresse (A-A-3). Was hier steht, ist
- *    genau das, was angezeigt und was geöffnet wird.
- *  - `file` — der absolute Pfad, unverändert wie eingegeben.
- *  - `image` — der **erzeugte** Name der Kopie im Bildverzeichnis (A-A-17),
- *    nie der Name der Quelldatei. Der Pfad der Quelle wird **nicht**
- *    gespeichert: Er verrät, wo der Benutzer seine Dateien hält, und niemand
- *    braucht ihn nach dem Kopieren.
- *
- * Ein Feld und nicht drei: Eine vierte Art bekäme sonst eine vierte Spalte,
- * und drei von vier Spalten wären in jeder Zeile leer.
+ * Links speichern die Normalform, Dateien den absoluten Pfad, Bilder nur den erzeugten Kopienamen.
+ * Der ursprüngliche Bildpfad wird nicht gespeichert.
  */
 export interface Attachment {
   readonly id: AttachmentId;
@@ -242,44 +107,18 @@ export interface Attachment {
    */
   readonly origin: AttachmentOrigin;
   /**
-   * Der Absender der E-Mail, aus der dieser Anhang stammt — **fremder Text**.
-   * `null` bei `origin === 'user'` und dann, wenn die Nachricht keinen
-   * hergab.
-   *
-   * Er steht hier und nicht nur in einer Meldung beim Anlegen, weil A-A-85 ihn
-   * in der Rückfrage vor dem Öffnen verlangt: *„Diese Datei stammt aus einer
-   * E-Mail von …"*. Ein Hinweis, der nur beim Anlegen erscheint, ist drei
-   * Wochen später nirgends.
+   * Fremdtext, der auch später in der Rückfrage vor dem Öffnen erscheinen muss; null bei fehlendem
+   * Absender oder Benutzeranhängen.
    */
   readonly originSender: string | null;
   /**
-   * Der Anzeigename aus fremder Hand (A-19.23a). `null`, wenn es keinen gibt.
-   *
-   * **Getrennt von `title`, und das ist der Punkt.** `title` ist, was der
-   * **Benutzer** gewählt hat (A-19.10); `displayName` ist, was der **Absender**
-   * die Datei genannt hat. Beides in ein Feld zu legen hieße, der anzeigenden
-   * Fläche die Auskunft zu nehmen, welche Regeln gelten: Für fremden Text ist
-   * die Endung stets sichtbar und am Ende wird nie gekürzt (A-19.23b, A-A-93);
-   * für den eigenen Titel gilt das nicht.
-   *
-   * Auf der Platte steht er **nie** (A-A-78). Dort steht ein erzeugter Name.
+   * Fremder Anzeigename, getrennt vom Benutzertitel. Die Dateiendung muss vollständig sichtbar
+   * bleiben; auf der Platte steht ein erzeugter Name.
    */
   readonly displayName: string | null;
   /**
-   * Ist diese Datei ein **Nachbau** statt der ursprünglichen Nachricht?
-   * (A-19.22b, A-A-97.)
-   *
-   * `true` nur bei der `.eml` aus A-19.22a, die aus den Office.js-Feldern
-   * zusammengesetzt wurde, weil Outlook die Nachricht nicht hergab. Die
-   * Kennzeichnung hängt an der **Datei** und nicht am Augenblick: Sie steht
-   * hier im Bestand, übersteht den Round-Trip der Datensicherung (A-20.4) und
-   * ist damit auch in drei Wochen noch da.
-   *
-   * Der Grund ist kein Ordnungssinn: Eine Datei, die für die ursprüngliche
-   * Nachricht gehalten werden kann, ohne es zu sein, ist in einem Vorgang, aus
-   * dem eine Rechnung wird, eine falsche Auskunft über ein Beweisstück. Sie
-   * trägt keine Kopfzeilen, kein DKIM, kein S/MIME und keine Empfangsstempel
-   * — und sie wird weitergereicht: an die Buchhaltung, in eine Akte.
+   * Kennzeichnet dauerhaft eine aus Office-Feldern nachgebaute E-Mail, damit sie nicht als
+   * ursprüngliche Nachricht mit Originalkopfzeilen gilt.
    */
   readonly rebuilt: boolean;
 }
@@ -308,9 +147,7 @@ export interface AttachmentCreate {
   readonly rebuilt?: boolean;
 }
 
-// ---------------------------------------------------------------------------
 // Grenzwerte — an einer Stelle, bei den übrigen aus T-128
-// ---------------------------------------------------------------------------
 
 /**
  * Obergrenze der Adresse in **Bytes** (A-A-2).
@@ -333,63 +170,19 @@ export const MAX_ATTACHMENT_LINK_BYTES = 2_048;
 export const MAX_ATTACHMENT_PATH_BYTES = 4_096;
 
 /**
- * Obergrenze **eines Bildes**, in Bytes (A-A-15, E-073 Punkt 3).
- *
- * ---------------------------------------------------------------------------
- * Woher die Zahl kommt und warum sie acht und nicht fünf Mebibyte ist
- * ---------------------------------------------------------------------------
- *
- * E-073 Punkt 3 schlug 5 MiB vor und begründete sie mit dem Arbeitsspeicher im
- * Webview: Ein Bild geht als `data:`-Adresse hinüber und wird dabei um rund ein
- * Drittel größer; fünf Anhänge an einem Todo wären dann etwa 33 MiB.
- *
- * Das Bedrohungsmodell hat daraus in A-A-15 **8 388 608 Bytes** gemacht, und
- * diese Datei nimmt die Zahl aus dem Bedrohungsmodell. Der Grund für den
- * höheren Wert ist der Fall, den die Rechnung nicht abbildet: Ein Foto aus
- * einer heutigen Handykamera liegt regelmäßig zwischen fünf und acht Mebibyte,
- * ist nicht bösartig und wäre bei fünf abgewiesen worden — mit einer Meldung,
- * die der Benutzer für eine Fehlfunktion hält. Die Rechnung aus E-073 bleibt
- * richtig; sie sagt, was der Preis ist, und acht ist der Preis, den A-A-15
- * bezahlt.
- *
- * **Gezählt beim Lesen, nicht aus `stat`** (A-A-15, dieselbe Begründung wie
- * A-V-6 für `content-length`): Eine angekündigte Größe ist keine Grenze. Die
- * Umsetzung steht im Adapter; diese Konstante ist die eine Zahl, die er liest.
+ * Beim Lesen begrenzen, nicht anhand der angekündigten Dateigröße. Die Daten-URI vergrößert den
+ * Speicherbedarf zusätzlich.
  */
 export const MAX_ATTACHMENT_IMAGE_BYTES = 8_388_608;
 
-/**
- * Obergrenze der Bezeichnung, in Zeichen.
- *
- * Dieselbe Zahl wie `MAX_NAME_LENGTH` in `tag-name.ts` und aus demselben
- * Grund — ein Titel ist eine Zeile. Sie steht hier trotzdem eigenständig und
- * nicht als Verweis: Ein Anhangstitel ist kein Tagname, und wer den einen
- * ändert, soll nicht den anderen mitändern. Die Zahl ist dieselbe, die Sache
- * ist es nicht.
- */
+/** Eigenständige Grenze: Anhangstitel und Tagnamen können sich unabhängig ändern. */
 export const MAX_ATTACHMENT_TITLE_CHARACTERS = 200;
 
-// ---------------------------------------------------------------------------
 // Verweis — Normalisierung an genau einer Stelle (A-A-13)
-// ---------------------------------------------------------------------------
 
 /**
- * Zwei unsichtbare Zeichen, die **zusätzlich** zu
- * `FORBIDDEN_NAME_CHARACTERS` in einer Adresse nichts zu suchen haben
- * (A-A-14).
- *
- * `U+200B` (Nullbreite) und `U+FEFF` (Nullbreite ohne Umbruch) stehen
- * ausdrücklich **nicht** in der Namensklasse: Dort halten `U+200B`–`U+200D`
- * zusammengesetzte Emoji zusammen, und ein Titel darf sie tragen
- * (`characters.ts`). In einer **Adresse** ist das anders, und der Unterschied
- * ist gemessen (Bedrohungsmodell 20.2): Der Zerleger entfernt sie
- * stillschweigend aus dem Wirtsnamen. `https://exam<ZWSP>ple.org/` wird zu
- * `https://example.org/` — Anzeige und Ziel fallen auseinander, und genau das
- * schließt A-A-3 aus.
- *
- * Sie werden **abgewiesen** und nicht entfernt: Eine Adresse ist Eingabe des
- * Benutzers, und eine stillschweigend geänderte Eingabe ist die zweite Hälfte
- * desselben Fehlers (E-063 Punkt 3).
+ * Nullbreiten in URLs vor dem Zerlegen abweisen, da der URL-Parser sie still entfernen kann. Die
+ * Namensprüfung erlaubt sie teilweise für Emoji.
  */
 export const INVISIBLE_IN_ADDRESS: readonly CodePointRange[] = Object.freeze([
   Object.freeze({ from: 0x200b, to: 0x200b }),
@@ -397,15 +190,8 @@ export const INVISIBLE_IN_ADDRESS: readonly CodePointRange[] = Object.freeze([
 ]);
 
 /**
- * Warum eine Adresse abgewiesen wurde.
- *
- * Ein **geschlossener** Vorrat technischer Schlüssel, derselbe Aufbau wie
- * `ReleaseLookupFailure` und aus demselben Grund (A-A-8): Der abgewiesene Wert
- * steht **nicht** in der Meldung. Er kann aus einer fremden Quelle stammen und
- * trägt womöglich genau das Zeichen, gegen das er abgewiesen wurde.
- *
- * Die Schlüssel sind wortgleich die aus A-A-8, damit Dienst und Hülle über
- * denselben Fall dasselbe sagen.
+ * Geschlossene Fehlergründe ohne den abgewiesenen Fremdwert, damit dessen Steuerzeichen nicht in
+ * Meldungen gelangen.
  */
 export type LinkRejection =
   /** Läßt sich gar nicht zerlegen — `\\server\freigabe`, `//server/x`, ein NUL mitten im Schema. */
@@ -434,26 +220,10 @@ export type LinkCheck =
   | { readonly ok: false; readonly reason: LinkRejection };
 
 /**
- * Die erlaubten Schemata. Positivliste, geprüft am **zerlegten** Schema
- * (A-A-2).
- *
- * Wer diese Menge erweitert, sollte wissen, was daran hängt: `http` und
- * `https` sind im WHATWG-Standard **besondere** Schemata („special schemes"),
- * und für die erzwingt der Zerleger einen Wirt. Ein nicht-besonderes Schema
- * tut das nicht — `new URL('takt:///pfad').hostname` ist gemessen `''`. Erst
- * dann trägt die Wirtsprüfung in {@link normalizeAttachmentLink}, und erst
- * dann kann sie überhaupt etwas abweisen. Sie ist der Preis dieser
- * Erweiterung und steht deshalb schon heute da.
+ * Bei Erweiterungen beachten: Nur besondere WHATWG-Schemata erzwingen bereits beim Zerlegen einen
+ * Host.
  */
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
-
-/** Liegt der Codepunkt in einem der Bereiche? Dieselben vier Zeilen wie in `characters.ts`. */
-function inRanges(codePoint: number, ranges: readonly CodePointRange[]): boolean {
-  for (const range of ranges) {
-    if (codePoint >= range.from && codePoint <= range.to) return true;
-  }
-  return false;
-}
 
 function hasInvisibleAddressCharacter(value: string): boolean {
   for (const character of value) {
@@ -463,32 +233,14 @@ function hasInvisibleAddressCharacter(value: string): boolean {
     // Ersatzwert liegt in keinem der Bereiche und ist damit die harmlose
     // Richtung.
     const code = character.codePointAt(0) ?? -1;
-    if (inRanges(code, INVISIBLE_IN_ADDRESS)) return true;
+    if (isCodePointInRanges(code, INVISIBLE_IN_ADDRESS)) return true;
   }
   return false;
 }
 
 /**
- * Länge in **UTF-8-Bytes**, von Hand gezählt.
- *
- * ---------------------------------------------------------------------------
- * Warum nicht `new TextEncoder().encode(value).length`
- * ---------------------------------------------------------------------------
- *
- * Weil die Domäne `types: []` und `lib: ["ES2023"]` führt (siehe
- * `packages/domain/tsconfig.json`) und `TextEncoder` weder das eine noch das
- * andere ist — er ist WHATWG. Das ist kein Formfehler des Übersetzers, sondern
- * genau die Absicht dieser Schalter: Was hier nicht benennbar ist, kann hier
- * nicht benutzt werden, und `fs` oder `process` sollen es nicht sein.
- *
- * Die Zählung selbst ist vier Zeilen und braucht keine Zeichentabelle: Die
- * Breite eines Zeichens in UTF-8 hängt allein an seinem Codepunkt. Sie
- * **erzeugt keine Zwischenzeichenkette** — das ist der zweite Gewinn
- * gegenüber `encode`, das für jede Prüfung ein Bytefeld anlegt, das niemand
- * liest.
- *
- * `for...of` läuft über Codepunkte und nicht über UTF-16-Einheiten; ein
- * Ersatzpaar wird damit einmal gezählt und nicht zweimal.
+ * Die Domäne bindet keine DOM-Typen ein. Codepunkte direkt zählen, ohne ein temporäres Bytefeld
+ * anzulegen.
  */
 function byteLength(value: string): number {
   let bytes = 0;
@@ -509,17 +261,8 @@ function byteLength(value: string): number {
 }
 
 /**
- * Was von einer zerlegten Adresse gebraucht wird — und nichts darüber hinaus.
- *
- * Neun Felder aus dem WHATWG-URL-Standard, alle Zeichenketten. `href` ist die
- * **Serialisierung**, also die Normalform, um die es in A-A-3 geht.
- *
- * Fünf davon prüfen ({@link normalizeAttachmentLink}), vier beschriften
- * ({@link attachmentLabel}): `host` — mit Port, denn der gehört zum Wirt —,
- * `pathname`, `search` und `hash`. Sie stehen hier, damit die Beschriftung
- * die Normalform **zerlegt** statt sie mit Zeichenkettenarbeit auseinanderzu-
- * nehmen; eine zweite Zerlegeregel neben der der Laufzeit wäre genau die
- * zweite Wahrheit, die dieser ganze Abschnitt vermeidet.
+ * Die Beschriftung verwendet dieselbe Zerlegung wie die Prüfung; `href` liefert die gespeicherte
+ * Normalform.
  */
 interface ParsedUrl {
   readonly protocol: string;
@@ -534,67 +277,14 @@ interface ParsedUrl {
 }
 
 /**
- * Der Zerleger der Laufzeit, an **einer** Stelle typisiert.
- *
- * ---------------------------------------------------------------------------
- * Die eine Zusicherung dieser Datei, und warum sie hier vertretbar ist
- * ---------------------------------------------------------------------------
- *
- * `URL` ist wie `TextEncoder` nicht in `lib: ["ES2023"]` — und anders als bei
- * der Bytezählung ist Selbermachen hier die **schlechtere** Wahl: Die Tabelle
- * aus Bedrohungsmodell 20.2 zeigt, wie viele Regeln man dabei nachbauen müßte,
- * und jede davon wäre eine Gelegenheit, eine falsch nachzubauen (T-145-12,
- * derselbe Schluß, den das Bedrohungsmodell für die Hülle zieht).
- *
- * Also wird der Zerleger der Laufzeit benutzt, und die Zusicherung darüber
- * steht **einmal**, an einer Stelle, deren ganzer Inhalt eine Zeile ist —
- * dieselbe Bauart wie `patchOf` im Dienst. Sie behauptet genau das, was jede
- * Laufzeit dieses Vorhabens mitbringt (Node ≥ 22, jeder Webview) und nicht
- * mehr: neun Felder, alle Zeichenketten.
- *
- * Gäbe es `URL` nicht, wirft `new` — und der Wurf landet in der Klammer von
- * {@link normalizeAttachmentLink}, die daraus `link_unparsable` macht. Keine
- * Adresse käme dann durch, und das ist die richtige Richtung: zu viel
- * abweisen, nie zu wenig.
- *
- * Es bleibt eine Fremdheit in einem Paket, das sonst nichts von der Plattform
- * weiß — dieselbe wie `Intl` in `kernel.ts`, und mit derselben Begründung: Ein
- * Standard der Plattform ist keine Fremdbibliothek (B-18.7), und eine eigene
- * Fassung wäre die zweite Wahrheit neben der der Laufzeit.
+ * Der WHATWG-URL-Parser gehört zur Laufzeit, aber nicht zu den ES2023-Typen. Fehlt er, wird die
+ * Adresse als nicht zerlegbar abgewiesen.
  */
 const PlatformUrl = (globalThis as unknown as { URL: new (input: string) => ParsedUrl }).URL;
 
 /**
- * **Die** Normalisierung einer Anhangsadresse (A-A-13).
- *
- * Sie steht hier und nirgends sonst — nicht im Dienst, nicht in der
- * Oberfläche, nicht in der Hülle. Die Hülle **prüft** dieselbe Eigenschaft
- * (Festpunkt), sie stellt sie nicht her; das ist der Unterschied, den A-A-3
- * verlangt, und er ist der Grund, warum eine zweite Normalisierung im Baum ein
- * Fund wäre und keine Dopplung.
- *
- * Die Reihenfolge der Prüfungen ist Inhalt und kein Zufall:
- *
- *  1. **Länge** — bevor irgendetwas Teures geschieht.
- *  2. **Steuer- und Richtungszeichen**, ausdrücklich **vor** dem Zerlegen
- *     (A-A-2). Der Zerleger entfernt Tabulator und Zeilenumbruch an jeder
- *     Stelle; wer danach prüft, prüft eine Zeichenkette, die es nie gab.
- *  3. **Die beiden Nullbreiten**, aus demselben Grund (A-A-14).
- *  4. **Zerlegen.** Was hier scheitert, ist keine Adresse — der UNC-Pfad
- *     `\\server\freigabe` fällt hier, und deshalb braucht der Typ *Verweis*
- *     keine eigene UNC-Regel (T-145-10).
- *  5. **Schema**, auf dem zerlegten Wert und nicht auf einem Präfix der
- *     Rohfassung. `http:/\example.org/` ist ein `http`-Ziel; ein
- *     Präfixvergleich hielte es für keines und wäre damit **strenger** und
- *     zugleich gefährlicher — er verführte dazu, die Rohfassung zu speichern.
- *  6. **Wirt vorhanden.**
- *  7. **Keine Zugangsdaten.** `https://evil.example@gutartig.example/` bleibt
- *     in der Normalform erhalten und liest sich wie ein anderer Wirt, als es
- *     ansteuert. Deshalb abweisen und nicht normalisieren.
- *
- * Zurück kommt `url.href` — die Serialisierung des WHATWG-Standards. Sie ist
- * gemessen idempotent: `norm(norm(x)) === norm(x)` für jede Zeile aus
- * Bedrohungsmodell 20.2.
+ * Länge und unsichtbare Zeichen vor dem Zerlegen prüfen: Der Parser kann Steuerzeichen entfernen.
+ * Schema und Zugangsdaten am zerlegten Wert prüfen; ausschließlich die Normalform speichern.
  */
 export function normalizeAttachmentLink(raw: string): LinkCheck {
   if (byteLength(raw) > MAX_ATTACHMENT_LINK_BYTES) return { ok: false, reason: 'link_too_long' };
@@ -610,30 +300,9 @@ export function normalizeAttachmentLink(raw: string): LinkCheck {
 
   if (!ALLOWED_SCHEMES.has(url.protocol)) return { ok: false, reason: 'link_scheme_rejected' };
 
-  /*
-   * Der Wirt. Diese Zeile ist ein **Boden**, kein Filter — und die Begründung,
-   * die bis T-159 hier stand, war falsch.
-   *
-   * Falsch war: „fängt `https:///pfad`". Gemessen (Node 22.23.2, WHATWG-URL)
-   * ist `new URL('https:///pfad').hostname === 'pfad'`; der Zerleger befördert
-   * das erste Pfadstück zum Wirt, und die Normalform lautet danach
-   * `https://pfad/`. Diese Zeile sieht davon nichts — der Wirt ist nicht leer.
-   * Das ist auch kein Verlust: Gespeichert und geöffnet wird die Normalform
-   * (A-A-3), Anzeige und Ziel sagen also dasselbe. Ein leerer Wirt ist für
-   * `http`/`https` überhaupt nicht erreichbar, weil beide **besondere**
-   * Schemata sind: `new URL('https://')` wirft, und der Wurf ist schon oben
-   * als `link_unparsable` abgefangen.
-   *
-   * Richtig ist: Unter der heutigen {@link ALLOWED_SCHEMES} kann diese Zeile
-   * nichts abweisen, und kein Prüffall erreicht sie. Sie steht für den Tag, an
-   * dem die Positivliste ein **nicht**-besonderes Schema aufnimmt — dort ist
-   * ein leerer Wirt zulässig (`new URL('takt:///pfad').hostname === ''`), und
-   * dann trägt allein diese Zeile. Wer sie streicht, weil kein Prüffall sie
-   * erreicht, streicht die Wache für eine Erweiterung, die sich nicht selbst
-   * ansagt.
-   *
-   * Zweiter Träger derselben Zusage: {@link attachmentLabel} verläßt sich
-   * darauf, daß ein `ok`-Ergebnis einen nicht leeren Wirt hat.
+  /**
+   * Auch bei einer späteren Schemaerweiterung muss jede angenommene Adresse einen Host haben; die
+   * Beschriftung setzt das voraus.
    */
   if (url.hostname === '') return { ok: false, reason: 'link_host_missing' };
 
@@ -647,44 +316,19 @@ export function normalizeAttachmentLink(raw: string): LinkCheck {
 }
 
 /**
- * Ist dieser gespeicherte Wert bereits ein **Festpunkt** der Normalform
- * (A-A-3)?
- *
- * Das ist die Frage, die der Öffnen-Befehl der Hülle stellt — hier steht sie
- * für den Dienst, der denselben Bestand liest und dieselbe Antwort braucht,
- * bevor er einen Wert herausgibt.
- *
- * `normalizeAttachmentLink(x).url === x` und nicht `URL(x).href === x`: Der
- * Festpunkt schließt die vollständige Prüfung ein, nicht nur die
- * Serialisierung. Ein `file:///etc/passwd` ist ein Festpunkt der
- * Serialisierung und trotzdem keine zulässige Adresse.
+ * Ein Festpunkt muss die vollständige Zulässigkeitsprüfung bestehen; stabile Serialisierung allein
+ * würde auch `file:` erlauben.
  */
 export function isNormalizedAttachmentLink(value: string): boolean {
   const checked = normalizeAttachmentLink(value);
   return checked.ok && checked.url === value;
 }
 
-// ---------------------------------------------------------------------------
 // Datei — die Form des Pfads (A-A-4, A-A-5)
-// ---------------------------------------------------------------------------
 
 /**
- * Fünf Endungen, die **hart** abgewiesen werden (A-A-5).
- *
- * Sie stehen hier **nicht**, weil sie ausführbar sind — `.exe`, `.bat` und
- * `.ps1` sind es auch und werden nicht abgewiesen. Sie stehen hier, weil sie
- * **Umleitungen** sind: Bei ihnen zeigt der Pfad, den die Rückfrage nennt,
- * nicht auf das, was startet. Eine `rechnung.lnk` kann jedes Ziel und jedes
- * Symbol tragen.
- *
- * Für sie ist die Rückfrage aus E-072 Punkt 3 nicht bloß schwach, sie ist
- * **aktiv irreführend**: Sie sagt die Wahrheit über die Datei und lügt über
- * die Wirkung. Genau diese Begründung — und keine andere — trägt diese fünf
- * Einträge. Alles darüber hinaus wäre eine Liste, die beruhigt und das
- * Umbenennen lehrt (Bedrohungsmodell 20.1).
- *
- * Verglichen wird ohne Rücksicht auf Groß- und Kleinschreibung, auf dem
- * **letzten** Punktsegment des Dateinamens.
+ * Umleitungsdateien abweisen, weil der angezeigte Pfad ihr tatsächliches Ziel verschweigt. Dies
+ * ist keine Liste aller ausführbaren Endungen.
  */
 export const INDIRECT_EXTENSIONS: readonly string[] = Object.freeze([
   'lnk',
@@ -709,22 +353,8 @@ export type PathCheck =
   | { readonly ok: false; readonly reason: PathRejection };
 
 /**
- * Ist das ein UNC-Pfad?
- *
- * **Beide** Schreibweisen: `\\server\freigabe` und `//server/freigabe`.
- * Windows löst beide auf, und beide sind dort ein **Anmeldeversuch gegen einen
- * fremden Rechner** — was dabei über die Leitung geht, ist der NTLM-Handschlag
- * des angemeldeten Benutzers (R-22, Bedrohungsmodell 20.1).
- *
- * Diese Prüfung ist **nicht** aus „ist der Pfad absolut" ableitbar: Unter
- * Windows ist `\\server\freigabe\datei.exe` absolut. Genau deshalb steht sie
- * einzeln da und nicht als Nebensatz.
- *
- * Erfaßt sind zusätzlich die verlängerten Windows-Präfixe, mit denen sich
- * dieselbe Auflösung erreichen läßt: `\\?\UNC\server\...`, `\\?\...`,
- * `\\.\...`. Die vollständige Prüfung gegen `std::path::Prefix` liegt in der
- * Hülle (A-A-4); hier steht die Fassung, die eine Zeichenkette prüfen kann —
- * die Tür soll einen offensichtlich falschen Wert erst gar nicht speichern.
+ * UNC-Pfade können eine NTLM-Anmeldung an fremden Rechnern auslösen. Beide Trenner und verlängerte
+ * Windows-Präfixe prüfen.
  */
 export function isUncPath(value: string): boolean {
   const head = value.slice(0, 2);
@@ -732,70 +362,31 @@ export function isUncPath(value: string): boolean {
 }
 
 /**
- * Ist der Pfad absolut?
- *
- * Zwei Formen, weil zwei Systeme gemeint sind: `/…` unter Unix und
- * `C:\…`/`C:/…` unter Windows. Ein relativer Pfad würde gegen das
- * Arbeitsverzeichnis der Hülle aufgelöst — einen Ort, den niemand bewußt
- * gewählt hat.
- *
- * Diese Prüfung ist **keine Grenze**, sondern Hygiene (Bedrohungsmodell 20.1);
- * die Grenze ist die UNC-Prüfung darüber und die Rückfrage in der Oberfläche.
+ * Relative Pfade würden gegen das unbeabsichtigte Arbeitsverzeichnis der Hülle aufgelöst.
+ * UNC-Prüfung und Öffnungsrückfrage bleiben zusätzlich nötig.
  */
 export function isAbsoluteAttachmentPath(value: string): boolean {
   if (value.startsWith('/') || value.startsWith('\\')) return true;
   return /^[A-Za-z]:[\\/]/.test(value);
 }
 
-/**
- * Der letzte Namensbestandteil eines Pfades — alles hinter dem letzten `/`
- * oder `\`. Er steht hier **einmal**, weil zwei Prüfungen ihn brauchen:
- * {@link hasPathStreamSeparator} und {@link fileExtensionOf}. Zwei Fassungen
- * derselben Zerlegung wären zwei Antworten auf die Frage, welche Datei
- * eigentlich gemeint ist.
- *
- * **Beide Trenner, auf jeder Plattform**, und das ist Absicht: Hier wird über
- * eine Zeichenkette geurteilt, die aus einem Windows-Bestand stammen kann,
- * während der Dienst auf Linux läuft. `node:path` wüßte an dieser Stelle zu
- * wenig — es kennt den Trenner der **laufenden** Plattform und nicht den des
- * Pfades —, und die Domäne dürfte es ohnehin nicht rufen.
- */
+/** Beide Pfadtrenner auf jeder Plattform berücksichtigen, da der Bestand von Windows stammen kann. */
 function lastNameSegment(path: string): string {
   const lastSeparator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
   return path.slice(lastSeparator + 1);
 }
 
 /**
- * Der Dateiname, **wie Windows ihn beim Öffnen auflöst** (A-A-5′).
- *
- * Windows schneidet nachgestellte Punkte und Leerzeichen vom letzten
- * Namensbestandteil ab, **bevor** es die Datei auflöst: `rechnung.lnk.` und
- * `rechnung.lnk ` öffnen beide `rechnung.lnk`. Wer den gespeicherten Namen
- * prüft, prüft eine Zeichenkette, die nie eine Datei war — T-156-1 hat die
- * Verbotsliste der Hülle mit genau **einem** Zeichen ausgehebelt.
- *
- * Abgeschnitten wird nur am **Ende** und nur diese beiden Zeichen. Zeichengleich
- * mit `effective_file_name` in `apps/desktop/src-tauri/src/attachment.rs` und
- * mit `effectiveFileNameOf` in `apps/web/src/features/todos/attachmentLabel.ts`.
- *
- * **Auf jeder Plattform**, nicht unter einer Betriebssystemabfrage: Ein Zweig,
- * der nur auf einem System etwas tut, ist auf dem Läufer der Reihe unmeßbar
- * (A-A-10). Der Preis ist eine Datei namens `rechnung.lnk.` unter Linux, die
- * Takt nicht annimmt; eine `.lnk` tut dort ohnehin nichts.
+ * Windows entfernt abschließende Punkte und Leerzeichen vor dem Öffnen. Diese Regel muss auch beim
+ * Prüfen auf anderen Plattformen gelten.
  */
 function effectiveNameSegment(path: string): string {
   return trimResolvedTail(lastNameSegment(path));
 }
 
 /**
- * Nachgestellte Punkte und Leerzeichen fallen — der Teil von
- * {@link effectiveNameSegment}, der **ohne** die Zerlegung in Pfadbestandteile
- * auskommt (T-320).
- *
- * Eigen, weil {@link attachmentTargetNamesFile} genau diese Hälfte auf den
- * **gesuchten Namen** anwenden muß und die andere ausdrücklich nicht: Ein
- * gesuchter Name, der selbst einen Trenner trägt, wird buchstäblich am Ende
- * gesucht, und das ist eine zugesagte Eigenschaft.
+ * Ohne Pfadzerlegung, damit ein gesuchter Name mit eigenem Trenner wörtlich verglichen werden
+ * kann.
  */
 function trimResolvedTail(name: string): string {
   let end = name.length;
@@ -808,100 +399,19 @@ function trimResolvedTail(name: string): string {
 }
 
 /**
- * Trägt der letzte Namensbestandteil einen Doppelpunkt? (A-A-28.)
- *
- * ---------------------------------------------------------------------------
- * Diese Prüfung ist der **zweite** Riegel und nicht der einzige. Wer sie für
- * die Grenze hält, baut die Grenze aus.
- * ---------------------------------------------------------------------------
- *
- * Die tragende Kontrolle ist und bleibt `check_file` in
- * `apps/desktop/src-tauri/src/attachment.rs`; sie läuft **bei jedem Aufruf**
- * unmittelbar vor dem Öffnen. Zwischen dieser Tür und jenem Öffnen liegt der
- * **Bestand**, und in den Bestand kommt man an jeder Tür vorbei: über die
- * Routen des Dienstes mit dem Sitzungsgeheimnis (VG-1) und über ein `UPDATE`
- * mit `sqlite3` auf die Bestandsdatei (VG-3). Ein Wert, der so hineingeschrieben
- * wurde, hat diese Zeilen nie gesehen.
- *
- * Umgekehrt gilt dasselbe: Diese Prüfung ist **nicht** entbehrlich, weil es die
- * andere gibt. Sie hält den Wert aus dem Bestand heraus, solange er über die
- * Tür kommt, und sie sagt dem Benutzer im Augenblick der Eingabe, warum — die
- * Hülle könnte das erst nach dem Klick, an einem Anhang, den er schon angelegt
- * hat. **Keine der beiden ist die Verdopplung der anderen.** Wer eine davon
- * streicht, weil sie doppelt aussieht, streicht entweder die Kontrolle oder die
- * Auskunft.
- *
- * ---------------------------------------------------------------------------
- * Warum überhaupt
- * ---------------------------------------------------------------------------
- *
- * Unter NTFS ist der Doppelpunkt der Trenner eines alternativen Datenstroms:
- * `datei::$DATA` löst auf den unbenannten Datenstrom von `datei` auf,
- * `datei:strom` auf einen benannten. Damit reden die Existenzprüfung und die
- * Endungsprüfung über **verschiedene Dateien** — T-164 hat gemessen, daß
- * `…/rechnung.lnk::$DATA` und `…/rechnung.lnk:harmlos.txt` durch
- * {@link INDIRECT_EXTENSIONS} fallen, weil deren letztes Punktsegment
- * `lnk::$data` heißt und nicht `lnk`. Ein Name mit Doppelpunkt hat keine
- * beurteilbare Endung; die Frage danach ist keine sinnvolle Frage mehr.
- *
- * ---------------------------------------------------------------------------
- * Gefragt wird nur der **letzte** Bestandteil
- * ---------------------------------------------------------------------------
- *
- * Sonst fiele der Laufwerksbuchstabe mit: `C:\Users\…` trägt einen Doppelpunkt,
- * ist aber ein Präfix und kein Name. Aus demselben Grund steht diese Prüfung in
- * {@link checkAttachmentPath} **hinter** der Absolutheitsprüfung — ein
- * unvollständiger Windows-Pfad wie `C:datei.pdf` bekommt `path_not_absolute`
- * und nicht diesen Grund, der ihn in die Irre führte.
- *
- * ---------------------------------------------------------------------------
- * Dieselbe Frage stellt `has_stream_separator` in der Hülle
- * ---------------------------------------------------------------------------
- *
- * Wortgleich: „enthält der letzte Namensbestandteil ein `:`". Der einzige
- * Unterschied liegt in der Zerlegung — dort `Path::file_name()`, also der
- * Trenner der laufenden Plattform, hier {@link lastNameSegment} mit **beiden**
- * Trennern. Die Richtung ist gutartig: Wo die Zerlegungen auseinandergehen,
- * urteilt die Hülle **strenger** oder hat den Pfad schon vorher mit
- * `path_not_absolute` abgewiesen. Ein Wert, den diese Tür annimmt und die Hülle
- * öffnet, ist damit nie einer, den die Hülle wegen des Doppelpunkts abgelehnt
- * hätte.
+ * Nur den letzten Namensbestandteil prüfen, damit Laufwerkspräfixe erlaubt bleiben.
+ * NTFS-Datenströme können sonst die Endungsprüfung umgehen.
+ * Die Hülle muss unmittelbar vor dem Öffnen erneut prüfen, da direkte Bestandsänderungen diese
+ * Eingabeprüfung umgehen.
  */
 export function hasPathStreamSeparator(value: string): boolean {
   return lastNameSegment(value).includes(':');
 }
 
 /**
- * Das letzte Punktsegment des **aufgelösten** Dateinamens, kleingeschrieben.
- * Leer, wenn es keines gibt.
- *
- * ---------------------------------------------------------------------------
- * Zwei Dinge, die anders sind als bei einer gewöhnlichen Endungsfunktion
- * ---------------------------------------------------------------------------
- *
- *  1. **Gemessen wird an {@link effectiveNameSegment}**, also am Namen, den
- *     Windows auflöst — nicht am gespeicherten. `rechnung.lnk.` und
- *     `rechnung.lnk ` liefern beide `lnk` (A-A-5′, T-156-1).
- *  2. **Ein führender Punkt zählt mit.** `.lnk` hat die Endung `lnk` und ist
- *     **keine** endungslose versteckte Datei: Für den Windows-Explorer ist es
- *     eine Verknüpfung, und die Hülle weist sie ab. Der Preis ist, daß
- *     `.gitignore` die Endung `gitignore` bekommt — sie steht auf keiner Liste
- *     und ändert nichts.
- *
- * Punkt 2 war bis T-178 anders (`dot <= 0` statt `dot === -1`), und das war
- * eine **gemessene Abweichung** von der Hülle: `/home/nutzer/.lnk` kam an der
- * Tür durch und fiel erst am Öffnen-Befehl (T-179 B-1). Zeichengleich mit
- * `has_indirect_extension` in `apps/desktop/src-tauri/src/attachment.rs`
- * (`rsplit_once('.')` nimmt den führenden Punkt ebenfalls als Trenner) und mit
- * `extensionOf` in `apps/web/src/features/todos/attachmentLabel.ts`.
- *
- * **Über einen Namen mit Doppelpunkt trifft diese Funktion keine Aussage** —
- * `rechnung.lnk::$DATA` liefert `lnk::$data`, und das steht auf keiner Liste
- * (A-A-28, gemessen in T-164). Genau deshalb fragt {@link checkAttachmentPath}
- * **vor** dieser Funktion nach dem Doppelpunkt und nicht danach. Wer die
- * Reihenfolge dort umdreht, hebt A-A-5 wieder auf. Dieselbe Auslassung hat
- * `has_indirect_extension` in der Hülle, und aus demselben Grund: Beide sind
- * durch die Doppelpunktprüfung gedeckt, statt sie nachzubauen.
+ * Die Windows-Normalform und führende Punkte berücksichtigen: Auch `.lnk` und `x.lnk.` sind
+ * Umleitungen.
+ * Doppelpunkte müssen vor dieser Endungsprüfung ausgeschlossen sein.
  */
 export function fileExtensionOf(path: string): string {
   const name = effectiveNameSegment(path);
@@ -911,18 +421,8 @@ export function fileExtensionOf(path: string): string {
 }
 
 /**
- * ASCII-Faltung — und **nur** ASCII (A-A-98).
- *
- * `toLowerCase()` faltet nach Unicode und ist dabei nicht längentreu: `İ` wird
- * zu zwei Zeichen, `ẞ` zu `ß`, und die türkische Regel für `I` hängt an der
- * Umgebung. Was hier gefaltet wird, entscheidet darüber, ob eine Datei mit
- * Kundenmaterial **gelöscht** wird; eine Faltung, die je nach Laufzeit ein
- * anderes Ergebnis liefert, ist an dieser Stelle keine Erleichterung, sondern
- * eine zweite Antwort auf dieselbe Frage.
- *
- * Dieselbe Faltung benutzt SQLite in `LIKE` (ASCII, ohne `ICU`). Damit sind die
- * Vorauswahl im Adapter und die Entscheidung hier **dieselbe** Regel und nicht
- * zwei — genau die Trennung, an der T-313-1 hing.
+ * Nur ASCII falten, damit die Entscheidung mit SQLite-LIKE übereinstimmt und Unicode-Zeichen nicht
+ * zusammenfallen.
  */
 function asciiLower(value: string): string {
   return value.replace(/[A-Z]/g, (character) =>
@@ -930,106 +430,18 @@ function asciiLower(value: string): string {
   );
 }
 
-/**
- * Der Dateiname, den ein gespeicherter Pfad nennt — gefaltet (A-A-98).
- *
- * Der letzte Namensbestandteil, so wie Windows ihn beim Öffnen auflöst
- * ({@link effectiveNameSegment}: nachgestellte Punkte und Leerzeichen fallen),
- * anschließend ASCII-gefaltet. Beide Trenner zählen auf jeder Plattform —
- * derselbe Grund wie bei {@link fileExtensionOf}: Der Wert kommt aus einem
- * Bestand, der auf einem anderen Betriebssystem entstanden sein kann.
- */
+/** Windows-Namensauflösung und beide Pfadtrenner verwenden, unabhängig von der laufenden Plattform. */
 export function attachmentTargetFileName(target: string): string {
   return asciiLower(effectiveNameSegment(target));
 }
 
 /**
- * **Nennt dieser gespeicherte Pfad diese liegende Datei?** (A-A-98, T-313-1,
- * T-313-2, T-313-3.)
- *
- * ===========================================================================
- * Diese Funktion entscheidet über eine Löschung, und sie entscheidet in die
- * teure Richtung nur widerwillig
- * ===========================================================================
- *
- * Die **beiden** Aufräumläufe — übernommene E-Mail-Dateien und Bildkopien,
- * `apps/local-api/src/features/todos/orphan-sweep.ts` — entfernen eine Datei
- * genau dann, wenn **keine** Zeile in `todo_attachment` sie nennt. Die Frage,
- * was „nennt" heißt, steht hier und an keiner zweiten Stelle. Seit T-315 gilt
- * das wörtlich: Der Bildlauf hatte bis dahin seine eigene, engere Fassung
- * derselben Frage (`kind = 'image' AND target IN (namen)`), und **drei** der
- * vier dort gemessenen Löschwege lagen ausschließlich in dieser Zweitfassung.
- *
- * **Die Richtung ist entschieden, und sie steht hier ausdrücklich:** Ein
- * falsches `true` läßt eine Datei liegen, die niemandem mehr gehört — ein
- * Schönheitsfehler in einem Ordner. Ein falsches `false` entfernt eine Rechnung
- * aus der E-Mail eines Kunden, ohne Rückfrage, ohne Papierkorb und ohne Spur
- * außer einer Zahl im Protokoll. **Die beiden Fehler sind nicht gleich teuer,
- * also ist die Funktion nicht symmetrisch:** Im Zweifel `true`.
- *
- * Deshalb ist die Bedingung die **weiteste**, die einen Eigentümer finden kann:
- *
- *  - **Kein `origin`, kein `kind`.** Die engere Frage war der Fehler, den T-313
- *   gemessen hat: `origin = 'email' AND kind = 'file'` ist die Bedingung, die
- *   **löscht** — verliert eine Zeile ihr `origin` (`ON DELETE CASCADE` auf ein
- *   zweites, selbst eingetragenes Anhangsrecht; der Rückweg von Migration 0023,
- *   der die Spalte fallen läßt und mit `DEFAULT 'user'` neu anlegt), dann
- *   verschwindet sie aus der Frage und ihre Datei fällt. Der Quelltext an
- *   `knownEmailFileTargets` hatte diese Richtung genau verkehrt herum
- *   aufgeschrieben. Im Bildverzeichnis hieß dieselbe Enge `kind = 'image'`, und
- *   sie kostete dort zwei Dateien in einer Messung, deren Zeilen unverändert
- *   stehenblieben (T-314 Abschnitt 4).
- *  - **Mit Namen, nicht mit Zeilen — und deshalb auch gegen den vollen Pfad.**
- *   Der Bildlauf fragte mit bloßen Namen (`target IN (namen)`); eine Zeile, die
- *   dieselbe Datei mit ihrem **vollen Pfad** nennt, war für ihn unsichtbar, und
- *   so ein Pfad entsteht durch die gewöhnliche Tür: ein Dateianhang, der auf
- *   eine Bildkopie zeigt, ist absolut, vorhanden und trägt `.png`. Das ist kein
- *   Angriff, das ist ein Bedienweg — und hier ist er zu, weil der Name am Ende
- *   des Pfades gefunden wird.
- *  - **Ohne Rücksicht auf die Schreibweise des Pfades davor.** Verglichen wird
- *   der Name, nicht der Pfad. `C:\…\email-attachments\<hex>.eml` und
- *   `c:/…/email-attachments/<hex>.eml` sind dieselbe Datei und zwei
- *   Zeichenketten; ein zeichengleicher Vergleich hielt die zweite für
- *   herrenlos.
- *  - **Und großzügiger als „letzter Pfadbestandteil".** Ein Pfad, der auf
- *   diesen Namen **endet**, nennt ihn ebenfalls — auch wenn sein letzter
- *   Bestandteil länger ist. Das trifft mehr Zeilen als nötig und verschont
- *   damit mehr Dateien als nötig; siehe die Richtung oben.
- *
- * **Was sie nicht ist:** eine Aussage darüber, ob der Pfad in **diesem** Ordner
- * liegt. Das ist Absicht. Ein Pfad, der denselben Namen in einem anderen Ordner
- * nennt, verschont die Datei hier — und das ist der billige Fehler.
- *
- * ===========================================================================
- * Beide Argumente werden gleich behandelt — seit T-320, und der Unterschied
- * war eine Enge
- * ===========================================================================
- *
- * Bis T-320 lief `target` durch {@link attachmentTargetFileName} (letzter
- * Namensbestandteil, nachgestellte Punkte und Leerzeichen gekürzt, gefaltet),
- * `fileName` dagegen nur durch die Faltung. Ein liegender Name mit
- * nachgestelltem Leerzeichen — auf POSIX möglich — fand seine Zeile deshalb
- * **nicht**, und eine Zeile, die nicht gefunden wird, ist eine Datei, die
- * fällt (T-318, Befund `attachment.ts:993`).
- *
- * Die Unsymmetrie ist aufgehoben, ohne eine der beiden Fassungen aufzugeben:
- * Gefragt wird **beides**, der Name wie übergeben und der um Punkte und
- * Leerzeichen gekürzte. Damit ist diese Fassung Zeichen für Zeichen weiter als
- * die vorige — sie findet jeden Eigentümer, den jene fand, und zusätzlich die,
- * die an der Kürzung hängen. Eine Fassung, die `fileName` **nur** kürzt, wäre
- * es nicht: Ein `target` ohne Trenner, das auf `x.png.` endet, nennt `x.png.`,
- * aber nicht `x.png`.
- *
- * **Was ausdrücklich nicht mitgeht, ist die Zerlegung in Pfadbestandteile.**
- * `fileName` läuft durch {@link trimResolvedTail} und **nicht** durch
- * {@link attachmentTargetFileName}: Ein gesuchter Name, der selbst einen
- * Trenner trägt, wird weiterhin buchstäblich am Ende gesucht. Das ist eine
- * zugesagte Eigenschaft — und die Enge kostet hier nichts, weil beide
- * Aufräumläufe ausschließlich erzeugte Namen fragen (32 Hexziffern und eine
- * Endung, kein Trenner).
- *
- * Der Preis steht oben in der Richtung: mehr Eigentümer, mehr verschonte
- * Dateien. Genau so herum ist es gewollt.
+ * Im Zweifel Eigentümerschaft annehmen: Eine unnötig behaltene Datei ist weniger schädlich als
+ * gelöschtes Kundenmaterial.
+ * Alle Anhangsarten und Herkünfte berücksichtigen; ein passendes Namensende genügt auch in einem
+ * anderen Ordner.
+ * Den gesuchten Namen sowohl unverändert als auch ohne abschließende Punkte und Leerzeichen
+ * prüfen, aber nicht in Pfadbestandteile zerlegen.
  */
 export function attachmentTargetNamesFile(target: string, fileName: string): boolean {
   if (fileName === '') return false;
@@ -1046,44 +458,10 @@ export function attachmentTargetNamesFile(target: string, fileName: string): boo
 }
 
 /**
- * Die Form eines Dateipfads an der Tür (A-A-4, A-A-5).
- *
- * Der Pfad wird **nicht** verändert — kein `trim`, keine Auflösung, keine
- * Umschreibung von Trennern. Was hier durchgeht, ist Zeichen für Zeichen das,
- * was gespeichert wird, und das ist dieselbe Regel wie beim Verweis: Geprüft
- * wird der Wert, der abgelegt wird.
- *
- * **Ob die Datei existiert, prüft diese Funktion nicht.** Das ist keine
- * Sicherheitsprüfung — zwischen `exists()` und `open()` liegt ein Wettlauf,
- * den niemand gewinnt (Bedrohungsmodell 20.1). Es ist die Voraussetzung für
- * A-19.15 („sagt das an Ort und Stelle"), und dafür fragt die Anzeige, nicht
- * die Tür.
- *
- * ---------------------------------------------------------------------------
- * Die Reihenfolge ist Inhalt, und sie ist die aus `check_file`
- * ---------------------------------------------------------------------------
- *
- * Schritt für Schritt dieselbe wie in `apps/desktop/src-tauri/src/attachment.rs`
- * — dieselben Fragen, dieselben Schlüssel, dieselbe Folge:
- *
- *  1. **Leer, Länge, Steuerzeichen.** Hygiene, und sie steht vorn, damit nichts
- *     Langes erst zerlegt wird.
- *  2. **Kein UNC** ({@link isUncPath}). **Vor** der Absolutheitsprüfung, weil
- *     ein UNC-Pfad unter Windows absolut ist und sie bestünde.
- *  3. **Absolut** ({@link isAbsoluteAttachmentPath}).
- *  4. **Kein Doppelpunkt im Namen** ({@link hasPathStreamSeparator}, A-A-28).
- *     **Nach** Schritt 3, damit `C:datei.pdf` den Grund bekommt, der ihm
- *     zusteht. **Vor** Schritt 5, weil ein Name mit Doppelpunkt keine
- *     beurteilbare Endung mehr hat.
- *  5. **Keine Umleitungsendung** ({@link INDIRECT_EXTENSIONS}, A-A-5).
- *
- * Der sechste Schritt der Hülle — **vorhanden** — fehlt hier, und zwar
- * absichtlich: Die Domäne kennt kein Dateisystem.
- *
- * Diese Tür ist der **zweite** Riegel; die tragende Kontrolle bleibt
- * `check_file`, weil zwischen Eingabe und Öffnen der Bestand liegt (VG-1,
- * VG-3). Die lange Fassung dieses Satzes steht bei
- * {@link hasPathStreamSeparator}, und sie gilt für jeden Schritt hier.
+ * Den Pfad unverändert prüfen. UNC vor Absolutheit prüfen, Datenstrom-Trenner nach Absolutheit und
+ * vor der Endung.
+ * Die Hülle prüft unmittelbar vor dem Öffnen erneut; diese Funktion kann weder Bestandsänderungen
+ * noch die Dateiexistenz absichern.
  */
 export function checkAttachmentPath(value: string): PathCheck {
   if (value.trim() === '') return { ok: false, reason: 'path_empty' };
@@ -1098,9 +476,7 @@ export function checkAttachmentPath(value: string): PathCheck {
   return { ok: true, path: value };
 }
 
-// ---------------------------------------------------------------------------
 // Bild — erkannt an der Kopfsignatur (A-A-16)
-// ---------------------------------------------------------------------------
 
 /**
  * Die Bildarten, die Takt annimmt.
@@ -1129,21 +505,8 @@ function startsWith(bytes: Uint8Array, offset: number, expected: readonly number
 }
 
 /**
- * Welche Bildart die **Kopfsignatur** ansagt — oder `null` (A-A-16).
- *
- * ---------------------------------------------------------------------------
- * Was hier ausdrücklich **nicht** zählt
- * ---------------------------------------------------------------------------
- *
- *  - **Die Endung.** Eine als `.png` benannte `.exe` ist der Regelfall und
- *    nicht die Ausnahme.
- *  - **Ein angegebener `content-type`.** Angegeben hat ihn der Aufrufer.
- *  - **`image/*` als Klasse.** Eine Klasse ist keine Positivliste.
- *
- * Was diese Funktion **nicht leistet**: Sie sagt nicht, daß die Datei
- * unbeschädigt ist. Eine gültige Signatur mit beschädigtem Rest kommt hier
- * durch und wird beim Anzeigen zu einem Bild, das nicht erscheint — das ist
- * dann A-19.15 („sagt das an Ort und Stelle") und kein Wurf.
+ * Nur die Kopfsignatur ist maßgeblich, weder Endung noch angegebener MIME-Typ. Eine gültige
+ * Signatur garantiert keine unbeschädigte Bilddatei.
  */
 export function imageMediaTypeOf(bytes: Uint8Array): ImageMediaType | null {
   // PNG: 89 50 4E 47 0D 0A 1A 0A — die vier ersten Bytes genügen (A-A-16).
@@ -1169,139 +532,21 @@ export type ImageRejection =
   | 'image_not_an_image'
   | 'image_empty';
 
-// ---------------------------------------------------------------------------
 // Beschriftung (A-19.12)
-// ---------------------------------------------------------------------------
 
 /**
- * Was an einem Anhang steht, wenn der Titel fehlt (A-19.12).
- *
- * „Nie eine leere Zeile" ist die eine Hälfte der Anforderung. Die andere hat
- * T-165 (Befund X-04) nachgereicht, und sie wiegt schwerer:
- *
- *   **Zwei verschiedene Anhänge tragen nie dieselbe Ersatzbeschriftung.**
- *
- * Der Grund steht nicht in A-19.12, sondern an den Knöpfen: Die Beschriftung
- * ist der zugängliche Name des Knopfes zum **Öffnen**, des Knopfes zum
- * **Entfernen** und der Rückfrage davor. Drei Ticketverweise ohne Titel auf
- * demselben Wirt — der Regelfall und nicht die Ausnahme — hießen bis T-168
- * dreimal `beispiel.example`. Wer die Liste mit einer Vorlesehilfe durchgeht,
- * hört dreimal dasselbe, und der zweite Knopf löscht. Das ist kein
- * Bedienkomfort, das ist ein Weg zum Datenverlust (SC 2.4.6).
- *
- * Warum diese Funktion in der **Domäne** liegt: Es gab sie zweimal — hier und
- * in `apps/web/src/features/todos/attachmentLabel.ts` —, und die beiden
- * **antworteten verschieden** (Befund O-CR). Nicht, weil der Aufgabenbereich des Add-ins
- * Anhänge zeigte: Er zeigt keine. A-19.19 und E-072 Punkt 1 schließen sie
- * strukturell aus, und das Wort `attachment` kommt in
- * `apps/outlook-addin/src/**` kein einziges Mal vor. Der Ort ist richtig, die
- * Begründung, die bis T-168 hier stand, war es nicht (T-165, Befund X-07).
- *
- * ---------------------------------------------------------------------------
- * Die Regel: der **ganze** Wert, gekürzt nur um das, was überall gleich lautet
- * ---------------------------------------------------------------------------
- *
- * | Art | ohne Titel | Beispiel |
- * |---|---|---|
- * | Verweis | Wirt (mit Port), Pfad, Abfrage, Fragment. `https://` fällt weg, `http://` bleibt stehen | `beispiel.example/tickets/4711` |
- * | Verweis, nur Wirt | ist der Pfad `/` und Abfrage und Fragment leer: der Wirt allein | `beispiel.example` |
- * | Datei | der Dateiname **zuerst**, danach der Ordner in Klammern | `rechnung.pdf (C:\Kunden\Meier\)` |
- * | Bild | der erzeugte Name der Kopie | `4a…c1.png` |
- *
- * **Warum beim Verweis der Pfad dazugehört.** Bis T-157 stand hier der Wirt
- * allein. Er erfüllt den Buchstaben von A-19.12 („etwas Lesbares aus der
- * Adresse") und verfehlt den Zweck: Ein Ticketsystem hat einen Wirt und
- * beliebig viele Tickets. Die zweite Zeile der Anhangkarte fängt das nicht
- * auf — sie trägt `truncate` wie die erste, und eine Vorlesehilfe liest den
- * **zugänglichen Namen**, nicht die Nachbarzeile.
- *
- * **Warum `http://` stehen bleibt.** Zwei Gründe, und beide sind gemessen.
- * Erstens ist die Kürzung sonst nicht umkehrbar: `http://a/b` und
- * `https://a/b` sind zwei verschiedene Anhänge und bekämen dieselbe
- * Beschriftung. Zweitens ist es die einzige Stelle vor dem Klick, an der eine
- * **Herabstufung** von `https` auf `http` zu sehen ist — bei einem Verweis
- * fragt Takt nicht zurück (A-A-7), die Liste ist die ganze Anzeige
- * (Bedrohungsmodell, Hinweis T-156-8). `https://` fällt weg, weil es an jedem
- * zweiten Anhang gleich lautet und nichts unterscheidet.
- *
- * **Warum beim Verweis der Port dazugehört.** `hostname` ließ ihn weg;
- * `beispiel.example:8443` und `beispiel.example` sind zwei Wirte.
- *
- * **Warum bei der Datei der Ordner dazugehört — und warum er hinter dem Namen
- * steht.** Zwei Kunden, zwei Ordner, in beiden eine `rechnung.pdf`: derselbe
- * Fall wie beim Wirt, nur unauffälliger. Der **Name** bleibt trotzdem vorn,
- * denn er ist das Unterscheidende, das beim Abschneiden der Zeile stehen
- * bleiben muss und das eine Vorlesehilfe zuerst ansagt. Der Ordner trägt
- * seinen Trenner am Ende: `C:\` ist die Wurzel, `C:` wäre etwas anderes, und
- * `a/` und `a\` sind zwei verschiedene Ordner.
- *
- * **Der volle Pfad in der Beschriftung ist keine neue Klasse Text.** Er steht
- * ohnehin in der zweiten Zeile und in der Rückfrage vor dem Öffnen (A-A-6),
- * und der Rückfallzweig dieser Funktion gibt seit jeher den vollen rohen Wert
- * zurück. Diese Funktion **maskiert nichts** — sie liefert fremden Text, und
- * die Anzeige führt ihn durch `visibleText` beziehungsweise `<Foreign>`
- * (E-063).
- *
- * ---------------------------------------------------------------------------
- * Wie weit die Zusage trägt
- * ---------------------------------------------------------------------------
- *
- * Sie gilt für die **Ersatz**beschriftung, also für Werte, die durch die Tür
- * gekommen sind: eine Adresse in Normalform (A-A-3), ein absoluter Pfad, ein
- * erzeugter Bildname (A-A-17). Für sie ist die Abbildung umkehrbar — aus der
- * Beschriftung lässt sich der Wert zurückrechnen, also können zwei Werte nicht
- * dieselbe Beschriftung ergeben:
- *
- *  - **Verweis:** ein Wirt enthält weder `/` noch `:` ohne Port, damit ist die
- *    Beschriftung mit `http://` genau die der `http`-Adressen; der Rest ist
- *    die Serialisierung selbst.
- *  - **Datei:** der Name enthält keinen Trenner, der Ordner endet auf einen —
- *    die Zerlegung ist damit eindeutig, und beide Teile stehen vollständig da.
- *  - **Bild:** der Name ist der Schlüssel der Kopie und je Datei einmalig.
- *
- * **Zwei Fälle sind ausdrücklich nicht eingeschlossen.** Erstens der Titel:
- * Nennt der Benutzer zwei Anhänge gleich, heißen sie gleich — das ist seine
- * Wahl, und Takt denkt sich daneben nichts aus. Zweitens die Rückfallzweige
- * für einen leeren oder nicht zerlegbaren Wert: Solche Werte entstehen nicht
- * an der Tür, sondern nur, wenn jemand an ihr vorbei in `todo_attachment`
- * schreibt (VG-1, VG-3). Dann ist die Beschriftung der rohe Wert, und das ist
- * die richtige Antwort — sie zeigt, was dasteht.
- *
- * Ein Titel aus lauter Leerzeichen zählt als **fehlend** — dieselbe Regel, die
- * `titleSchema` für den Todo-Titel durchsetzt (`length(trim(title)) > 0`).
- * Der Rückgabewert ist niemals leer: Der letzte Rückfall ist die Zeichenkette
- * selbst, und wenn auch die leer wäre, ein deutsches Wort.
+ * Ersatzbeschriftungen müssen gültige Ziele unterscheidbar halten: Bei Links Port, Pfad und
+ * `http://`, bei Dateien den Ordner erhalten.
+ * Die Rückgabe bleibt Fremdtext und muss bei der Anzeige bereinigt werden. Selbst gewählte Titel
+ * dürfen mehrdeutig sein.
  */
 export function attachmentLabel(
   kind: AttachmentKind,
   title: string | null,
   target: string,
   /**
-   * Der Name aus fremder Hand (A-19.23a) — der Anzeigename einer aus einer
-   * E-Mail übernommenen Datei. Fehlt bei jedem Anhang, den der Benutzer selbst
-   * eingetragen hat, und dann ändert dieser Parameter nichts.
-   *
-   * -------------------------------------------------------------------------
-   * Warum er **zwischen** Titel und Ableitung steht, und nicht davor oder
-   * dahinter
-   * -------------------------------------------------------------------------
-   *
-   * **Der Titel gewinnt weiter.** Er ist das, was der Benutzer selbst gewählt
-   * hat (A-19.10); eine Angabe aus einer fremden E-Mail über seine eigene zu
-   * stellen wäre die falsche Reihenfolge, und sie wäre neu — heute gewinnt der
-   * Titel über alles.
-   *
-   * **Die Ableitung verliert.** Sie wäre hier `4a…c1.pdf` — der **erzeugte**
-   * Name auf der Platte (A-A-78). Der sagt einem Menschen nichts, und drei
-   * Anhänge aus derselben E-Mail hießen drei zufällige Hexzahlen. Genau den
-   * Zustand schließt die zweite Hälfte dieser Funktion aus (T-165, X-04): Zwei
-   * verschiedene Anhänge tragen nie dieselbe Beschriftung — aber eine, die
-   * niemand wiedererkennt, erfüllt den Buchstaben und verfehlt den Zweck,
-   * genau wie der bloße Wirt bis T-157.
-   *
-   * **Der Parameter ist freiwillig**, damit kein bestehender Aufrufer ihn
-   * nennen muß. Wer ihn nennt, bekommt dieselbe Funktion mit einer Stufe mehr;
-   * die Reihenfolge ist an einer Stelle beschrieben und nicht an dreien.
+   * Der Benutzertitel hat Vorrang vor dem fremden Anzeigenamen; dieser wiederum vor dem erzeugten
+   * Dateinamen.
    */
   displayName: string | null = null,
 ): string {

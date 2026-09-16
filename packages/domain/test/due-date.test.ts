@@ -61,9 +61,7 @@ import type { CalendarDay, Timestamp } from '../src/kernel.ts';
 const day = (value: string): CalendarDay => value as CalendarDay;
 const ts = (value: string): Timestamp => value as Timestamp;
 
-// ---------------------------------------------------------------------------
 // isCalendarDay — Form, Bandbreite, Existenz
-// ---------------------------------------------------------------------------
 
 describe('isCalendarDay — Form (A-A-19)', () => {
   it.each(['2026-09-05', '1970-01-01', '2999-12-31', '2024-02-29'])(
@@ -136,9 +134,7 @@ describe('isCalendarDay — der Existenztest über den Rückweg (der Fall, den m
   });
 });
 
-// ---------------------------------------------------------------------------
 // checkDueDate — der abgewiesene Wert steht nicht in der Meldung
-// ---------------------------------------------------------------------------
 
 describe('checkDueDate', () => {
   it('ein gültiger Tag kommt unverändert als ok zurück', () => {
@@ -163,9 +159,7 @@ describe('checkDueDate', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die vier Zustände
-// ---------------------------------------------------------------------------
 
 describe('DUE_STATE_PRESENCE / isDueState / DUE_STATES — Vollständigkeit', () => {
   it('genau vier Zustände, wörtlich benannt', () => {
@@ -261,9 +255,7 @@ describe('dueState — die Tagesgrenze, gemessen mit dem echten Tagesbegriff des
   });
 });
 
-// ---------------------------------------------------------------------------
 // Filtern (A-19.20) — dueComparison / matchesDueComparison als Eigenschaft
-// ---------------------------------------------------------------------------
 
 describe('dueComparison — der Vergleich, der genau den Zustand trifft (A-19.20)', () => {
   const today = day('2026-09-05');
@@ -307,9 +299,7 @@ describe('matchesDueComparison / dueComparison — die Gegenprobe aus dem Quellk
   );
 });
 
-// ---------------------------------------------------------------------------
 // Sortieren (A-19.20, E-074 Punkt 2)
-// ---------------------------------------------------------------------------
 
 describe('compareByDueDate — ein Todo ohne Frist steht in BEIDEN Richtungen am Ende (E-074 Punkt 2)', () => {
   it('beide ohne Frist: nicht zu unterscheiden', () => {

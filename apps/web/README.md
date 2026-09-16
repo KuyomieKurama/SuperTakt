@@ -1,8 +1,8 @@
 # apps/web — Oberfläche und Designsystem von Takt
 
 Reines Vite + React + TypeScript. **Tauri wird hier nicht gebraucht**, es ist keine
-Rust-Toolchain nötig (E-014, R-04). Die Tauri-Hülle kommt in T-008 als eigenes Paket
-`apps/desktop` dazu.
+Rust-Toolchain nötig (E-014, R-04). Die Tauri-Hülle liegt im eigenen Paket
+`apps/desktop`.
 
 ## Musterseite ansehen
 
@@ -11,14 +11,20 @@ pnpm install      # an der Wurzel des Arbeitsbereichs, nicht in apps/web
 pnpm dev          # kurz fuer: pnpm --filter @takt/web dev
 ```
 
-Danach im Browser `http://127.0.0.1:5173` öffnen. Der Entwicklungsserver bindet bewusst nur an
+Danach im Browser `http://127.0.0.1:5173/designsystem.html` öffnen.
+Die Wurzeladresse öffnet die Anwendung, nicht die Musterseite. Der Entwicklungsserver bindet bewusst nur an
 die Loopback-Adresse; Takt läuft lokal (E-001).
 
 Alternativ ohne laufenden Entwicklungsserver:
 
 ```bash
-pnpm build && pnpm preview     # http://127.0.0.1:4173
+pnpm --filter @takt/web build:designsystem
+pnpm --filter @takt/web preview   # http://127.0.0.1:4173/designsystem.html
 ```
+
+Der reguläre Produktionsbau enthält die Musterseite nicht. Maßgeblich sind
+[vite.config.ts](vite.config.ts) und das Skript `build:designsystem` in
+[package.json](package.json).
 
 Die Seite beginnt mit einer Einleitung, die kein Vorwissen voraussetzt: was man sieht, worauf
 man achten soll und wie man die Seite bedient. Oben rechts stehen zwei Schalter:
@@ -64,7 +70,36 @@ Tabulator-Halt ist die Sprungmarke „Zum Inhalt springen“.
 | `pnpm contrast:md` | dasselbe als Markdown-Tabelle |
 
 Von der Wurzel des Arbeitsbereichs aus laufen dieselben Skripte über den Paketfilter, zum
-Beispiel `pnpm --filter @takt/web contrast`. An der Wurzel selbst gibt es kein `contrast`-Skript.
+Beispiel `pnpm --filter @takt/web contrast`. Das Root-Skript `pnpm contrast` delegiert
+ebenfalls dorthin; maßgeblich ist [../../package.json](../../package.json).
+
+## Theme-Dateien
+
+Die eingebauten Themes werden ausschließlich unter [`src/styles/themes/`](src/styles/themes/README.md)
+gepflegt: eine CSS-Datei mit Metadaten je Theme. Entwicklungsstart und Build
+erzeugen daraus Auswahl, Kennungen, Startdarstellung und CSS-Importplan.
+Die Anleitung dort beschreibt auch neue Themes und den Neustart des lokalen Dienstes.
+
+## Das Symbol im Reiter (T-377)
+
+`index.html` und `designsystem.html` verweisen auf `public/favicon-32.png` und
+`public/favicon-192.png`. Das größere Bild wird auch als Logo in der Seitenleiste
+verwendet. Die Hülle hat keinen Reiter und zieht ihr Fenster- und Taskleistensymbol
+aus `apps/desktop/src-tauri/icons/`.
+
+Die Quelle ist dieselbe wie dort, und sie liegt **nicht hier**, sondern in
+`apps/desktop/icons/quelle.png`. Wird sie ersetzt, sind diese zwei Dateien mit zu erneuern:
+
+```bash
+pnpm --filter @takt/desktop tauri icon ../desktop/icons/quelle.png --png 32 --png 192 -o /tmp/favicon
+cp /tmp/favicon/32x32.png  apps/web/public/favicon-32.png
+cp /tmp/favicon/192x192.png apps/web/public/favicon-192.png
+```
+
+`favicon-32.png` ist danach byteweise identisch mit `apps/desktop/src-tauri/icons/32x32.png` —
+gleiche Quelle, gleiches Werkzeug, gleiche Größe. Weicht es ab, ist eine der beiden Seiten
+vergessen worden. Beide Dateien liegen lokal in `public/`; zur Laufzeit lädt nichts nach (E-001),
+und `img-src 'self' data:` in der CSP der Hülle deckt sie ohne Änderung ab.
 
 ## Aufbau
 
@@ -74,6 +109,8 @@ packages/ui-tokens/tokens.css  Farb-, Schrift-, Abstands-, Radien-, Schatten-Tok
                                Outlook-Add-in dieselben Werte braucht (A-10.6, E-040).
 apps/web/
   design/DESIGNSYSTEM.md     Das Designsystem in Worten. Verbindlich.
+  public/                    Was unveraendert neben index.html ausgeliefert wird:
+                             startup-appearance.js und die zwei Reitersymbole.
   scripts/contrast-check.mjs Kontrastmessung gegen packages/ui-tokens/tokens.css.
   src/
     styles/

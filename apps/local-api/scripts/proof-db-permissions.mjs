@@ -127,9 +127,7 @@ if (process.platform === 'win32') {
 // und nicht versehentlich die `umask` dieses Prüfprozesses.
 const vorherigeUmask = process.umask(0o000);
 
-// ---------------------------------------------------------------------------
 section('0  Die Vorbedingung dieses Laufs: die eigene umask ist weit');
-// ---------------------------------------------------------------------------
 //
 // `process.umask()` ohne Wert liest, ohne zu setzen. Steht hier etwas anderes
 // als `0o000`, sind die Zeilen in Abschnitt 1, 3 und 4 keine Aussage über das
@@ -152,9 +150,7 @@ async function scratch(prefix) {
 }
 
 try {
-  // ---------------------------------------------------------------------------
   section('1  Ein frisch angelegter Bestand liegt mit 0600 — trotz weiter umask');
-  // ---------------------------------------------------------------------------
   {
     const dir = await scratch('takt-proof-perm-neu-');
     const path = join(dir, 'takt.db');
@@ -186,9 +182,7 @@ try {
     database.close();
   }
 
-  // ---------------------------------------------------------------------------
   section('2  Ein Bestand aus einer früheren Fassung wird beim Öffnen eingeholt');
-  // ---------------------------------------------------------------------------
   {
     const dir = await scratch('takt-proof-perm-alt-');
     const path = join(dir, 'takt.db');
@@ -216,9 +210,7 @@ try {
     second.close();
   }
 
-  // ---------------------------------------------------------------------------
   section('3  Die Sicherungskopie des Migrationsläufers erbt den engen Modus');
-  // ---------------------------------------------------------------------------
   {
     const dir = await scratch('takt-proof-perm-backup-');
     const path = join(dir, 'takt.db');
@@ -248,9 +240,7 @@ try {
     database.close();
   }
 
-  // ---------------------------------------------------------------------------
   section('4  Der echte Startpfad des Dienstes, mit absichtlich weiter umask');
-  // ---------------------------------------------------------------------------
   {
     const dataHome = await scratch('takt-proof-perm-start-');
     const appDir = appDataDirIn(dataHome);
@@ -311,9 +301,7 @@ try {
     await sleep(300);
   }
 
-  // ---------------------------------------------------------------------------
   section('5  Der Ordner der übernommenen E-Mail-Dateien (A-19.23, A-A-78, A-A-79)');
-  // ---------------------------------------------------------------------------
   //
   // Dieselbe Zusage wie für die Bildkopien in A-A-27, für einen zweiten Ordner:
   // Verzeichnis `0700`, Datei `0600`, **ausdrücklich gesetzt** und nicht der

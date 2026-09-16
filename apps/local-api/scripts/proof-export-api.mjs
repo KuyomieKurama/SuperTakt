@@ -1,3 +1,4 @@
+import { waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis der beiden Erweiterungen aus T-033 (E-049, E-051).
  *
@@ -35,7 +36,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
-import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
 import { dienstEinstieg } from './source-resolve.mjs';
@@ -84,31 +84,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Ein Verbindungsversuch, der scheitert, heißt "frei"; einer, der ankommt, heißt "belegt". */
-function portFree(port) {
-  return new Promise((done) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    socket.once('connect', () => {
-      socket.destroy();
-      done(false);
-    });
-    socket.once('error', () => done(true));
-    setTimeout(() => {
-      socket.destroy();
-      done(true);
-    }, 500).unref();
-  });
-}
 
-/** Dasselbe Muster wie in `proof-access.mjs` — die Prüfpfade teilen sich den Port. */
-async function waitForPortFree(port, timeoutMs = 5000) {
-  const until = Date.now() + timeoutMs;
-  do {
-    if (await portFree(port)) return true;
-    await sleep(150);
-  } while (Date.now() < until);
-  return false;
-}
 
 /**
  * Jeder Antwortkörper dieses Laufs — die Menge, über die Abschnitt 8 urteilt.
@@ -161,9 +137,7 @@ function call(path, { method = 'GET', token, origin = UI_ORIGIN, body, sammeln =
   });
 }
 
-// ---------------------------------------------------------------------------
 // Aufbau
-// ---------------------------------------------------------------------------
 
 if (!(await waitForPortFree(PORT))) {
   console.error(
@@ -231,9 +205,7 @@ try {
   check('der Dienst kommt hoch', up, stderr.slice(-400));
   if (!up) throw new Error('Dienst nicht erreichbar');
 
-  // -------------------------------------------------------------------------
   section('1  GET /export/sources liefert die Auswahlliste (E-049)');
-  // -------------------------------------------------------------------------
 
   const sources = await get('/export/sources');
   check('die Route antwortet mit 200', sources.status === 200, `Status ${sources.status}: ${sources.text.slice(0, 200)}`);
@@ -322,9 +294,7 @@ try {
     (await call('/export/sources')).status === 401,
   );
 
-  // -------------------------------------------------------------------------
   section('2  Jede ausgelieferte Quelle wird beim Speichern angenommen');
-  // -------------------------------------------------------------------------
 
   /**
    * Eine Vorlage über **alle** gelieferten Quellen. Aus der Antwort gebaut,
@@ -355,9 +325,7 @@ try {
     `Status ${previewAll.status}: ${previewAll.text.slice(0, 300)}`,
   );
 
-  // -------------------------------------------------------------------------
   section('3  Bestand für die Vorschau: ein Todo mit drei Buchungen an einem Tag');
-  // -------------------------------------------------------------------------
 
   const todo = await post('/todos', {
     title: 'Call 4711',
@@ -408,9 +376,7 @@ try {
     note: 'Etwas getan',
   });
 
-  // -------------------------------------------------------------------------
   section('4  POST /export/preview nimmt eine Definition entgegen (E-051)');
-  // -------------------------------------------------------------------------
 
   const stored = await post('/export/preview', { templateId: null, timeEntryIds: [] });
   check('die Vorschau auf den gespeicherten Stand geht weiter (200)', stored.status === 200, stored.text.slice(0, 200));
@@ -482,9 +448,7 @@ try {
     JSON.stringify(stillOpen.map((entry) => entry.exportStatus)),
   );
 
-  // -------------------------------------------------------------------------
   section('5  Die Prüfung ist dieselbe wie beim Speichern (E-051, Auflage)');
-  // -------------------------------------------------------------------------
 
   /**
    * Neun Definitionen, die das Speichern ablehnt. Jede geht an **beide**
@@ -552,9 +516,7 @@ try {
     note.body?.error?.message,
   );
 
-  // -------------------------------------------------------------------------
   section('6  Die Ränder: eindeutig oder abgewiesen');
-  // -------------------------------------------------------------------------
 
   const templates = listOf(await get('/export/templates')) ?? [];
   const builtinId = templates.find((entry) => entry.isBuiltin)?.id;
@@ -598,9 +560,7 @@ try {
     `Status ${ohneAlles.status}: ${ohneAlles.text.slice(0, 200)}`,
   );
 
-  // -------------------------------------------------------------------------
   section('7  Verhalten, das so bleiben sollte (T-031, gemessen)');
-  // -------------------------------------------------------------------------
 
   const bedingt = await post('/export/preview', {
     definition: {
@@ -630,9 +590,7 @@ try {
     JSON.stringify(ohneCallZeile),
   );
 
-  // -------------------------------------------------------------------------
   section('8  Der Vermerk kommt in keiner dieser Antworten vor (A-7.2, R-06)');
-  // -------------------------------------------------------------------------
 
   // A-A-57 — die Untergrenze der Menge, über die die nächste Zeile urteilt.
   // `some` über einer leeren Menge ist falsch, die Verneinung also wahr: Ohne

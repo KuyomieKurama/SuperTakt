@@ -35,7 +35,7 @@ import { Icon, type IconName } from "./Icon";
  *
  * |                  | überfällig        | heute fällig       | später fällig |
  * |------------------|-------------------|--------------------|---------------|
- * | Wortlaut         | „Überfällig"      | „Heute fällig"     | nur das Datum |
+ * | Wortlaut         | nur das Datum      | „Heute fällig"     | nur das Datum |
  * | Absolutes Datum  | immer dabei       | immer dabei        | ist der Text  |
  * | Symbol           | `alert-triangle`  | `calendar-clock`   | `calendar`    |
  * | Füllung          | voll gefüllt      | Kontur, kräftig    | keine Fläche  |
@@ -117,7 +117,7 @@ export function DeadlineFlag({ dueDate, today, className }: DeadlineFlagProps) {
       aria-label={word === null ? `Frist: ${date}` : `${word} — Frist: ${date}`}
     >
       <Icon name={DEADLINE_ICON[state]} size={12} />
-      {word === null ? null : <span className="deadline__word">{word}</span>}
+      {word === null || state === "overdue" ? null : <span className="deadline__word">{word}</span>}
       <span className="deadline__date tabular">{date}</span>
     </span>
   );

@@ -1,7 +1,5 @@
 import { useState } from "react";
-import {
-  listTimeEntries,
-} from "../../api/endpoints";
+import { listTimeEntries } from "../bookings/api";
 import {
   listTodos,
 } from "../todos/api";
@@ -87,7 +85,7 @@ export function TimeScreen() {
 
   const data = useAsync(async () => {
     const [entries, todos, all] = await Promise.all([
-      listTimeEntries({ fromDay: today, toDay: today }, { limit: 200 }),
+      listTimeEntries({ fromDay: today, toDay: today, includeNoExport: true }, { limit: 200 }),
       listTodos(showDone ? {} : { onlyOpen: true }, { limit: 100 }),
       // Wie viele wären es ohne die Ausblendung? Nur gefragt, wenn
       // ausgeblendet wird — sonst ist die Zahl bereits bekannt.

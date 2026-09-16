@@ -73,9 +73,7 @@ const tokensPath = resolve(repoRoot, "packages/ui-tokens/tokens.css");
 /** Ein Pfad für die Ausgabe — relativ zur Wurzel, mit Schrägstrichen. */
 const label = (target) => relative(repoRoot, target).split(/[\\/]/).join("/");
 
-/* ------------------------------------------------------------------ */
 /* Token aus der CSS-Datei lesen                                       */
-/* ------------------------------------------------------------------ */
 
 /**
  * Schneidet den Inhalt eines Selektorblocks heraus, beginnend beim ersten
@@ -120,9 +118,7 @@ for (const [key, value] of parseDeclarations(
   darkTokens.set(key, value);
 }
 
-/* ------------------------------------------------------------------ */
 /* Farbrechnung                                                        */
-/* ------------------------------------------------------------------ */
 
 /** Loest `var(--x)`-Verweise auf, maximal 10 Ebenen tief. */
 function resolveToken(tokens, name, depth = 0) {
@@ -179,9 +175,7 @@ function flatten(front, back) {
   };
 }
 
-/* ------------------------------------------------------------------ */
 /* Die Flaeche unter einer teildurchsichtigen Farbe                    */
-/* ------------------------------------------------------------------ */
 
 /** Der Anwendungshintergrund. Die einzige Flaeche, unter der nichts mehr liegt. */
 const CANVAS = "--bg-canvas";
@@ -241,9 +235,7 @@ function contrastRatio(fg, bg) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/* ------------------------------------------------------------------ */
 /* Zu pruefende Paare                                                  */
-/* ------------------------------------------------------------------ */
 
 /**
  * `min` ist die Mindestanforderung nach WCAG 2.2 AA:
@@ -811,15 +803,11 @@ const pairs = [
   { group: "Struktur", fg: "--focus-ring-color", bg: "--bg-canvas", min: 3, note: "Fokusring auf Hintergrund" },
   { group: "Struktur", fg: "--focus-ring-color", bg: "--bg-subtle", min: 3, note: "Fokusring in Werkzeugleiste" },
 
-  /* ---------------------------------------------------------------- */
   /* Der nicht-modale Versionshinweis (T-144 U-01, T-147)              */
-  /* ---------------------------------------------------------------- */
   { group: "Versionshinweis", fg: "--info-fg", bg: "--info-bg", min: 4.5, note: "Leiste mitten in der Sitzung" },
   { group: "Versionshinweis", fg: "--info-border", bg: "--bg-canvas", min: 1, note: "Trennlinie der Leiste — Zierde, keine Grenze" },
 
-  /* ---------------------------------------------------------------- */
   /* Frist und Anhaenge (Abschnitt 19, T-147)                          */
-  /* ---------------------------------------------------------------- */
   //
   // Die drei Zustaende der Frist unterscheiden sich ueber sechs Merkmale, von
   // denen nur eines die Farbe ist (SC 1.4.1). Gemessen wird sie trotzdem: Ein
@@ -857,9 +845,7 @@ const pairs = [
   { group: "Anhaenge", fg: "--text-muted", bg: "--bg-inset", min: 4.5, note: "Beschriftungen in der Rueckfrage" },
 ];
 
-/* ------------------------------------------------------------------ */
 /* Ausfuehrung                                                         */
-/* ------------------------------------------------------------------ */
 
 const themes = [
   { label: "hell", tokens: lightTokens },
@@ -907,9 +893,7 @@ function listComplaint(pair) {
   );
 }
 
-/* ------------------------------------------------------------------ */
 /* Vollstaendigkeit — A-A-45                                           */
-/* ------------------------------------------------------------------ */
 
 /**
  * Token, die gezeichnet werden und **keine Kontrastfrage stellen**.
@@ -1243,9 +1227,7 @@ if (completeness.length === 0) {
   }
 }
 
-/* ------------------------------------------------------------------ */
 /* Gegenproben — der Lauf gegen eine eingesetzte Verletzung            */
-/* ------------------------------------------------------------------ */
 
 /*
  * Ein Waechter, der nie rot war, ist eine Behauptung ueber einen Waechter — die
@@ -1491,9 +1473,7 @@ for (const entry of probes) {
   );
 }
 
-/* ------------------------------------------------------------------ */
 /* Schlusszeile                                                        */
-/* ------------------------------------------------------------------ */
 
 const measurements = pairs.length * themes.length;
 const withSurface = pairs.filter((pair) => surfaceStack(pair).length > 0).length;

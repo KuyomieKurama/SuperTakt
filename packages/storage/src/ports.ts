@@ -1,18 +1,4 @@
-/**
- * Takt — Ausgehende Ports (Hexagonale Architektur).
- *
- * Diese Datei beschreibt, was die Anwendungsfälle von der Speicherung brauchen,
- * in der Sprache der Domäne. Kein SQL, kein Dateipfad, kein Treibertyp.
- *
- * Der SQLite-Adapter setzt diese Schnittstellen um. Ein anderer Adapter — etwa
- * gegen einen Dienst, falls das „zumindest derzeit" aus E-001 später fällt —
- * ersetzt ihn, ohne dass die Domäne oder ein Anwendungsfall sich ändert.
- *
- * T-001 liefert nur Typen. Der Adapter entsteht in T-009. Bezeichner sind
- * englisch und an den Tabellennamen ausgerichtet (E-015, R-16), Kommentare
- * bleiben deutsch.
- */
-
+import type { MailEntry } from '@takt/domain';
 import type {
   AppSettings,
   AppSettingsUpdate,
@@ -62,12 +48,11 @@ import type {
   TodoId,
   TodoNote,
   TodoStatus,
+  TodoPriority,
   TodoUpdate,
 } from '@takt/domain';
 
-// ---------------------------------------------------------------------------
 // Querschnitt
-// ---------------------------------------------------------------------------
 
 /** Seitenweises Abrufen. Fortsetzungsmarke statt Seitenzahl, siehe architektur.md. */
 export interface Page<T> {
@@ -104,6 +89,7 @@ export interface TransactionPort {
 
 /** Bündel aller Ports innerhalb einer Transaktion. */
 export interface UnitOfWork {
+  readonly mails: MailPort;
   readonly todos: TodoPort;
   readonly notes: TodoNotePort;
   readonly attachments: AttachmentPort;
@@ -111,6 +97,7 @@ export interface UnitOfWork {
   readonly folders: TagFolderPort;
   readonly pools: PoolPort;
   readonly statuses: TodoStatusPort;
+  readonly priorities: TodoPriorityPort;
   readonly timeEntries: TimeEntryPort;
   readonly timer: TimerPort;
   readonly idle: IdleTimerPort;
@@ -125,9 +112,7 @@ export interface UnitOfWork {
   readonly dataArchive: DataArchivePort;
 }
 
-// ---------------------------------------------------------------------------
 // Datensicherung und Migration (A-20.*)
-// ---------------------------------------------------------------------------
 
 /** JSON-kompatibler Zellenwert des anwendungsunabhängigen Archivs. */
 export type ArchiveScalar = string | number | null;
@@ -139,10 +124,13 @@ export type ArchiveRow = Readonly<Record<string, ArchiveScalar>>;
  */
 export const DATA_ARCHIVE_TABLES = [
   'todo_status',
+  'todo_priority',
   'tag_folder',
   'tag',
   'todo',
   'todo_note',
+  'todo_mail',
+  'addin_mail_receipt',
   'todo_tag',
   'time_entry',
   'timer_heartbeat',
@@ -169,9 +157,7 @@ export interface DataArchivePort {
   replaceAll(tables: DataArchiveTables): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
 // Todos
-// ---------------------------------------------------------------------------
 
 export interface TodoPort {
   load(id: TodoId): Promise<Todo | null>;
@@ -230,9 +216,7 @@ export interface TodoNotePort {
   write(todoId: TodoId, text: string, now: Timestamp): Promise<TodoNote>;
 }
 
-// ---------------------------------------------------------------------------
 // Anhänge (A-19.8 bis A-19.15)
-// ---------------------------------------------------------------------------
 
 /**
  * Anhänge eines Todos — Tabelle `todo_attachment` (A-19.8 bis A-19.14).
@@ -513,7 +497,6 @@ export interface AttachmentPort {
   emailFileCount(): Promise<number>;
 }
 
-
 /**
  * Die **Bytes** eines Bildanhangs (E-071 Punkt 2, A-A-15 bis A-A-18).
  *
@@ -741,9 +724,7 @@ export interface AttachmentBlobPort {
    */
   listEmailFiles(): Promise<readonly string[]>;
 
-  // -------------------------------------------------------------------------
   // Die Datensicherung trägt die Bytes mit (A-19.34, A-A-90, Archivfassung 6)
-  // -------------------------------------------------------------------------
 
   /**
    * Liest eine übernommene E-Mail-Datei zurück — für die Datensicherung
@@ -946,9 +927,7 @@ export type ImageBlobFailure =
   /** Das Schreiben der Kopie ist gescheitert. */
   | 'write_failed';
 
-// ---------------------------------------------------------------------------
 // Tags und Ordner
-// ---------------------------------------------------------------------------
 
 export interface TagPort {
   load(id: TagId): Promise<Tag | null>;
@@ -1058,7 +1037,6 @@ export interface TagFolderPort {
   ): Promise<Result<void, TaktError<'tag_folder_not_empty' | 'tag_in_use' | 'not_found'>>>;
 }
 
-// ---------------------------------------------------------------------------
 // Pools **und** Kanban-Spalten (A-3.4, E-054)
 //
 // Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel wie
@@ -1070,7 +1048,6 @@ export interface TagFolderPort {
 // Regel, nie die Mitgliedschaft (A-3.4). Eine Karte kann in mehreren Spalten
 // zugleich stehen — bei Regeln ist das unvermeidlich, und `members` liefert sie
 // jeder von ihnen.
-// ---------------------------------------------------------------------------
 
 /** Eine Regel, auf Kennung und Name verkürzt. Siehe `PoolPort.listNames`. */
 export interface PoolNameEntry {
@@ -1288,7 +1265,6 @@ export interface PoolPort {
   members(id: PoolId, filter?: TodoFilter, pagination?: Pagination): Promise<Page<Todo>>;
 }
 
-// ---------------------------------------------------------------------------
 // Der Status eines Todos (A-5.3, A-5.4) — Tabelle `todo_status`
 //
 // **Keine Kanban-Spalte.** Seit E-054 ist eine Spalte eine Regel und liegt in
@@ -1296,7 +1272,6 @@ export interface PoolPort {
 // lässt sich in einer Regel **nach** dem Status filtern (`Pool.statusIds`) —
 // das macht die Spalte nicht wieder zum Status: Eine Spalte kann mehrere
 // Status umfassen, keinen, oder Status und Tags mischen.
-// ---------------------------------------------------------------------------
 
 export interface TodoStatusPort {
   list(): Promise<readonly TodoStatus[]>;
@@ -1342,11 +1317,10 @@ export interface TodoStatusPort {
   >;
 }
 
-// ---------------------------------------------------------------------------
 // Zeitbuchungen und Timer
-// ---------------------------------------------------------------------------
 
 export interface TimeEntryFilter {
+  readonly excludeNoExport?: boolean;
   readonly todoId?: TodoId;
   readonly exportStatus?: ExportStatus;
   /**
@@ -1462,6 +1436,7 @@ export interface TimerPort {
 
 /** A-24: genau eine noch nicht zugeordnete Inaktivitätsphase. */
 export interface IdleSession {
+  readonly previousPeriods?: readonly Omit<IdleSession, "previousPeriods">[];
   readonly id: TimeEntryId;
   readonly todoId: TodoId;
   readonly startedAt: Timestamp;
@@ -1472,6 +1447,7 @@ export interface IdleSession {
 export interface IdleTimerPort {
   pending(): Promise<IdleSession | null>;
   begin(session: IdleSession): Promise<void>;
+  replace(session: IdleSession): Promise<void>;
   returned(id: TimeEntryId, at: Timestamp): Promise<void>;
   clear(id: TimeEntryId): Promise<void>;
 }
@@ -1518,9 +1494,7 @@ export interface TimerHeartbeatPort {
   } | null>;
 }
 
-// ---------------------------------------------------------------------------
 // Export
-// ---------------------------------------------------------------------------
 
 /**
  * Lesezugriff für den Export.
@@ -1705,9 +1679,7 @@ export interface ExportTemplatePort {
   ): Promise<Result<void, TaktError<'builtin_template_immutable' | 'not_found'>>>;
 }
 
-// ---------------------------------------------------------------------------
 // Einstellungen und Standard-Tags
-// ---------------------------------------------------------------------------
 
 export interface AppSettingsPort {
   load(): Promise<AppSettings>;
@@ -1838,9 +1810,7 @@ export interface VersionCheckStatePort {
   recordCheck(at: Timestamp): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
 // Ports, die nicht auf die Datenbank zeigen
-// ---------------------------------------------------------------------------
 
 /**
  * Die Uhr. Eigener Port, damit Anwendungsfälle mit fester Zeit prüfbar sind.
@@ -1958,4 +1928,19 @@ export interface SystemPort {
    * Nichtaussage ist keine Entwarnung, genauso wie bei den Merkmalen oben.
    */
   databaseFilesTooPermissive(): number | null;
+}
+
+export interface MailPort {
+  list(todoId: TodoId): Promise<readonly MailEntry[]>;
+  find(todoId: TodoId, identity: string): Promise<MailEntry | null>;
+  insert(entry: MailEntry): Promise<void>;
+  receipt(key: string): Promise<{ readonly fingerprint: string; readonly response: string } | null>;
+  record(key: string, fingerprint: string, todoId: TodoId, response: string): Promise<void>;
+}
+
+export interface TodoPriorityPort {
+  list(): Promise<readonly TodoPriority[]>;
+  load(id: string): Promise<TodoPriority | null>;
+  save(id: string | null, name: string, weight: number, now: Timestamp): Promise<Result<TodoPriority, TaktError>>;
+  remove(id: string): Promise<Result<void, TaktError>>;
 }

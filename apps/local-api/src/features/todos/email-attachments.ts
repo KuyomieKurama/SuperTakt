@@ -102,9 +102,7 @@ import { type AppContext, type UseCaseResult, now } from '../../context.ts';
 import type { Logger } from '../../logger.ts';
 import { type AttachmentView, toAttachmentView } from './attachments.ts';
 
-// ---------------------------------------------------------------------------
 // Was hereinkommt
-// ---------------------------------------------------------------------------
 
 /**
  * Die **Nachricht selbst** als Datei (A-19.22).
@@ -263,9 +261,7 @@ export interface FreshTodo<T> {
   readonly value: T;
 }
 
-// ---------------------------------------------------------------------------
 // Die Naht
-// ---------------------------------------------------------------------------
 
 /**
  * Legt ein Todo an und hängt die Anhänge aus der E-Mail daran (A-19.22 bis
@@ -325,6 +321,7 @@ export async function attachEmailToNewTodo<T>(
   intake: EmailIntake,
   create: () => Promise<UseCaseResult<FreshTodo<T>>>,
   logger: Logger,
+  rollbackOnRowError = false,
 ): Promise<UseCaseResult<TodoWithEmailAttachments<T>>> {
   const created = await create();
   if (!created.ok) {
@@ -605,7 +602,8 @@ export async function attachEmailToNewTodo<T>(
       }
       return { views, rejected };
     });
-  } catch {
+  } catch (error) {
+    if (rollbackOnRowError) throw error;
     /*
      * Jede Datei einzeln, und ein Fehlschlag beim Entfernen hält die übrigen
      * nicht auf: Der Adapter beantwortet ihn mit `failed` und schreibt seine
@@ -682,14 +680,16 @@ export async function attachEmailToNewTodo<T>(
    * ausdehnt, die **vor** diesem Aufruf lag, braucht `releaseUnclaimedBlobs`.
    */
   const rejectedIndices = new Set(rows.rejected);
-  for (const entry of written) {
-    if (!rejectedIndices.has(entry.index)) continue;
-    const input = pending[entry.index];
+  for (const index of rejectedIndices) {
+    const input = pending[index];
     failed.push({
       displayName: input?.displayName ?? '',
       reason: 'rejected',
       bytes: null,
     });
+  }
+  for (const entry of written) {
+    if (!rejectedIndices.has(entry.index)) continue;
     await context.attachmentBlobs.removeEmailFile(entry.path);
   }
 
@@ -699,9 +699,7 @@ export async function attachEmailToNewTodo<T>(
   });
 }
 
-// ---------------------------------------------------------------------------
 // Die Fähigkeit, wie das Add-in sie bekommt
-// ---------------------------------------------------------------------------
 
 /**
  * Die Anhangsübernahme als **Fähigkeit** — ohne `AppContext` in der Signatur.
@@ -746,13 +744,12 @@ export type EmailAttachmentIntake = <T>(
 export function createEmailAttachmentIntake(
   context: AppContext,
   logger: Logger,
+  rollbackOnRowError = false,
 ): EmailAttachmentIntake {
-  return (intake, create) => attachEmailToNewTodo(context, intake, create, logger);
+  return (intake, create) => attachEmailToNewTodo(context, intake, create, logger, rollbackOnRowError);
 }
 
-// ---------------------------------------------------------------------------
 // Der Absender
-// ---------------------------------------------------------------------------
 
 /**
  * Die längste Absenderangabe, die in den Bestand geht (Migration 0023).

@@ -1,15 +1,3 @@
-/**
- * Takt — Zusammenbau an genau einer Stelle (architektur.md 1.3).
- *
- * Alle Adapter werden hier erzeugt und in die Prüfschicht gereicht. Kein
- * Dienstsucher, keine versteckten Einzelstücke. Wer wissen will, was der Dienst
- * wirklich anspricht, liest diese Datei.
- *
- * Für den Prüfpfad wird derselbe Zusammenbau mit Attrappen aufgerufen — etwa
- * mit einem Tokenspeicher im Arbeitsspeicher. Ein Nachweispfad lässt sich damit
- * ohne Datei und ohne echtes Geheimnis prüfen.
- */
-
 import type { Hono } from 'hono';
 
 import {
@@ -147,10 +135,8 @@ export function compose(options: CompositionOptions): Composition {
     throttle: EMPTY_THROTTLE,
   };
 
-  // ---------------------------------------------------------------------------
   // Die Speicherung. Der Pfad kommt aus dem Anwendungsdatenverzeichnis (E-018)
   // und nie aus einer Anfrage oder einem Argument (B-1.6 Punkt 1).
-  // ---------------------------------------------------------------------------
   const clockPort = createClockPort(clock);
 
   const database =

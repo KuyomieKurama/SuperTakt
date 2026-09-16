@@ -1,3 +1,4 @@
+import { recordLogs } from './support/record-logs.ts';
 /**
  * Takt — T-132: Der Startabbruch nennt seinen Grund, und zwar pfadfrei.
  *
@@ -51,7 +52,7 @@ import { describe, expect, it } from 'vitest';
 
 import { migrationFailure, type MigrationFailureReason, type MigrationState } from '@takt/storage';
 
-import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../src/logger.ts';
+import { UNCLASSIFIED_REASON } from '../src/logger.ts';
 import {
   bringDatabaseUpToDate,
   describeMigrationFailure,
@@ -59,21 +60,11 @@ import {
   type MigrationStep,
 } from '../src/startup.ts';
 
-// ---------------------------------------------------------------------------
 // Hilfen
-// ---------------------------------------------------------------------------
 
-interface Recorded {
-  readonly logger: Logger;
-  readonly lines: { level: string; message: string; reason?: string }[];
-}
 
-/** Ein Protokollierer, der seine Zeilen behält — die echte Ausgabe, nur abgefangen. */
-function recording(): Recorded {
-  const lines: { level: string; message: string; reason?: string }[] = [];
-  const logger = createLogger((line) => lines.push(JSON.parse(line) as never));
-  return { logger, lines };
-}
+
+
 
 /** Ein Läufer, der einen vorgegebenen Wurf wirft. */
 function throwing(error: unknown): MigrationStep {
@@ -130,11 +121,9 @@ const ALLE_GRUENDE: readonly MigrationFailureReason[] = [
   { kind: 'unknown', code: null, sqlite: 26 },
 ];
 
-// ---------------------------------------------------------------------------
-
 describe('T-132 — der Grund wird unterschieden', () => {
   it('checksum_mismatch nennt die Fassung', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const ok = await bringDatabaseUpToDate(
       throwing(failure({ kind: 'checksum_mismatch', version: 12 })),
       logger,
@@ -147,7 +136,7 @@ describe('T-132 — der Grund wird unterschieden', () => {
   });
 
   it('database_too_new nennt beide Fassungen', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     await bringDatabaseUpToDate(
       throwing(failure({ kind: 'database_too_new', database: 13, known: 12 })),
       logger,
@@ -156,7 +145,7 @@ describe('T-132 — der Grund wird unterschieden', () => {
   });
 
   it('ein Fehlschlag mitten in einer Migration nennt Fassung und Richtung', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     await bringDatabaseUpToDate(
       throwing(
         failure({
@@ -175,7 +164,7 @@ describe('T-132 — der Grund wird unterschieden', () => {
   });
 
   it('der Fehlschlag der Sicherungskopie ist ein anderer Fall als der einer Migration', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     await bringDatabaseUpToDate(
       throwing(failure({ kind: 'backup_failed', from: 12, code: 'ENOSPC', sqlite: null })),
       logger,
@@ -186,13 +175,13 @@ describe('T-132 — der Grund wird unterschieden', () => {
   });
 
   it('ein belegter Bestand bekommt einen eigenen Grund und das Ergebniskennzeichen von SQLite', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     await bringDatabaseUpToDate(throwing(failure({ kind: 'database_busy', sqlite: 5 })), logger);
     expect(lines[0]?.reason).toBe('database_busy sqlite=5');
   });
 
   it('ein Wurf ohne bekannte Form wird eingeordnet, so weit es ohne seine Meldung geht', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const fremd = Object.assign(new Error('Etwas ganz anderes in /home/jemand/takt.db'), {
       code: 'ENOENT',
     });
@@ -207,7 +196,7 @@ describe('T-132 — der Grund wird unterschieden', () => {
   });
 
   it('ein Wurf, der gar kein Objekt ist, kippt den Startpfad nicht', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const ok = await bringDatabaseUpToDate(throwing('nur ein Text'), logger);
     expect(ok).toBe(false);
     expect(lines[0]?.reason).toBe('unknown');
@@ -258,7 +247,7 @@ describe('T-132 — keine dieser Zeilen trägt einen Pfad', () => {
 
   it('der Schlüssel bleibt im Zeichenvorrat, den der Protokollierer durchlässt', () => {
     for (const reason of ALLE_GRUENDE) {
-      const { logger, lines } = recording();
+      const { logger, lines } = recordLogs();
       logger.lifecycle('error', 'egal', describeMigrationFailure(failure(reason)).key);
       // Nicht `unclassified`: Der Riegel greift, aber er greift hier nicht ein.
       expect(lines[0]?.reason, reason.kind).not.toBe(UNCLASSIFIED_REASON);
@@ -267,7 +256,7 @@ describe('T-132 — keine dieser Zeilen trägt einen Pfad', () => {
   });
 
   it('ein Grund in falscher Gestalt wird ersetzt und nicht ausgegeben', () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     for (const boese of [
       'pfad=/home/jemand/.local/share/takt/takt.db',
       'C:\\Users\\Jemand\\AppData\\Local\\Takt',
@@ -285,7 +274,7 @@ describe('T-132 — keine dieser Zeilen trägt einen Pfad', () => {
 
 describe('T-132 — der Startpfad ohne Fehlschlag', () => {
   it('ein Bestand auf Stand meldet nichts und lässt den Dienst weiterlaufen', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const ok = await bringDatabaseUpToDate(
       {
         state: () => Promise.resolve({ kind: 'current', version: 12 } satisfies MigrationState),
@@ -298,7 +287,7 @@ describe('T-132 — der Startpfad ohne Fehlschlag', () => {
   });
 
   it('eine gelaufene Migration steht mit Fassungen und Sicherungskopie im Protokoll', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const ok = await bringDatabaseUpToDate(
       {
         state: () =>

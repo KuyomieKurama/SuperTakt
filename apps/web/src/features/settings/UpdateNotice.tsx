@@ -6,43 +6,8 @@ import { UpdateDialog } from "./UpdateDialog";
 import type { UpdateNoticeApi } from "./useUpdateNotice";
 
 /**
- * Takt — die Fläche der Versionsprüfung, an einer Stelle (Abschnitt 18).
- *
- * Die Verdrahtung zwischen {@link useUpdateNotice} und {@link UpdateDialog},
- * und der Grund für die erste Bedingung darunter: **Ist nichts zu melden,
- * entsteht kein Element.** Kein leerer Behälter, kein verstecktes `div`, kein
- * Abzeichen in der Kopfleiste, das darauf wartet, gefüllt zu werden.
- *
- * Das ist der Fall, in dem am leichtesten unbemerkt eine Fläche auftaucht
- * (A-18.5, TP-VER-08): „alles aktuell", „noch nichts geprüft", „GitHub nicht
- * erreichbar", „unbrauchbare Antwort" und „keine Hülle" sehen von außen gleich
- * aus — und sie sehen aus wie nichts.
- *
- * ===========================================================================
- * Zwei Flächen, und welche kommt, entscheidet der **Zeitpunkt** (T-144 U-01)
- * ===========================================================================
- *
- * **Beim Start** (`arrival === "start"`): der modale Dialog, unverändert. Der
- * Benutzer hat noch nichts getan; ein Dialog unterbricht nichts, und die
- * Entscheidung steht am richtigen Ort.
- *
- * **Mitten in der Sitzung** (`arrival === "session"`): eine ruhige,
- * **nicht-modale** Leiste. Sie nimmt keinen Fokus, sie legt sich über nichts,
- * sie lässt sich wegklicken — und aus ihr heraus öffnet der Benutzer den Dialog
- * **selbst**. Dann ist der Fokuswechsel angefordert und keine Nebenwirkung
- * (SC 3.2.5).
- *
- * **Warum nicht einfach den Dialog ohne Fokusübernahme zeigen.** Das war der
- * naheliegende Vorschlag und ist die schlechtere Lösung: Ein `aria-modal="true"`
- * unter einer Abdunklung verbirgt den Rest der Anwendung vor Hilfsmitteln.
- * Bliebe der Fokus draußen, tippte der Benutzer weiter in ein Feld, das für
- * seine Vorlesehilfe nicht mehr existiert — ein zweiter Fehler statt einer
- * Behebung.
- *
- * **Warum nicht bis zum nächsten Start warten.** Auch das wäre möglich (T-144
- * schlägt es vor), aber A-18.2 verlangt die Prüfung „beim Start **und danach
- * regelmäßig**". Ein Takt, das über Tage läuft, erführe sonst nichts, und die
- * regelmäßige Prüfung wäre eine Prüfung ohne Wirkung.
+ * A-27.12: Automatische Hinweise sind nicht modal. Der Benutzer öffnet
+ * die Details ausdrücklich. „start“ bleibt für bestehende Vorschauen erhalten.
  */
 export function UpdateNotice({ api }: { readonly api: UpdateNoticeApi }) {
   const { view, arrival, busy, problem, install, skip, postpone } = api;

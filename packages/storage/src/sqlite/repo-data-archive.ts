@@ -21,14 +21,17 @@ interface TableDefinition {
 }
 
 const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freeze({
+  todo_priority: { columns: ['id', 'name', 'weight', 'created_at', 'updated_at'], orderBy: 'weight DESC, id' },
   todo_status: { columns: ['id', 'name', 'position', 'is_default', 'color', 'created_at', 'updated_at'], orderBy: 'position, id' },
   tag_folder: { columns: ['id', 'parent_id', 'name', 'created_at', 'updated_at'], orderBy: 'created_at, id' },
   tag: { columns: ['id', 'folder_id', 'name', 'color', 'created_at', 'updated_at', 'name_key'], orderBy: 'created_at, id' },
-  todo: { columns: ['id', 'title', 'call_number', 'status_id', 'completed_at', 'created_at', 'updated_at', 'due_date'], orderBy: 'created_at, id' },
+  todo: { columns: ['id', 'title', 'call_number', 'status_id', 'completed_at', 'created_at', 'updated_at', 'due_date', 'due_time', 'estimate_minutes', 'no_export', 'priority_id'], orderBy: 'created_at, id' },
+  todo_mail: { columns: ['todo_id', 'identity', 'metadata', 'received_at', 'created_at'], orderBy: 'todo_id, identity' },
+  addin_mail_receipt: { columns: ['request_key', 'fingerprint', 'todo_id', 'response'], orderBy: 'request_key' },
   todo_note: { columns: ['todo_id', 'body', 'updated_at'], orderBy: 'todo_id' },
   todo_tag: { columns: ['todo_id', 'tag_id', 'created_at'], orderBy: 'todo_id, tag_id' },
   time_entry: { columns: ['id', 'todo_id', 'started_at', 'ended_at', 'note', 'export_status', 'export_count', 'source', 'created_at', 'updated_at'], orderBy: 'started_at, id' },
-  timer_idle: { columns: ['id', 'session_id', 'todo_id', 'started_at', 'returned_at', 'note'], orderBy: 'id' },
+  timer_idle: { columns: ['id', 'session_id', 'todo_id', 'started_at', 'returned_at', 'note', 'previous_periods'], orderBy: 'id' },
   timer_heartbeat: { columns: ['time_entry_id', 'seen_at'], orderBy: 'time_entry_id' },
   todo_attachment_kind: { columns: ['kind'], orderBy: 'kind' },
   /**
@@ -91,7 +94,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [
-  'todo_status', 'tag_folder', 'tag', 'todo_attachment_kind', 'todo', 'todo_note',
+  'todo_status', 'todo_priority', 'tag_folder', 'tag', 'todo_attachment_kind', 'todo', 'todo_note', 'todo_mail', 'addin_mail_receipt',
   'todo_tag', 'time_entry', 'timer_heartbeat', 'timer_idle', 'todo_attachment', 'pool', 'pool_rule',
   'default_tag', 'export_template', 'export_run', 'export_run_group',
   'export_run_entry', 'export_audit', 'app_setting',

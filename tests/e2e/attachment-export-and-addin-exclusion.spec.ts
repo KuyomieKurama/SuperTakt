@@ -1,41 +1,7 @@
+import { todayAt } from './support/local-time';
 /**
- * TP-ANH-12, TP-ANH-13 (docs/testplan.md, Abschnitt 25.2) — T-150, TP-ANH-13
- * neu gefasst T-311 (E-108, T-304, Befund F-2 in
- * `.claude/team/reports/T-308-spec-ux-reviewer.md`).
- *
- * Weder die Frist noch ein Anhang gelangen in einen Export, gleich welche
- * Vorlage aktiv ist (A-19.17) — geprüft nach demselben Muster wie
- * `note-separation.spec.ts` für den Vermerk: eine auffällige, erfundene Frist
- * und ein auffälliger, erfundener Anhang, mehrere Vorlagen, die Ergebnisdatei
- * vollständig als Text durchsucht statt nur die erwarteten Felder gelesen.
- * Dazu die strukturelle Bedingung: Die Feldquellen des Vorlageneditors
- * kennen weder die Frist noch einen Anhang (`EXPORT_SOURCE_PATHS`,
- * `packages/export/src/sources.ts`, zwölf Werte, keiner davon neu) — dieselbe
- * Prüfbauart wie `TP-NOTE-01`.
- *
- * **TP-ANH-13 maß bis zum 2026-09-11 die volle Abwesenheit** — „über das
- * Add-in entstehen keine Anhänge" (A-19.19 alt, E-072 Punkt 1). Seit E-108
- * ist das **falsch**: Über `POST /addin/todos` entstehen seit T-304 Anhänge,
- * und zwar **beim Anlegen eines neuen Todos aus einer E-Mail**. Was A-19.19
- * (neu) und A-A-82 im Bedrohungsmodell weiterhin zusagen, ist die **engere**
- * Hälfte: **an einem Todo, das vorher schon da war, entsteht über das Add-in
- * kein Anhang** — auch nicht im Duplikatfall (A-10.9, E-100), auch nicht über
- * die neue Anlegetür (es gibt an ihr kein Feld, das ein vorhandenes Todo
- * benennt). Genau das mißt dieser Fall jetzt, und er mißt es an der
- * **Wirkung**, nicht an einem Statuscode oder einer Namensliste — dieselbe
- * Lehre, wegen der `proof:addin` Abschnitt 18 am 2026-09-10 von Name auf
- * Wirkung umgestellt wurde (T-247).
- *
- * **Spotcheck, keine Menge.** Dieser Fall ist weiterhin nur ein Spotcheck von
- * der Oberfläche/über die echte HTTP-Tür aus, kein struktureller Nachweis
- * über **alle** Türen unter `/addin` — der struktureller Nachweis (die
- * Untergrenze über die Menge der Türen: neun gesucht, neun zu) bleibt
- * `proof:addin` Abschnitt 18f/`proof:route-policy` (fremde Hoheit,
- * `apps/outlook-addin/**`, `apps/local-api/**`). Was hier zusätzlich zu der
- * strukturellen Prüfung gemessen wird: zwei konkrete Schmuggelversuche, an
- * den beiden Stellen, an denen das Add-in ein **vorhandenes** Todo überhaupt
- * berührt — die Anlegetür (mit einer mitgeschickten fremden Kennung) und die
- * Buchungstür (mit einem mitgeschickten Anhangsfeld).
+ * Exportdateien vollständig auf ausgeschlossene Daten prüfen. Die Add-in-Aufrufe prüfen konkrete
+ * Einschleusversuche, nicht sämtliche Routen.
  */
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -54,12 +20,6 @@ import {
 import { runExportFromScreen, readResultFilePath } from './support/actions';
 import { gotoExport, gotoTemplates } from './support/nav';
 import { E2E_EXPORT_DIR } from './support/session';
-
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 /** Weit in der Zukunft, damit das Datum im Exporttext unverwechselbar ist. */
 function farFutureIsoDay(): string {

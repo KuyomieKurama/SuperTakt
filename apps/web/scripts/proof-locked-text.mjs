@@ -93,9 +93,7 @@ import {
   workspaceRoot,
 } from '../../../scripts/source-anchors.mjs';
 
-/* ==================================================================== */
 /* 0  Werkzeug                                                          */
-/* ==================================================================== */
 
 let passed = 0;
 let failed = 0;
@@ -126,9 +124,7 @@ const webRoot = path.join(repoRoot, 'apps', 'web');
 const srcRoot = path.join(webRoot, 'src');
 const paperPath = path.join(repoRoot, 'docs', 'design', 'textbestand.md');
 
-/* ==================================================================== */
 /* 1  Die Menge: die Sperrliste, gelesen an der Anforderung             */
-/* ==================================================================== */
 
 heading('1  Die Sperrliste — gelesen, nicht abgeschrieben');
 
@@ -365,9 +361,7 @@ check('die Sperrliste ist gelesen, der Quellbaum auch — beide sind nicht leer'
   );
 });
 
-/* ==================================================================== */
 /* 2  Richtung 1: gibt es den Fundort noch?                             */
-/* ==================================================================== */
 
 heading('2  Der Fundort (E-103, zweite Richtung)');
 
@@ -442,9 +436,7 @@ check('jeder Eintrag nennt mindestens einen Ort', () => {
   assert.deepEqual(findings, [], 'ein Eintrag ohne Ort ist von hier aus nicht meßbar');
 });
 
-/* ==================================================================== */
 /* 3  Richtung 2: steht der Satz noch da?                               */
-/* ==================================================================== */
 
 heading('3  Der Wortlaut (E-103, erste Richtung)');
 
@@ -627,9 +619,7 @@ check('Gegenprobe: ein erfundener Bezeichner wird nicht gefunden', () => {
   assert.ok(symbolPlaces('reactivationTitle').length > 0, 'der Sucher findet Vorhandenes nicht');
 });
 
-/* ==================================================================== */
 /* 4  Gegenprobe — was dieser Lauf findet, wenn etwas fehlt             */
-/* ==================================================================== */
 
 heading('4  Gegenprobe (eine eingesetzte Kürzung je Eintrag)');
 
@@ -703,9 +693,7 @@ check('ein gestrichener Fundort wird rot', () => {
   );
 });
 
-/* ==================================================================== */
 /* 5  Bericht — was aufgelöst wurde und was nachzuziehen ist            */
-/* ==================================================================== */
 
 heading('5  Was nachzuziehen ist (fremde Hoheit: ui-designer)');
 
@@ -785,8 +773,6 @@ for (const { entry, places } of foreignEntries) {
       .join(', ')} liegt außerhalb von apps/web; gemessen wird nur, daß es die Datei gibt\n`,
   );
 }
-
-/* ==================================================================== */
 
 const anchorCount = lockedEntries.reduce((sum, entry) => sum + entry.anchors.length, 0);
 const placeCount = resolved.reduce((sum, item) => sum + item.places.length, 0);

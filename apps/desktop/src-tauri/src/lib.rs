@@ -1,24 +1,5 @@
-//! Takt — die Hülle (E-003, E-004).
-//!
-//! Der Rust-Anteil ist bewusst dünn: Fenster, Menü, Lebenszyklus des Sidecars,
-//! Windows-Benutzername, Anwendungsdatenverzeichnis. **Keine Fachlogik.** Sie
-//! lebt in TypeScript, und das ist der ganze Grund für die Sidecar-Bauweise aus
-//! E-004 — eine Rundung oder ein Exportformat, das hier zum zweiten Mal
-//! entstünde, liefe irgendwann auseinander.
-//!
-//! Reihenfolge beim Start, und sie ist Inhalt:
-//!
-//! ```text
-//!   1  Einzelinstanz sichern      B-1.6 Punkt 5
-//!   2  Startgeheimnis erzeugen    B-1.6 Punkt 2
-//!   3  Datenverzeichnis anlegen   E-018, B-7.2 — vor dem Dienst, damit alles,
-//!                                 was er hineinschreibt, die engen Rechte erbt
-//!   4  Benutzernamen lesen        E-010, B-8.1 — vom Betriebssystem, nicht
-//!                                 aus der Umgebung
-//!   5  Sidecar starten            Geheimnis und Benutzername über `stdin`,
-//!                                 zwei Zeilen, ein Schreibvorgang (E-042)
-//!   Das Fenster kann während 3–5 bereits die Ladeansicht darstellen.
-//! ```
+//! Vor dem Sidecar-Start Datenverzeichnis absichern und Benutzername vom Betriebssystem lesen.
+//! Geheimnis und Benutzername gemeinsam über stdin übertragen; die Fenster-Ereignisschleife darf dabei nicht blockieren.
 
 mod appdata;
 mod attachment;
@@ -47,8 +28,7 @@ struct Startup {
     problems: Vec<String>,
 }
 
-// Await preparation without blocking the window's event loop. All callers
-// share the same result, including failures from the worker.
+// Alle Aufrufer teilen das Vorbereitungsergebnis einschließlich Fehlern, ohne die Fenster-Ereignisschleife zu blockieren.
 enum StartupResult {
     Pending(tauri::async_runtime::JoinHandle<Startup>),
     Ready(Startup),
@@ -150,7 +130,7 @@ pub fn run() {
             eprintln!("[start] phase=setup elapsed_ms=0");
             let service = Service::new().map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             app.manage(service);
-            app.manage(idle::IdleMonitor::start());
+            app.manage(idle::IdleMonitor::start_with_app(app.handle().clone()));
             menu::install(app.handle())?;
             let handle = app.handle().clone();
             let preparation = tauri::async_runtime::spawn_blocking(move || {

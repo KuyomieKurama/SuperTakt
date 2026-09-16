@@ -1,0 +1,15 @@
+/* @theme {"label":"Velvet","mode":"dark","hint":"Samtiges Dunkel mit weichen Lichtakzenten","order":14} */
+:root[data-design-theme="velvet"] {
+  --preset-canvas: #131013;
+  --preset-surface: #221f22;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbabb;
+  --preset-accent: #d5adca;
+  --preset-link: #d5adca;
+  --preset-on: #101010;
+  --preset-accent-hover: #d8b2cd;
+  --preset-accent-active: #d9b5cf;
+}
+:root[data-design-theme="velvet"] .app {
+  background-image: radial-gradient(ellipse at top right, color-mix(in srgb, var(--accent-bg) 18%, transparent), transparent 60%);
+}

@@ -11,7 +11,8 @@
 // hier unverändert mit, nur der Browser übernimmt hier keine CA-Prüfung.
 //
 // Aufruf: pnpm exec playwright test -c tests/e2e/playwright.outlook-build.config.ts
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
+import { browserUse, chromiumProjects } from './playwright.shared.ts';
 
 export default defineConfig({
   testDir: '.',
@@ -33,19 +34,10 @@ export default defineConfig({
   outputDir: '../../test-results-outlook-build',
 
   use: {
+    ...browserUse,
     baseURL: 'https://127.0.0.1:17944',
     ignoreHTTPSErrors: true,
-    locale: 'de-DE',
-    timezoneId: 'Europe/Berlin',
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-    video: 'off',
   },
 
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  projects: chromiumProjects,
 });

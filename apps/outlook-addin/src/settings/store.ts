@@ -1,42 +1,5 @@
-/**
- * Takt — Einstellungen des Add-ins (E-009, E-019, R-09, R-12, B-2.8).
- *
- * ## Wo das Token liegt — und wo ausdrücklich nicht
- *
- * Das Token liegt im **`localStorage` der Add-in-Herkunft**. Es liegt **nicht**
- * in `Office.context.roamingSettings`.
- *
- * `roamingSettings` ist der naheliegende Ort für eine Add-in-Einstellung und
- * genau deshalb die Falle: Diese Werte werden **im Postfach gespeichert und
- * über Exchange beziehungsweise Microsoft 365 synchronisiert** (B-2.8). Das
- * Geheimnis, das sämtliche lokalen Kundendaten öffnet, verließe damit den
- * Rechner und läge in der Cloud — bei einem Produkt, dessen erste Entscheidung
- * E-001 lautet: keine Cloudanbindung. Wer Zugriff auf das Postfach hat — ein
- * Administrator, ein übernommenes Konto, ein anderes Add-in mit
- * Postfachrechten — hätte den Schlüssel.
- *
- * ## Warum hier gar kein `roamingSettings` vorkommt
- *
- * B-2.8 Punkt 2 erlaubt, **Nicht**-Geheimnisse dort abzulegen — den regulären
- * Ausdruck etwa. Takt tut es trotzdem nicht, und das ist eine Entscheidung mit
- * Grund: Sobald irgendein Wert über `roamingSettings` läuft, steht der Aufruf
- * im Quelltext, und der nächste Wert, der „auch nur eine Einstellung" ist,
- * findet den Weg von selbst. So gibt es in diesem Paket **keinen einzigen**
- * Aufruf von `roamingSettings`; der Nachweis in `scripts/proof-addin.mjs` prüft
- * das über den gesamten Quelltext.
- *
- * Der Preis ist ehrlich zu nennen: Muster und Token gelten je Rechner und
- * Browserprofil. Wer Outlook auf zwei Rechnern benutzt, richtet zweimal ein.
- * Beim Token ist das ohnehin unvermeidlich (auf dem anderen Rechner läuft ein
- * anderer Dienst mit einem anderen Token); beim Muster ist es der Preis dafür,
- * dass es diesen Aufruf nicht gibt.
- *
- * ## Was diese Datei nicht tut
- *
- * Sie schreibt das Token **nie** in eine Protokollausgabe, in eine Adresse oder
- * in eine Fehlermeldung (B-2.4). `describeToken` gibt es genau deshalb: damit
- * die Oberfläche „hinterlegt" anzeigen kann, ohne den Wert zu berühren.
- */
+/** Token und Muster bleiben im lokalen Browserprofil. `roamingSettings` würde sie ins Postfach synchronisieren.
+ * Das Token darf weder protokolliert noch in URLs oder Fehlermeldungen ausgegeben werden. */
 
 import { DEFAULT_PATTERN } from '../callnumber/catalog.ts';
 
@@ -59,7 +22,27 @@ export interface KeyValueStore {
   removeItem(key: string): void;
 }
 
+export interface AddinDefaults {
+  readonly statusId: string | null;
+  readonly tagIds: readonly string[];
+  readonly includeExcerpt: boolean;
+  readonly theme: 'auto' | 'light' | 'dark';
+}
+export const DEFAULT_TARGET: AddinDefaults = { statusId: null, tagIds: [], includeExcerpt: false, theme: 'auto' };
+const DEFAULTS_KEY = 'takt.addin.defaults';
+function readDefaults(storage: KeyValueStore): AddinDefaults {
+  try {
+    const value = JSON.parse(storage.getItem(DEFAULTS_KEY) ?? '{}') as Partial<AddinDefaults>;
+    return {
+      statusId: typeof value.statusId === 'string' ? value.statusId : null,
+      tagIds: Array.isArray(value.tagIds) ? value.tagIds.filter(id => typeof id === 'string') : [],
+      includeExcerpt: value.includeExcerpt === true,
+      theme: value.theme === 'light' || value.theme === 'dark' ? value.theme : 'auto',
+    };
+  } catch { return DEFAULT_TARGET; }
+}
 export interface AddinSettings {
+  readonly defaults?: AddinDefaults;
   /** Grundadresse des lokalen Dienstes, ohne abschließenden Schrägstrich. */
   readonly baseUrl: string;
   /** Der reguläre Ausdruck aus A-10.8. Steht hier, nicht im Code. */
@@ -72,6 +55,7 @@ export interface AddinSettings {
 
 export interface SettingsStore {
   read(): AddinSettings;
+  writeDefaults(defaults: AddinDefaults): void;
   /** Liest das Token. Der einzige Weg an den Wert — Aufrufer: der API-Client. */
   readToken(): string | null;
   writeToken(token: string): void;
@@ -113,6 +97,7 @@ export const isAcceptableBaseUrl = (value: string): boolean => {
 };
 
 export const createSettingsStore = (storage: KeyValueStore): SettingsStore => ({
+  writeDefaults(defaults) { storage.setItem(DEFAULTS_KEY, JSON.stringify(defaults)); },
   read() {
     const storedBase = storage.getItem(BASE_URL_KEY);
     const baseUrl =
@@ -124,6 +109,7 @@ export const createSettingsStore = (storage: KeyValueStore): SettingsStore => ({
 
     return {
       baseUrl,
+      defaults: readDefaults(storage),
       callNumberPattern: storedPattern ?? DEFAULT_PATTERN,
       // Nur die Tatsache, nie der Wert. Alles, was diese Funktion zurückgibt,
       // landet irgendwann in einem Zustand der Oberfläche und damit im DOM

@@ -293,9 +293,7 @@ export function TemplateFieldRow({
   );
 }
 
-/* ==================================================================== */
 /* Die Quellenauswahl                                                   */
-/* ==================================================================== */
 
 /**
  * Die Auswahlliste, gegliedert nach den Ebenen des Dienstes.
@@ -336,9 +334,7 @@ function sourceOptions(catalog: SourceCatalog): readonly SelectEntry<ExportSourc
   return groups;
 }
 
-/* ==================================================================== */
 /* Bedingung                                                            */
-/* ==================================================================== */
 
 interface ConditionEditorProps {
   readonly idPrefix: string;

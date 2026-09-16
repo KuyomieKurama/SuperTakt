@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "../../api/client";
-import {
-  listTimeEntries,
-} from "../../api/endpoints";
+import { listTimeEntries } from "../bookings/api";
 import { previewExportDraft } from "./api";
 import {
   listTodos,

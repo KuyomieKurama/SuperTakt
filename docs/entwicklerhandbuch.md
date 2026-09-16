@@ -94,7 +94,7 @@ tatsächlich tut, macht aus dem einen Fall einen Beweis (T-047, `proof:export` A
 Der Vergleicher, der die OpenAPI-Beschreibung des Dienstes gegen dessen tatsächliche Antworten
 hält, hätte selbst kaputt sein können, ohne dass es aufgefallen wäre: Ein Leser oder ein
 Vergleicher, der eine Abweichung verschluckt, ist „der schlimmste Fall: grün, weil er nichts
-findet" (`docs/architektur.md`, Abschnitt 5). Deshalb hält `scripts/proof-openapi.mjs` dem
+findet" (`docs/architektur.md`, Abschnitt 5). Deshalb hält `apps/local-api/scripts/proof-openapi.mjs` dem
 Vergleicher inzwischen sieben bekannte, künstlich eingebaute Abweichungen hin und verlangt, dass er
 jede einzelne findet, bevor er der echten Beschreibung vertraut wird.
 
@@ -607,20 +607,31 @@ Von der Wurzel des Arbeitsbereichs aus:
 | `pnpm dev` | Entwicklungsserver der Oberfläche, `apps/web`, auf `127.0.0.1:5173` |
 | `pnpm desktop` | Takt als Tauri-Anwendung starten, baut den Sidecar zuerst mit |
 | `pnpm desktop:build` | Takt einschließlich Installationspaket bauen |
-| `pnpm typecheck` | `tsc --noEmit` über alle acht Pakete |
+| `pnpm typecheck` | Typprüfung von Quelltext, Pakettests und Ende-zu-Ende-Tests |
 | `pnpm boundaries` | erlaubte Importe zwischen den Paketen prüfen |
 | `pnpm contrast` | alle Farbpaare der Oberfläche gegen WCAG 2.2 AA messen |
 | `pnpm test` | alle Vitest-Fälle unter `packages/*/test` und `apps/*/test` |
 | `pnpm test:coverage` | dieselben Fälle mit Abdeckungsbericht und Schwellenprüfung |
 | `pnpm proof:openapi` | die OpenAPI-Beschreibung des lokalen Dienstes gegen dessen tatsächliches Verhalten prüfen |
-| `pnpm check` | die vollständige Kette: Typprüfung, Paketgrenzen, Kontrast, OpenAPI-Nachweis, Testabdeckung, Bau |
+| `pnpm check` | vollständiges Projektgate; Zusammensetzung und Reihenfolge in [`package.json`](../package.json), Skript `check` |
 
-Daneben bestehen in `apps/local-api` und `apps/outlook-addin` neun weitere, einzeln aufrufbare
-Nachweispfade (`proof:access`, `proof:export`, `proof:export-api`, `proof:taskpane`,
-`proof:addin-wiring`, `proof:route-policy`, `proof:template-fields`, `proof:db-permissions` und,
-im Add-in-Paket, `proof:addin`), die zusammen mit `proof:openapi` die zehn Nachweispfade des
-Projekts bilden. Sie stehen nicht alle in `pnpm check`, weil ein Teil von ihnen den echten Sidecar
-auf seinem festen Port startet und deshalb nicht neben einem bereits laufenden Takt bestehen kann.
+Die aktuelle Liste der Nachweisläufe steht im Root-Skript `proof:all`, die Auflösung
+auf konkrete Dateien in den `scripts` der jeweiligen Paket-`package.json`. Diese
+Liste wird hier nicht zusätzlich gepflegt. `proof:all` und `verify:bundle` sind
+Bestandteile von `pnpm check`; `verify:bundle` baut den Sidecar und prüft das Erzeugnis.
+Es benötigt freie Ports 17843 und 17844. Eine laufende Desktop-App vorher regulär
+beenden. Der erste Sidecar-Bau benötigt Netzzugang für die festgelegte Node-Laufzeit;
+Rust-Tests benötigen die Rust-Toolchain und die Tauri-Systembibliotheken.
+
+`pnpm proof:engines` läuft separat mit zusätzlichen Browser-/WebKitGTK-Abhängigkeiten.
+`pnpm test:e2e` führt die im gleichnamigen Root-Skript aufgeführten
+Playwright-Konfigurationen aus. Plattformabhängige CI-Prüfungen stehen in
+[pruefung.yml](../.github/workflows/pruefung.yml).
+
+Die Designsystem-Musterseite ist im Entwicklungsserver unter
+`http://127.0.0.1:5173/designsystem.html` erreichbar. Ihr gesonderter Bau ist im
+[Web-README](../apps/web/README.md#musterseite-ansehen) beschrieben; der normale
+Produktionsbau enthält sie nicht.
 
 ## Was nie geprüft werden konnte
 

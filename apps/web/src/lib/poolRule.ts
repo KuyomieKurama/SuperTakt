@@ -69,9 +69,7 @@ import {
  * dort die Wahl getroffen wird und der Unterschied lesbar sein muss.
  */
 
-/* ==================================================================== */
 /* Die Teile einer beschriebenen Regel                                  */
-/* ==================================================================== */
 
 /** Ein Tag, ein Ordner oder ein Status, wie er in der Zusammenfassung steht. */
 export interface RuleChip {
@@ -167,9 +165,7 @@ export interface RuleLookup {
   readonly status: (id: Id) => ForeignText | undefined;
 }
 
-/* ==================================================================== */
 /* Die Achsen einer Regel                                               */
-/* ==================================================================== */
 
 /**
  * Die fünf Achsen, so wie sie an einem `Pool` stehen — auch als Entwurf im
@@ -202,9 +198,7 @@ export interface RuleAxes extends PoolRuleAxes {
   readonly exportState: PoolExportFilter;
 }
 
-/* ==================================================================== */
 /* Beschreiben                                                          */
-/* ==================================================================== */
 
 /** Der Text der Erledigt-Achse, wenn sie einschränkt. */
 const COMPLETION_TEXT: Readonly<Record<Exclude<PoolCompletionFilter, "any">, string>> = {
@@ -348,9 +342,7 @@ export function describeRule(axes: RuleAxes, lookup: RuleLookup): RuleDescriptio
   };
 }
 
-/* ==================================================================== */
 /* Warum trifft diese Regel nichts? (E-057, T-083, T-087)               */
-/* ==================================================================== */
 
 /**
  * Ein erforderlicher Ordner, in dem kein einziges Tag liegt (E-057, T-087).

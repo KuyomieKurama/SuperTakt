@@ -209,9 +209,7 @@ export function TemplateFields({
   );
 }
 
-/* ==================================================================== */
 /* Fehler des Dienstes einer Zeile zuordnen                             */
-/* ==================================================================== */
 
 /**
  * Aus welcher Feldzeile stammt die Meldung des Dienstes?

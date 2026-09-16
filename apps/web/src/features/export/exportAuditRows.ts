@@ -1,6 +1,4 @@
-import {
-  getTimeEntry,
-} from "../../api/endpoints";
+import { getTimeEntry } from "../bookings/api";
 import {
   getExportRun,
   listExportAudit,
@@ -189,6 +187,23 @@ function toRowModel(
   const todo = entry === null ? undefined : todoById.get(entry.todoId);
   const run = item.exportRunId === null ? null : (runById.get(item.exportRunId) ?? null);
 
+  let auditRun: AuditRun | null = null;
+  if (run !== null) {
+    auditRun = {
+      id: run.id,
+      filePath: run.filePath,
+      fileName: fileNameOf(run.filePath),
+      writtenAt: formatDateTime(run.createdAt),
+    };
+  } else if (item.exportRunId !== null) {
+    auditRun = {
+      id: item.exportRunId,
+      filePath: "",
+      fileName: "Lauf nicht mehr lesbar",
+      writtenAt: "",
+    };
+  }
+
   return {
     id: item.id,
     event: item.event,
@@ -206,22 +221,7 @@ function toRowModel(
             period: formatPeriod(entry.startedAt, entry.endedAt),
             duration: formatDuration(entry.durationSeconds),
           },
-    run:
-      run === null
-        ? item.exportRunId === null
-          ? null
-          : {
-              id: item.exportRunId,
-              filePath: "",
-              fileName: "Lauf nicht mehr lesbar",
-              writtenAt: "",
-            }
-        : {
-            id: run.id,
-            filePath: run.filePath,
-            fileName: fileNameOf(run.filePath),
-            writtenAt: formatDateTime(run.createdAt),
-          },
+    run: auditRun,
     reason: item.reason,
     actor: item.actor,
   };

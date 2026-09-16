@@ -1389,6 +1389,18 @@ paths:
       description: |
         Bei jedem Aufruf aus den Tags abgeleitet (A-3.4). Es gibt keine
         gespeicherte Zuordnung, die veralten könnte.
+      parameters:
+        - name: priorityId
+          in: query
+          description: Prioritätskennungen, durch Komma getrennt; Filter greift vor Pagination.
+          schema: { type: string }
+        - name: withoutPriority
+          in: query
+          schema: { type: boolean, default: false }
+        - name: sortByPriority
+          in: query
+          description: Höchste Gewichtung zuerst, ohne Priorität zuletzt; dieselbe Option beim Weiterblättern verwenden.
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Mitglieder des Pools.
@@ -1445,6 +1457,17 @@ paths:
         über `GET /pools/{poolId}/todos` mit der Marke, die dieselbe Spalte hier
         mitgegeben hat.
       parameters:
+        - name: priorityId
+          in: query
+          description: Prioritätskennungen, durch Komma getrennt; Filter greift vor Pagination.
+          schema: { type: string }
+        - name: withoutPriority
+          in: query
+          schema: { type: boolean, default: false }
+        - name: sortByPriority
+          in: query
+          description: Höchste Gewichtung zuerst, ohne Priorität zuletzt; dieselbe Option beim Weiterblättern verwenden.
+          schema: { type: boolean, default: false }
         - { $ref: '#/components/parameters/Limit' }
         - name: includeCompleted
           in: query
@@ -1469,6 +1492,93 @@ paths:
         '403': { $ref: '#/components/responses/OriginRejected' }
 
   # ---------------------------------------------------------------------------
+  /priorities:
+    get:
+      tags: [Todos]
+      operationId: listPriorities
+      summary: Prioritäten nach Gewichtung absteigend lesen (A-27)
+      responses:
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '200':
+          description: Konfigurierte Prioritäten.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TodoPriority' } }
+    post:
+      tags: [Todos]
+      operationId: createPriority
+      summary: Priorität anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriorityWrite' }
+      responses:
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '201':
+          description: Priorität angelegt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoPriority' }
+        '409': { description: Name bereits vergeben. }
+        '422': { description: Name oder ganzzahlige Gewichtung ungültig. }
+  /priorities/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    put:
+      tags: [Todos]
+      operationId: updatePriority
+      summary: Name und Gewichtung einer Priorität ändern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriorityWrite' }
+      responses:
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '200':
+          description: Priorität aktualisiert; Kanban verwendet die neue Gewichtung.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoPriority' }
+        '404': { description: Priorität nicht gefunden. }
+        '409': { description: Name bereits vergeben. }
+        '422': { description: Eingabe ungültig. }
+    delete:
+      tags: [Todos]
+      operationId: deletePriority
+      summary: Priorität löschen und Todo-Zuordnungen leeren
+      responses:
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '204': { description: Priorität gelöscht; Todos bleiben erhalten. }
+        '404': { description: Priorität nicht gefunden. }
   /todo-statuses:
     get:
       tags: [Kanban]
@@ -1685,6 +1795,10 @@ paths:
           in: query
           description: Kalendertag in Ortszeit, einschließlich (E-025). Siehe `fromDay`.
           schema: { type: string, format: date }
+        - name: includeNoExport
+          in: query
+          description: NoExport-Zeiten für Aufgaben- und Zeiterfassungsansichten einschließen; Standard false.
+          schema: { type: boolean, default: false }
         - name: onlyPreviouslyExported
           in: query
           description: Buchungen, deren Exportstatus zurückgesetzt wurde (R-10).
@@ -3443,6 +3557,11 @@ paths:
                         emailAttachments,
                       ]
                     properties:
+                      mailAssignment:
+                        type: object
+                        required: [accepted]
+                        properties:
+                          accepted: { type: boolean }
                       tagTree: { $ref: '#/components/schemas/TagTree' }
                       pools:
                         type: array
@@ -3543,29 +3662,11 @@ paths:
       operationId: createAddinTodo
       summary: Ein Todo aus einer E-Mail anlegen (A-2.1, A-9.5, A-10.5)
       description: |
-        Auf eine bereits vergebene Call-Nummer wird hier **nicht** geprüft.
-        A-10.9 verlangt, dass der Benutzer entscheidet; das Add-in fragt vorher
-        über `/addin/todo-matches` und legt danach bewusst an. Eine Prüfung an
-        dieser Stelle wäre das „stillschweigende Zusammenlegen", das A-10.9
-        ausschließt.
-
-        Die Standard-Tags (A-9) kommen im Anwendungsfall dazu, nicht im Add-in
-        — deshalb gelten sie über beide Wege gleichermaßen (A-9.5).
-
-        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074).
-        Siehe `dueDate` unten.
-
-        **Seit T-304 entstehen über diese Route Anhänge** (A-19.22 bis
-        A-19.33, E-108) — die E-Mail selbst als Datei und ihre Dateianhänge,
-        im Feld `attachments` unten. Bis dahin stand hier das Gegenteil, und
-        es stimmte: A-19.19 verbot jeden Anhang aus dem Add-in. E-108 hat den
-        Satz **halbiert**, nicht gestrichen — am **gefundenen** Todo entsteht
-        weiterhin keiner.
-
-        Der Unterschied ist strukturell und nicht eine Einstellung: Die Naht
-        dahinter nimmt keine `TodoId` entgegen, sondern die Anlegefunktion
-        selbst, und es gibt unter `/addin` keine zweite Tür, die eine Kennung
-        entgegennimmt und eine Datei ablegt (A-A-82).
+        Mit mail und requestId wird die Nachricht transaktionssicher zugeordnet (A-10.11).
+        mode auto ergänzt genau einen Call-Treffer, legt ohne Treffer an und weist Mehrdeutigkeit ab.
+        mode new erlaubt die bewusste Neuanlage. Wiederholte requestId erzeugt nichts doppelt.
+        Titel, Tags und Standard-Tags werden nur bei einer Neuanlage angewendet.
+        Ohne mail bleibt der bisherige Anlegevertrag für ältere lokale Aufrufer bestehen.
       requestBody:
         required: true
         content:
@@ -3574,6 +3675,14 @@ paths:
               type: object
               required: [title]
               properties:
+                dueTime:
+                  oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
+                  description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
+                estimateMinutes:
+                  oneOf: [{ type: integer, minimum: 1, maximum: 525600 }, { type: 'null' }]
+                requestId: { $ref: '#/components/schemas/Id' }
+                mail: { $ref: '#/components/schemas/MailMetadata' }
+                mode: { type: string, enum: [auto, new], default: new }
                 title:
                   type: string
                   minLength: 1
@@ -3890,6 +3999,51 @@ paths:
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
+  /addin/todos/{todoId}/mails:
+    post:
+      tags: [Add-in]
+      operationId: appendAddinMail
+      summary: Eine E-Mail zu einer Aufgabe mit derselben Call-Nummer ergänzen
+      description: |
+        Enger Mail-Anwendungsfall. Keine Änderung von Titel, Tags, Status, Frist, Schätzung,
+        Erledigt-Kennzeichen, Timer, Zeitbuchungen oder Exportstatus. Fremde Rumpffelder werden
+        abgewiesen. Wiederholungen erzeugen weder Mail-Einträge noch Dateien doppelt.
+      parameters:
+        - { $ref: '#/components/parameters/TodoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, callNumber, mail]
+              properties:
+                requestId: { $ref: '#/components/schemas/Id' }
+                callNumber: { type: string, minLength: 1, maxLength: 128 }
+                mail: { $ref: '#/components/schemas/MailMetadata' }
+                note: { type: string, maxLength: 4000, default: '' }
+                attachments:
+                  oneOf: [{ $ref: '#/components/schemas/AddinEmailAttachments' }, { type: 'null' }]
+                  default: null
+      responses:
+        '200':
+          description: Zugeordnet oder bereits vorhanden, einschließlich bestätigter Anhangsergebnisse.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AddinTodoCreated' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
   /addin/todos/{todoId}/time-entries:
     parameters: [{ $ref: '#/components/parameters/TodoId' }]
     post:
@@ -4098,7 +4252,7 @@ paths:
                 roundingMode: { $ref: '#/components/schemas/RoundingMode' }
                 locale: { type: string, minLength: 2, maxLength: 35 }
                 theme: { type: string, enum: [system, light, dark] }
-                designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
+                designTheme: { type: string, enum: [classic, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha, clear] }
                 density: { type: string, enum: [comfortable, compact] }
                 promptOnTimerStop: { type: boolean }
                 idleKeepTimerRunning: { type: boolean, default: true }
@@ -4648,9 +4802,12 @@ components:
       required: [todo_status, tag_folder, tag, todo, todo_note, todo_tag, time_entry, timer_heartbeat, timer_idle, todo_attachment_kind, todo_attachment, pool, pool_rule, default_tag, export_template, export_run, export_run_group, export_run_entry, export_audit, app_setting]
       properties:
         todo_status: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_priority: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         tag_folder: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         todo: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_mail: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        addin_mail_receipt: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         todo_note: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         todo_tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         time_entry: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
@@ -4699,9 +4856,9 @@ components:
         format: { type: string, const: de.supertakt.data-archive }
         schemaVersion:
           type: integer
-          const: 6
+          const: 10
           description: |
-            Erzeugt wird stets die Fassung 6. Eingelesen werden 1 bis 6; Fassung
+            Erzeugt wird stets die Fassung 10. Eingelesen werden 1 bis 10; Fassung
             6 ist die erste, die `data.files` führt.
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
@@ -4897,6 +5054,50 @@ components:
                       Fehlt das Feld, trägt dieser Befund keinen Namen. Ein
                       leerer Wert kommt nicht vor.
 
+    MailMetadata:
+      type: object
+      additionalProperties: false
+      required: [identity, subject, sender, receivedAt, internetMessageId, outlookLink, excerpt]
+      properties:
+        identity: { type: string, minLength: 1, maxLength: 4096 }
+        subject: { type: string, maxLength: 4096 }
+        sender: { type: string, maxLength: 2048 }
+        receivedAt: { oneOf: [{ type: string, format: date-time }, { type: 'null' }] }
+        internetMessageId: { oneOf: [{ type: string, maxLength: 2048 }, { type: 'null' }] }
+        outlookLink: { oneOf: [{ type: string }, { type: 'null' }] }
+        excerpt: { oneOf: [{ type: string, maxLength: 4000 }, { type: 'null' }] }
+    MailEntry:
+      type: object
+      required: [identity, subject, sender, receivedAt, internetMessageId, outlookLink, excerpt, todoId, kind, personalNote, createdAt]
+      properties:
+        identity: { type: string, minLength: 1, maxLength: 4096 }
+        subject: { type: string, maxLength: 4096 }
+        sender: { type: string, maxLength: 2048 }
+        receivedAt: { oneOf: [{ type: string, format: date-time }, { type: 'null' }] }
+        internetMessageId: { oneOf: [{ type: string, maxLength: 2048 }, { type: 'null' }] }
+        outlookLink: { oneOf: [{ type: string }, { type: 'null' }] }
+        excerpt: { oneOf: [{ type: string, maxLength: 4000 }, { type: 'null' }] }
+        todoId: { $ref: '#/components/schemas/Id' }
+        kind: { type: string, enum: [Antwort, Weiterleitung, E-Mail] }
+        personalNote: { type: string, maxLength: 4000 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TodoPriority:
+      type: object
+      required: [id, name, weight, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        weight: { type: integer, minimum: -9007199254740991, maximum: 9007199254740991 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+    PriorityWrite:
+      type: object
+      additionalProperties: false
+      required: [name, weight]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        weight: { type: integer, minimum: -9007199254740991, maximum: 9007199254740991 }
     Todo:
       type: object
       description: |
@@ -4910,6 +5111,17 @@ components:
         Ansicht sortiert mehr danach.
       required: [id, title, callNumber, statusId, completedAt, dueDate, tagIds, createdAt, updatedAt]
       properties:
+        priorityId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: Konfigurierbare Priorität; null bedeutet keine Priorität (A-27).
+        noExport:
+          type: boolean
+          description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        dueTime:
+          oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
+          description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
+        estimateMinutes:
+          oneOf: [{ type: integer, minimum: 1, maximum: 525600 }, { type: 'null' }]
         id: { $ref: '#/components/schemas/Id' }
         title:
           type: string
@@ -4986,6 +5198,17 @@ components:
         engere für den Vermerk (B-12.3) — siehe `POST /addin/todos`.
       required: [title]
       properties:
+        priorityId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: Konfigurierbare Priorität; null bedeutet keine Priorität (A-27).
+        noExport:
+          type: boolean
+          description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        dueTime:
+          oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
+          description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
+        estimateMinutes:
+          oneOf: [{ type: integer, minimum: 1, maximum: 525600 }, { type: 'null' }]
         title: { type: string, minLength: 1, maxLength: 500 }
         callNumber: { oneOf: [{ type: string, maxLength: 64 }, { type: 'null' }] }
         statusId:
@@ -5042,6 +5265,17 @@ components:
     TodoUpdate:
       type: object
       properties:
+        priorityId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: Konfigurierbare Priorität; null bedeutet keine Priorität (A-27).
+        noExport:
+          type: boolean
+          description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        dueTime:
+          oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
+          description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
+        estimateMinutes:
+          oneOf: [{ type: integer, minimum: 1, maximum: 525600 }, { type: 'null' }]
         title: { type: string, minLength: 1, maxLength: 500 }
         callNumber: { oneOf: [{ type: string, maxLength: 64 }, { type: 'null' }] }
         statusId: { $ref: '#/components/schemas/Id' }
@@ -6695,6 +6929,7 @@ components:
         Ressource, und der Aufruf dorthin ist im Quelltext auffindbar.
       required: [todo, totalSeconds, openSeconds, attachments]
       properties:
+        mails: { type: array, items: { $ref: '#/components/schemas/MailEntry' } }
         todo: { $ref: '#/components/schemas/Todo' }
         attachments:
           type: array
@@ -6765,6 +7000,7 @@ components:
         dadurch erzwungen, dass es nur eine Zeile gibt.
       required: [todo, addedDefaultTagIds, createdTags, attachments]
       properties:
+        outcome: { type: string, enum: [created, appended, already_present] }
         todo: { $ref: '#/components/schemas/Todo' }
         addedDefaultTagIds:
           type: array
@@ -7191,6 +7427,19 @@ components:
         - startedAt
         - returnedAt
       properties:
+        previousPeriods:
+          type: array
+          maxItems: 127
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, todoId, startedAt, returnedAt, note]
+            properties:
+              id: { $ref: '#/components/schemas/Id' }
+              todoId: { $ref: '#/components/schemas/Id' }
+              startedAt: { $ref: '#/components/schemas/Timestamp' }
+              returnedAt: { $ref: '#/components/schemas/Timestamp' }
+              note: { type: string }
         id:
           $ref: '#/components/schemas/Id'
         todoId:
@@ -7239,7 +7488,7 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         locale: { type: string }
         theme: { type: string, enum: [system, light, dark] }
-        designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
+        designTheme: { type: string, enum: [classic, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha, clear] }
         density: { type: string, enum: [comfortable, compact] }
         promptOnTimerStop: { type: boolean }
         idleDetectionEnabled: { type: boolean }

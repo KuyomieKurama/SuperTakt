@@ -415,6 +415,7 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
   let stopped = false;
+  let started = false;
   /*
    * Der Bezugspunkt des Bodens, und er liegt **im Arbeitsspeicher** (T-285).
    *
@@ -1039,7 +1040,8 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
     current: () => state,
 
     start(): void {
-      if (stopped) return;
+      if (stopped || started) return;
+      started = true;
       schedule(startDelayMs);
     },
 

@@ -1,16 +1,3 @@
-/**
- * Takt — Speicherung: Ports und Adapter.
- *
- * Dieses Paket hält die ausgehenden Ports **und** den SQLite-Adapter, der sie
- * umsetzt. Die Domäne hängt nicht von hier ab; die Abhängigkeit läuft genau
- * andersherum (E-001, architektur.md 1.1).
- *
- * Der Adapter ist austauschbar. Fällt das „zumindest derzeit" aus E-001, tritt
- * an seine Stelle ein anderer — die Ports und damit jeder Anwendungsfall
- * bleiben, wie sie sind. Genau deshalb geben die Ports `Promise` zurück,
- * obwohl `node:sqlite` synchron arbeitet.
- */
-
 export type * from './ports.ts';
 export { DATA_ARCHIVE_TABLES } from './ports.ts';
 export type * from './migration.ts';
@@ -30,9 +17,7 @@ export {
   sqliteResultCodeOf,
 } from './migration.ts';
 
-// ---------------------------------------------------------------------------
 // SQLite-Adapter (T-021)
-// ---------------------------------------------------------------------------
 
 export {
   openConnection,

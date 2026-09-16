@@ -91,7 +91,7 @@ export type ConnectionState =
   | { readonly kind: "failed"; readonly message: string };
 
 interface ShellModule {
-  idleActivity(): Promise<IdleActivity>;
+  idleActivity(wake?: { enabled: boolean; thresholdMinutes: number }): Promise<IdleActivity>;
   isShellAvailable(): boolean;
   serviceHandshake(): Promise<Connection>;
   shellState(): Promise<ShellStateSnapshot>;
@@ -279,9 +279,7 @@ export async function quitApplication(): Promise<void> {
   await shell.quit();
 }
 
-/* ==================================================================== */
 /* Versionsprüfung (Abschnitt 18)                                       */
-/* ==================================================================== */
 
 /**
  * Die installierte Fassung, aus den eingeprägten Angaben des Erzeugnisses
@@ -361,9 +359,7 @@ export async function chooseExportDirectory(
   return shell.chooseExportDirectory(current);
 }
 
-/* ==================================================================== */
 /* Anhänge (Spezifikation Abschnitt 19, E-072)                          */
-/* ==================================================================== */
 
 /**
  * Der Satz für den reinen Browserbetrieb, an **einer** Stelle.
@@ -438,9 +434,9 @@ export async function readOutlookCertificate(): Promise<OutlookCertificateResult
   return shell.outlookCertificate();
 }
 
-export async function readIdleActivity(): Promise<IdleActivity | null> {
+export async function readIdleActivity(wake?: { enabled: boolean; thresholdMinutes: number }): Promise<IdleActivity | null> {
   const shell = await loadShell();
-  return shell === null || !shell.isShellAvailable() ? null : shell.idleActivity();
+  return shell === null || !shell.isShellAvailable() ? null : shell.idleActivity(wake);
 }
 
 export async function confirmOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {

@@ -53,10 +53,8 @@ describe('Migration 0023 "attachment_origin" — zurück und vor: die Eigentüme
       now: fixedNow('2026-08-31T08:00:00Z'),
     });
 
-    // ---------------------------------------------------------------------
     // 0. Vorwärts auf den vollständigen Bestand und eine übernommene
     //    E-Mail-Datei anlegen, über den echten Adapter.
-    // ---------------------------------------------------------------------
     await runner.migrateToLatest();
     const unit = createUnitOfWork(conn, { ids: fakeIds('mig23') });
     const todo = await unit.todos.create(
@@ -83,27 +81,21 @@ describe('Migration 0023 "attachment_origin" — zurück und vor: die Eigentüme
     )).toBe(true);
     expect(await unit.attachments.emailFileCount()).toBe(1);
 
-    // ---------------------------------------------------------------------
     // 1. Rückweg auf die Fassung vor 0023 — die Spalte `origin` fällt.
-    // ---------------------------------------------------------------------
     const down = await runner.migrateDownTo(priorVersion);
     expect(down.to).toBe(priorVersion);
     expect(() => conn.prepare('SELECT origin FROM todo_attachment').get()).toThrow(/no such column/);
 
-    // ---------------------------------------------------------------------
     // 2. Wieder vor auf 0023: DEFAULT 'user' legt die Spalte neu an — genau
     //    der Zustand, den T-313-3 gemessen hat.
-    // ---------------------------------------------------------------------
     const up = await runner.migrateToLatest();
     expect(up.to).toBe(migrations.at(-1)?.version);
     const nachher = conn.prepare('SELECT origin FROM todo_attachment WHERE id = ?').get(created.value.id);
     expect(nachher?.['origin']).toBe('user');
 
-    // ---------------------------------------------------------------------
     // 3. Die Eigentümerfrage findet die Datei TROTZDEM — A-A-98 fragt nicht
     //    mehr nach origin. Vor A-A-98 wäre "owned" hier leer gewesen und die
     //    Datei beim nächsten Start als Waise gelöscht worden.
-    // ---------------------------------------------------------------------
     const unitAfter = createUnitOfWork(conn, { ids: fakeIds('mig23-nach') });
     const owned = await unitAfter.attachments.attachmentsNamingFiles([
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml',

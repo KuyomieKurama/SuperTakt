@@ -72,9 +72,7 @@ const NUMBER_2 = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 2,
 });
 
-/* ==================================================================== */
 /* Dauer                                                                */
-/* ==================================================================== */
 
 function splitSeconds(seconds: number): { hours: number; minutes: number; rest: number } {
   const total = Math.max(0, Math.trunc(seconds));
@@ -150,9 +148,7 @@ export function spokenDuration(seconds: number): string {
   return `${h} und ${m}`;
 }
 
-/* ==================================================================== */
 /* Viertelstunden                                                       */
-/* ==================================================================== */
 
 /**
  * Der gerundete Wert einer **Tagesgruppe** als Text, zum Beispiel `0,75`.
@@ -167,9 +163,7 @@ export function formatQuarters(quarters: number): string {
   return NUMBER_2.format(quarters / 4);
 }
 
-/* ==================================================================== */
 /* Zeitpunkte                                                           */
-/* ==================================================================== */
 
 export function formatDate(timestamp: string): string {
   return DATE_FORMAT.format(new Date(timestamp));
@@ -198,9 +192,7 @@ export function formatDayLabel(day: string): string {
   return WEEKDAY_FORMAT.format(new Date(`${day}T12:00:00`));
 }
 
-/* ==================================================================== */
 /* Kalendertage für Filter                                              */
-/* ==================================================================== */
 
 /** Der Kalendertag eines Zeitpunkts in der Zeitzone des Rechners. */
 export function calendarDayOf(timestamp: string): string {
@@ -242,9 +234,7 @@ export function shiftCalendarDay(day: string, days: number): string {
   return DAY_FORMAT.format(base);
 }
 
-/* ==================================================================== */
 /* Eingabefelder für Zeitpunkte                                         */
-/* ==================================================================== */
 
 /**
  * Zeitstempel des Dienstes in den Wert eines `datetime-local`-Feldes.
@@ -270,9 +260,7 @@ export function fromLocalInputValue(value: string): string | null {
   return `${date.toISOString().slice(0, 19)}Z`;
 }
 
-/* ==================================================================== */
 /* Zahlen und Text                                                      */
-/* ==================================================================== */
 
 /** Ganze Zahl mit Tausenderpunkt. */
 export function formatCount(value: number): string {
@@ -294,9 +282,7 @@ export function plural(count: number, one: string, many: string): string {
   return `${formatCount(count)} ${count === 1 ? one : many}`;
 }
 
-/* ==================================================================== */
 /* Aufzählungen — sie stehen nicht mehr hier                            */
-/* ==================================================================== */
 
 /*
   Bis T-124 stand hier `joinGerman`: fünf Zeilen, die „A", „A und B", „A, B

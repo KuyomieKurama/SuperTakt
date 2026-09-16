@@ -43,9 +43,7 @@ import {
   syncFolderEvidence,
 } from "../../lib/pathInspection";
 
-/* ==================================================================== */
 /* Gestalt                                                              */
-/* ==================================================================== */
 
 /**
  * Was am Ablageort aufgefallen ist.
@@ -99,9 +97,7 @@ export interface DatabaseLocationAdvice {
 
 const NOTHING: DatabaseLocationAdvice = { concerns: [] };
 
-/* ==================================================================== */
 /* Flüchtige Ordner                                                     */
-/* ==================================================================== */
 
 /**
  * Ordnernamen, deren Inhalt planmäßig gelöscht wird.
@@ -113,9 +109,7 @@ const NOTHING: DatabaseLocationAdvice = { concerns: [] };
  */
 const VOLATILE_FOLDER_NAMES: ReadonlySet<string> = new Set(["temp", "tmp"]);
 
-/* ==================================================================== */
 /* Die Auskunft                                                         */
-/* ==================================================================== */
 
 /**
  * Beurteilt den vom Dienst gemeldeten Ablageort.

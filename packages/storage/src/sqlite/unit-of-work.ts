@@ -1,55 +1,10 @@
+import { createTodoPriorityPort } from "./repo-priorities.ts";
+import { createMailPort } from './repo-mail.ts';
 /**
- * Takt — die Transaktionsklammer (A-6.2, A-8.8).
- *
- * ---------------------------------------------------------------------------
- * Warum die Transaktionen gereiht werden, und warum das nicht optional ist
- * ---------------------------------------------------------------------------
- *
- * `node:sqlite` ist synchron, die Ports sind es nicht (siehe `database.ts`).
- * Ein Anwendungsfall darf also innerhalb einer offenen Transaktion `await`
- * sagen — und der Exportlauf **muss** es sogar, weil er die Datei schreibt,
- * bevor er markiert (architektur.md 3.2). An jedem `await` kann die
- * Ereignisschleife eine zweite Anfrage bedienen. Ohne Reihung liefe deren
- * `BEGIN` in dieselbe offene Transaktion hinein: Ihre Schreibvorgänge lägen in
- * fremder Klammer, und ein `ROLLBACK` des Exports nähme sie mit.
- *
- * Deshalb hält dieser Port eine Warteschlange. Zwei Transaktionen laufen nie
- * gleichzeitig; die zweite beginnt, wenn die erste festgeschrieben oder
- * zurückgenommen ist. Für einen Einbenutzerdienst auf einer Loopback-Adresse
- * ist das kein Engpass — der teuerste Vorgang ist der Exportlauf, und der
- * findet einmal am Tag statt.
- *
- * `BEGIN IMMEDIATE` statt `BEGIN`: Die Schreibsperre wird sofort genommen und
- * nicht erst beim ersten Schreibvorgang. Eine Transaktion, die zunächst liest
- * und dann schreibt — genau der Exportlauf — könnte sonst mitten im Vorgang an
- * `SQLITE_BUSY` scheitern, nachdem die Datei bereits geschrieben ist.
- *
- * ---------------------------------------------------------------------------
- * Verschachtelte Aufrufe sind unzulässig
- * ---------------------------------------------------------------------------
- *
- * SQLite kennt Sicherungspunkte, aber ein Anwendungsfall, der eine bestehende
- * Transaktion nur teilweise zurücknimmt, ist bei einer Abrechnung nicht
- * wünschenswert: „Datei geschrieben, aber nur die Hälfte markiert" ist genau
- * der Zustand, den A-8.8 ausschließt. Ein verschachtelter Aufruf ist deshalb
- * ein Programmierfehler und wirft.
- *
- * Der Wächter dafür muss **vor** der Warteschlange stehen, nicht dahinter
- * (T-029, Befund aus T-027). Ein Zähler innerhalb des Laufs war unerreichbar:
- * Der verschachtelte Aufruf kam gar nicht bis dorthin, weil er zuerst auf
- * `queue` wartete — und `queue` wird erst frei, wenn die äußere Transaktion
- * endet, die ihrerseits auf das Ergebnis der inneren wartet. Das Ergebnis war
- * kein Wurf, sondern ein Ring ohne Ende: eine Anfrage, die nie antwortet.
- * Für einen Benutzer sieht das aus wie ein hängender Speichervorgang, und er
- * bricht die Anwendung mitten im Vorgang ab — genau der Zustand, den A-8.8
- * ausschließen soll.
- *
- * Erkannt wird die Verschachtelung über den asynchronen Aufrufzusammenhang
- * (`AsyncLocalStorage`). Das ist nicht Zierrat: Ein bloßes „läuft gerade eine
- * Transaktion?" würde auch die **zweite, unabhängige** Anfrage abweisen, die
- * zulässig ist und nur warten soll. Unterschieden werden muss „von *innerhalb*
- * der laufenden Transaktion aufgerufen" von „gleichzeitig, aber von außen" —
- * und genau diese Auskunft gibt der Aufrufzusammenhang.
+ * Transaktionen serialisieren, da `await` sonst fremde Anfragen in dieselbe SQLite-Transaktion
+ * lassen könnte. `BEGIN IMMEDIATE` nimmt die Schreibsperre vor dem Dateiexport.
+ * Verschachtelte Aufrufe vor dem Einreihen erkennen, sonst entsteht ein Deadlock.
+ * `AsyncLocalStorage` unterscheidet sie von unabhängigen wartenden Anfragen.
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -131,6 +86,7 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
 
   return {
     todos,
+    mails: createMailPort(conn),
     notes: createTodoNotePort(conn),
     /*
      * Anhänge (A-19.8). Ein eigener Port neben `notes` und aus demselben
@@ -142,6 +98,7 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
     folders: createTagFolderPort(conn, ids),
     pools: createPoolPort(conn, ids, searchTodos),
     statuses: createTodoStatusPort(conn, ids),
+    priorities: createTodoPriorityPort(conn, ids),
     timeEntries: createTimeEntryPort(conn, ids, options.timeZone),
     timer: createTimerPort(conn, ids),
     idle: createIdleTimerPort(conn),

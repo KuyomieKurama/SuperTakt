@@ -1,0 +1,12 @@
+/* @theme {"label":"Dracula","mode":"dark","hint":"Violett und Pastell auf Anthrazit","order":4} */
+:root[data-design-theme="dracula"] {
+  --preset-canvas: #282a36;
+  --preset-surface: #2c2e3a;
+  --preset-ink: #f8f8f2;
+  --preset-muted: #cbccca;
+  --preset-accent: #bd93f9;
+  --preset-link: #c39df8;
+  --preset-on: #101010;
+  --preset-accent-hover: #c199f9;
+  --preset-accent-active: #c49efa;
+}

@@ -1,65 +1,8 @@
 /**
- * Takt — Dateizugriff für den Export (E-011, R-11, A-8.1, A-8.9, B-6.*).
- *
- * ---------------------------------------------------------------------------
- * Der Ordner ist Benutzereingabe, und er wird jedes Mal neu geprüft
- * ---------------------------------------------------------------------------
- *
- * Nicht nur beim Einstellen. Zwischen zwei Exportläufen kann ein Netzlaufwerk
- * verschwinden, ein Ordner schreibgeschützt werden oder durch eine Datei
- * gleichen Namens ersetzt sein. Ein Export, der das erst beim Schreiben
- * bemerkt, hat die Transaktion schon offen.
- *
- * ---------------------------------------------------------------------------
- * Warum erst eine Nachbardatei und dann umbenannt wird
- * ---------------------------------------------------------------------------
- *
- * Ein Umbenennen innerhalb desselben Dateisystems ist unteilbar. Wer die
- * Zieldatei direkt schriebe, hinterließe bei einem Absturz mitten im Schreiben
- * eine halbe Exportdatei — mit gültigem Namen, im richtigen Ordner, und ohne
- * Kennzeichen, dass sie unvollständig ist. Sie ginge an die Abrechnung.
- *
- * Die Nachbardatei heißt `.takt-<zufall>.tmp` und liegt im **selben** Ordner:
- * Ein Umbenennen über eine Dateisystemgrenze hinweg wäre ein Kopiervorgang und
- * damit nicht mehr unteilbar.
- *
- * ---------------------------------------------------------------------------
- * Der Zielpfad wird aufgelöst und verglichen
- * ---------------------------------------------------------------------------
- *
- * Der Dateiname wird vom Dienst gebildet und enthält keine Eingabe des
- * Aufrufers. Trotzdem wird geprüft: `resolve(ordner, name)` muss innerhalb des
- * aufgelösten Ordners liegen. Das ist die Maßnahme gegen R-11 — und sie steht
- * hier, weil sie sonst bei der nächsten Vorlage vergessen würde, die einen
- * Dateinamen konfigurierbar macht.
- *
- * ---------------------------------------------------------------------------
- * Die Prüfung wartet höchstens drei Sekunden
- * ---------------------------------------------------------------------------
- *
- * Ein `stat` auf eine tote Netzfreigabe kehrt nicht sofort zurück. Es kehrt
- * zurück, wenn das Betriebssystem aufgibt — unter Windows nach etwa fünfzehn
- * Sekunden. So lange hielt `PATCH /settings` die Antwort auf, und ein Benutzer,
- * der einen Ordner einstellt, hält eine Anwendung nach fünfzehn Sekunden ohne
- * Rückmeldung für abgestürzt. Er wartet nicht, er klickt.
- *
- * Deshalb ein Zeitbudget von drei Sekunden. Was danach kommt, ist `unreachable`
- * und nicht `missing`: Nicht geantwortet zu haben ist kein Beleg dafür, nicht
- * da zu sein.
- *
- * Zwei Dinge, die dabei **nicht** geschehen, gehören dazugesagt:
- *
- *  1. Der Systemaufruf wird nicht abgebrochen. Node kann `stat` nicht
- *     zurücknehmen; das Budget beendet nur das Warten. Der Aufruf läuft in
- *     einem Arbeiter des Threadpools weiter, bis das Betriebssystem ihn
- *     beendet. Der Pool hat vier Arbeiter — wer viermal hintereinander auf
- *     dieselbe tote Freigabe prüft, bevor der erste Aufruf zurückkehrt, hält
- *     sie alle. Das ist hinnehmbar, weil der einzige Auslöser eine Handlung des
- *     Benutzers an derselben Einstellung ist, und es ist der Grund, warum das
- *     Budget nicht auf 300 Millisekunden steht.
- *  2. Das Schreiben selbst bekommt kein Budget. Ein halb geschriebener Export
- *     ist schlimmer als ein langsamer; dort ist die Nachbardatei die Sicherung
- *     und nicht die Uhr.
+ * Den Ordner vor jedem Export erneut prüfen. Über eine Nachbardatei im selben Ordner schreiben,
+ * damit das abschließende Umbenennen atomar bleibt.
+ * Der aufgelöste Zielpfad muss im Exportordner liegen. Das Prüfzeitlimit beendet nur das Warten,
+ * nicht den Systemaufruf; Schreiben erhält kein Zeitlimit.
  */
 
 import { createHash, randomBytes } from 'node:crypto';

@@ -14,9 +14,7 @@ import {
   importTodoistFiles,
   type DataImportSummary,
 } from "./api";
-/* ==================================================================== */
 /* Daten — Sicherung, Wiederherstellung und Fremdimport                 */
-/* ==================================================================== */
 
 function saveJsonFile(value: unknown): void {
   const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");

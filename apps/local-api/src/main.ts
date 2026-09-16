@@ -227,7 +227,6 @@ export async function main(options: MainOptions = {}): Promise<void> {
   }
   const { app, runtime, tokens, database, context, versionCheck } = composed;
 
-  // ---------------------------------------------------------------------------
   // Migration. Vorwärts bis zur höchsten bekannten Fassung, mit
   // Sicherungskopie davor (siehe migration-runner.ts).
   //
@@ -237,7 +236,6 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // **Der Grund wird unterschieden** (T-132). Hier stand bis dahin ein `catch`
   // ohne Bindung; der Schritt selbst liegt jetzt in `startup.ts` und ist ohne
   // laufenden Dienst prüfbar.
-  // ---------------------------------------------------------------------------
   if (database !== null && !(await bringDatabaseUpToDate(database.migrations, logger))) {
     process.exit(EXIT_CONFIG);
   }
@@ -529,14 +527,12 @@ export async function main(options: MainOptions = {}): Promise<void> {
     },
   );
 
-  // ---------------------------------------------------------------------------
   // Der Aufgabenbereich des Add-ins über HTTPS (E-046).
   //
   // Zweiter Port, **nur statische Dateien**. Die API bleibt auf 17843 mit ihrer
   // Prüfschicht. Schlägt der Start fehl, läuft Takt weiter: Ohne
   // Aufgabenbereich ist das Add-in nicht benutzbar, die Anwendung selbst schon.
   // Ein Abbruch wäre die falsche Antwort auf ein fehlendes Zertifikat.
-  // ---------------------------------------------------------------------------
   // Die Klammer ist keine Vorsicht, sondern eine Lehre aus T-053: Dort riss
   // ein `TypeError` aus der Wegsuche des Aufgabenbereichs den ganzen Dienst
   // mit. Was oben als Absicht steht — „ohne Aufgabenbereich läuft Takt

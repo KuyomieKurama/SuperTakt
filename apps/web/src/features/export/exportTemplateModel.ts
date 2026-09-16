@@ -66,9 +66,7 @@ export type {
  * war: dass die Antwort je etwas enthält, was sie nicht enthalten darf.
  */
 
-/* ==================================================================== */
 /* Gestalt einer Vorlage                                                */
-/* ==================================================================== */
 
 export interface ExportFieldCondition {
   readonly source: ExportSourcePath;
@@ -100,9 +98,7 @@ export interface ExportTemplateDefinition {
   readonly fields: readonly ExportFieldDefinition[];
 }
 
-/* ==================================================================== */
 /* Die Auswahlliste, geordnet und versiegelt                            */
-/* ==================================================================== */
 
 /**
  * Sieht ein gelieferter Quellenpfad nach dem internen Vermerk aus?
@@ -265,9 +261,7 @@ export function readSourceCatalog(response: ExportSourceCatalog): SourceCatalog 
   };
 }
 
-/* ==================================================================== */
 /* Lesen                                                                */
-/* ==================================================================== */
 
 export type TemplateParseResult =
   | { readonly ok: true; readonly value: ExportTemplateDefinition }
@@ -396,9 +390,7 @@ export function toDefinitionBody(fields: readonly ExportFieldDefinition[]): unkn
   };
 }
 
-/* ==================================================================== */
 /* Abgleich mit der Standardvorlage                                     */
-/* ==================================================================== */
 
 export type DeviationTone = "warning" | "info";
 

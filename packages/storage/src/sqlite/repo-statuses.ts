@@ -1,25 +1,4 @@
-/**
- * Takt — der **Status** eines Todos (A-5.3, A-5.4, E-023, E-054).
- *
- * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel und
- * liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist seit
- * E-055 eine ihrer fünf Achsen und nicht ihr Gegenstück — als Eigenschaft am
- * Todo liegt er hier. Die Wörter in den Meldungen dieser
- * Datei sagen das seit T-074 auch — bis dahin sprachen fünf von ihnen von einer
- * „Spalte", und die erste davon erscheint im Einstellungsbereich *Status*, zwei
- * Absätze unter der Erklärung, dass beides zweierlei ist.
- *
- * Ein Status trägt **kein** Merkmal „Erledigt". Erledigt (A-2.4) und der
- * Abschlussstatus (A-5.3) sind zwei getrennte Achsen: Ein Todo kann „Done"
- * tragen und nicht erledigt sein, und es kann erledigt sein und „In Progress"
- * tragen. Das Kennzeichen ist `todo.completed_at` und hängt an keinem Status.
- *
- * Die Neuordnung ist ein eigener Vorgang und kein Feld auf `update`. Grund ist
- * `ux_todo_status_position`: Der eindeutige Index bricht, sobald zwei Zeilen
- * auch nur für die Dauer einer Anweisung dieselbe Position tragen. Eine
- * Neuordnung, die Zeile für Zeile schreibt, ist deshalb nicht bloß langsam,
- * sondern schlägt fehl.
- */
+/** Status und „Erledigt“ sind unabhängig. Beim Umsortieren dürfen auch vorübergehend keine doppelten Positionen entstehen. */
 
 import type { TodoStatusPort } from '../ports.ts';
 import type { StatusId, TodoStatus } from '@takt/domain';

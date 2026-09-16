@@ -1,16 +1,4 @@
-/**
- * Takt — dünner API-Zugang für die Vorbereitung von End-zu-Ende-Fällen.
- *
- * Die eigentliche Prüfung eines Testfalls läuft über die Oberfläche
- * (Playwright-Interaktion), nicht über diese Datei. Was hier steht, ist
- * ausschließlich Vorbereitung ("gegeben sei …") — etwa drei Todos anlegen,
- * bevor der Export in der Oberfläche ausgelöst wird — und das Nachlesen von
- * Tatsachen, die die Oberfläche selbst nicht in einer prüfbaren Form zeigt
- * (z. B. den rohen `exportCount`).
- *
- * Ruft denselben Dienst über dieselbe Route wie die Oberfläche, mit demselben
- * Sitzungsgeheimnis (`api/client.ts`, `X-Takt-Token`).
- */
+/** API-Zugriffe dienen dem Testaufbau und Nachlesen; Bedienabläufe werden über die Oberfläche geprüft. */
 
 import { API_BASE_URL, SESSION_SECRET, TOKEN_HEADER, WEB_BASE_URL } from './session';
 
@@ -40,10 +28,7 @@ export interface Todo {
   readonly statusId: string;
   readonly completedAt: string | null;
   readonly tagIds: readonly string[];
-  /**
-   * Die Frist (A-19.1, A-19.3). `null` heißt: keine — ein Tag als
-   * `YYYY-MM-DD`, kein Zeitstempel (T-150, Abschnitt 19).
-   */
+  /** Tageswert YYYY-MM-DD oder null, kein Zeitstempel. */
   readonly dueDate: string | null;
 }
 
@@ -80,14 +65,7 @@ export async function createTodo(input: {
   return result.todo;
 }
 
-/**
- * `PATCH /todos/:id` — nur die Frist (A-19.3, T-150).
- *
- * `undefined` ist hier **nicht** erreichbar (anders als am Dienst selbst):
- * Diese Testhilfe dient ausschließlich dazu, eine Frist zu setzen, zu ändern
- * oder zu entfernen (`null`) — nie dazu, sie unverändert zu lassen, dafür
- * braucht es kein eigenes Werkzeug.
- */
+/** null entfernt das Fälligkeitsdatum. */
 export async function updateTodoDueDate(id: string, dueDate: string | null): Promise<Todo> {
   return call<Todo>(`/todos/${id}`, {
     method: 'PATCH',
@@ -122,25 +100,7 @@ export async function clearTodoDone(id: string): Promise<Todo> {
   return call<Todo>(`/todos/${id}/done`, { method: 'DELETE' });
 }
 
-/**
- * Vertrag von `PUT`/`DELETE /todos/:id/done`, seit T-101/T-102 gemessen
- * (E-060 Punkt 1): Beide Routen liefern das Todo **flach** wie bisher,
- * `poolMovement` als zusätzliches Feld daneben — Anlass `'booking'` beim
- * Setzen, `'reopen'` beim Aufheben (E-060 Punkt 2), `null`, wenn sich nichts
- * bewegt (kein Regelwechsel). Genau die Gestalt, die T-102 gegen die echte
- * Route gelesen hat (`Felder: callNumber, completedAt, createdAt, id,
- * poolMovement, statusId, tagIds, title, updatedAt`) und die
- * `apps/web/src/api/types.ts` als `TodoDoneResult extends Todo` abbildet.
- * **Keine** Hülle `{ todo, poolMovement }` — der T-103-Entwurf hatte das
- * angenommen, gemessen ist es anders.
- *
- * {@link markTodoDone}/{@link clearTodoDone} oben bleiben unverändert bei
- * der Beschriftung `Todo`: Die zusätzlichen Felder der Antwort stören dort
- * niemanden, sie werden nur nicht gelesen (kein Aufrufer dieser beiden
- * Funktionen braucht den Bewegungssatz). Keine `kind`-Marke hier — anders
- * als beim Timer kennt weder das Setzen noch das Aufheben von „Erledigt"
- * einen zweiten Ausgang (kein „unvollständig", kein „abgelehnt").
- */
+/** Die Antwort enthält die Todo-Felder und `poolMovement` ohne zusätzliche Hülle. */
 export interface TodoDoneResult extends Todo {
   readonly poolMovement: PoolMovementNames | null;
 }
@@ -172,16 +132,7 @@ export async function createTimeEntry(input: {
   });
 }
 
-/**
- * Vertrag von `POST /time-entries`, seit T-107 gemessen (E-061 Nachtrag,
- * O-V): Die Buchung kommt **flach** zurück, `poolMovement` als zusätzliches
- * Feld daneben — Anlass `'booking'`, `null`, wenn das Todo schon eine offene,
- * abgeschlossene Buchung hatte. Gerechnet wird mit `closedEntryMovementStates`
- * (`ENTRY_CLOSED_EFFECT`), derselben Rechnung wie am Stopp — eine Buchung von
- * Hand hebt „Erledigt" **nicht** auf (A-2.5, nur der Timerstart tut das;
- * `decisions.md` E-061, Nachtrag). Dieselbe Gestalt wie {@link TodoDoneResult}:
- * kein `?` und kein `?? null`, siehe dortiger Kommentar zur Begründung.
- */
+/** Die Antwort ergänzt den Zeiteintrag um `poolMovement`; manuelle Buchungen öffnen erledigte Todos nicht wieder. */
 export interface CreatedTimeEntryResult extends TimeEntry {
   readonly poolMovement: PoolMovementNames | null;
 }
@@ -307,14 +258,7 @@ export interface ApiFieldErrorEntry {
   readonly message: string;
 }
 
-/**
- * `DELETE /tag-folders/:id` roh — anders als {@link deleteTagFolder} wirft
- * dieser Weg bei einer Ablehnung nicht, sondern liefert Status und Antwortkörper
- * zur Prüfung (T-096, R-1 Befund 1 / T-089): Ein in einer Regel stehender
- * Ordner antwortet `409 tag_in_use` mit `details` — je betroffener Regel ein
- * Eintrag mit ihrer Kennung (`field`) und ihrem Namen (`message`,
- * `packages/storage/src/sqlite/mappers.ts#poolReference`).
- */
+/** Liefert auch Fehlerantworten unverändert zur Prüfung. */
 export async function attemptDeleteTagFolder(id: string): Promise<
   | { readonly ok: true }
   | {
@@ -358,20 +302,9 @@ export async function createStatus(name: string, position = 0): Promise<Status> 
   return call<Status>('/todo-statuses', { method: 'POST', body: JSON.stringify({ name, position }) });
 }
 
-/* ==================================================================== */
 /* Pools / Kanban-Spalten (E-054, E-055)                                 */
-/* ==================================================================== */
 
-/**
- * Seit E-054 dieselbe Entität wie eine Kanban-Spalte — `placement`
- * unterscheidet, wo eine Regel erscheint. Nur die Felder, die die
- * Aufräumung und die wenigen Fälle brauchen, in denen das Anlegen selbst
- * nicht der geprüfte Schritt ist (`todo-revival.spec.ts`): Eine Kanban-Spalte,
- * die tatsächlich geprüft wird, entsteht in `kanban.spec.ts` ausschließlich
- * über die Oberfläche (`support/actions.ts`, `createBoardColumn`) — ein
- * Testaufbau an der Datenbank vorbei würde genau das nicht mitmessen
- * (T-081-Auftrag, "Zwei Fallen").
- */
+/** Nur für Testaufbau und Aufräumen; Bedienabläufe verwenden die Oberfläche. */
 export interface Pool {
   readonly id: string;
   readonly name: string;
@@ -410,12 +343,7 @@ export async function deletePool(id: string): Promise<void> {
   await call<void>(`/pools/${id}`, { method: 'DELETE' });
 }
 
-/**
- * Für die Aufräumung nach einem `kanban.spec.ts`-Fall: Eine über die
- * Oberfläche angelegte Spalte (`createBoardColumn`, `support/actions.ts`)
- * liefert keine Kennung an den Aufrufer zurück — sie wird hier über ihren
- * (im Testlauf eindeutigen, zeitgestempelten) Namen wiedergefunden.
- */
+/** Testnamen müssen eindeutig sein, damit das Aufräumen die richtige Spalte findet. */
 export async function listPools(placement: 'pool' | 'board' | 'all' = 'pool'): Promise<readonly Pool[]> {
   return call<readonly Pool[]>(`/pools?${new URLSearchParams({ placement }).toString()}`);
 }
@@ -486,20 +414,12 @@ export async function deleteTodo(id: string): Promise<void> {
   await call<void>(`/todos/${id}`, { method: 'DELETE' });
 }
 
-/**
- * Aufräumen nach einem Kanban-Testfall (T-052). Lehnt der Dienst ab
- * (`status_in_use`, 409 — trägt noch ein Todo, oder `last_status_column`,
- * falls sie die letzte verbliebene wäre), ist das ein Zeichen, dass zuerst
- * die betroffenen Todos umgehängt oder gelöscht werden müssen — kein Fall,
- * den diese Funktion selbst heilen sollte.
- */
+/** Verweise müssen vor dem Löschen entfernt werden; Fehler werden nicht automatisch behoben. */
 export async function deleteTodoStatus(id: string): Promise<void> {
   await call<void>(`/todo-statuses/${id}`, { method: 'DELETE' });
 }
 
-/* ==================================================================== */
 /* Timer (T-048 — Aufräumung; T-099 — Bewegungssatz und Exportstatus)    */
-/* ==================================================================== */
 
 export interface RunningTimer {
   readonly entry: { readonly id: string; readonly todoId: string; readonly startedAt: string };
@@ -507,13 +427,6 @@ export interface RunningTimer {
   readonly elapsedSeconds: number;
 }
 
-/**
- * Die Bewegung eines Todos durch die Pools, so wie der Dienst sie an den
- * Timer-Routen mitgibt (`PoolMovement` aus `@takt/domain`, E-058). Drei
- * Namenslisten und kein fertiger Satz — den bildet `poolMovementSentence`
- * aus derselben Domäne, hier bewusst noch als reine JSON-Gestalt gehalten,
- * damit diese Datei keine Domänenabhängigkeit braucht.
- */
 export interface PoolMovementNames {
   readonly appears: readonly string[];
   readonly enters: readonly string[];
@@ -530,11 +443,7 @@ export async function getOrphanedTimer(): Promise<{ readonly running: RunningTim
   return call('/timer/orphaned');
 }
 
-/**
- * `POST /timer/start` (T-099). `poolMovement` steht nur im Zweig `started`
- * und ist dort `null`, wenn der Start nichts bewegt hat (E-058 Punkt 1) —
- * derselbe Vertrag wie in `apps/web/src/api/types.ts` (`StartTimerResult`).
- */
+/** Nur `started` kann eine Poolbewegung enthalten. */
 export type StartTimerResult =
   | {
       readonly kind: 'started';
@@ -550,11 +459,7 @@ export async function startTimer(todoId: string, stopRunning = false): Promise<S
   });
 }
 
-/**
- * `POST /timer/stop` (T-099, E-058 Punkt 6). Im Zweig `discarded` steht
- * `poolMovement` fest auf `null` — der Timer lief unter einer Sekunde, und
- * ohne Buchung bewegt sich nichts.
- */
+/** Verworfene Buchungen unter einer Sekunde lösen keine Poolbewegung aus. */
 export type StopTimerResult =
   | { readonly kind: 'recorded'; readonly entry: TimeEntry; readonly poolMovement: PoolMovementNames | null }
   | { readonly kind: 'discarded'; readonly poolMovement: null };
@@ -563,18 +468,7 @@ export async function stopTimer(note = ''): Promise<StopTimerResult> {
   return call<StopTimerResult>('/timer/stop', { method: 'POST', body: JSON.stringify({ note }) });
 }
 
-/**
- * `POST /timer/orphaned/resolve` (T-099, E-058 Punkt 6). Dieselbe Gestalt wie
- * beim Stopp — auch hier ist `poolMovement` im verworfenen Zweig fest `null`.
- *
- * `reason` als geschlossene Aufzählung, nicht als `string` (Fund aus T-093,
- * O-R): Die OpenAPI verspricht `timer_too_short` und `orphan_discarded`,
- * vor T-101 liefert der Dienst aber ausnahmslos `timer_too_short` — die Wahl
- * „verwerfen“ läuft heute unter derselben Kennung wie „zu kurz“. Die
- * Aufzählung hier nennt bereits beide, weil kein heutiger Aufrufer den Wert
- * ausliest (siehe `cleanupAnyTimer` unten); sobald T-101 unterscheidet, ist
- * dieser Typ bereits der richtige, kein zweiter Umbau nötig.
- */
+/** Unterscheidet bewusstes Verwerfen von einer zu kurzen Buchung. */
 export type ResolveOrphanedTimerResult =
   | { readonly kind: 'recorded'; readonly entry: TimeEntry; readonly poolMovement: PoolMovementNames | null }
   | {
@@ -597,13 +491,7 @@ export async function touchTimerHeartbeat(): Promise<void> {
   await call<unknown>('/timer/heartbeat', { method: 'POST' });
 }
 
-/**
- * Räumt einen laufenden oder verwaisten Timer über die API auf — unabhängig
- * davon, ob ein UI-Testfall zuvor selbst aufgeräumt hat. Ohne das hinterlässt
- * ein fehlgeschlagener Testfall einen laufenden Timer im gemeinsamen Bestand;
- * jeder folgende Testfall träfe dann sofort auf die „verwaister Timer"-
- * Rückfrage der Oberfläche (siehe Bericht zu T-048).
- */
+/** Räumt auch nach fehlgeschlagenen Tests einen verbliebenen Timer auf. */
 export async function cleanupAnyTimer(): Promise<void> {
   const running = await getRunningTimer().catch(() => null);
   if (running !== null) {
@@ -615,33 +503,9 @@ export async function cleanupAnyTimer(): Promise<void> {
   }
 }
 
-/* ==================================================================== */
 /* Outlook-Add-in — die Routen unter /addin direkt (T-099)               */
-/* ==================================================================== */
 
-/**
- * `credentialPolicy` (`apps/local-api/src/http/guards.ts`) senkt die
- * Anforderung nur unter `/api/v1/addin` auf „irgendein Nachweis" — das
- * Sitzungsgeheimnis dieses Testlaufs erfüllt das ebenso wie ein eigenes
- * Add-in-Token. Ein zweites, eigens ausgestelltes Token ist deshalb für
- * diese Aufrufe nicht nötig.
- *
- * Diese Datei ruft die Add-in-Routen absichtlich **direkt** über HTTP an,
- * nicht über den Aufgabenbereich selbst (Office.js): T-099 vergleicht den
- * Bewegungssatz gegen das, was `POST /addin/...` liefert und was
- * `apps/outlook-addin/src/duplicate/reopen.ts` (fremde Hoheit, nur gelesen)
- * daraus baut — dieselbe Auskunft, die auch ein echter Aufgabenbereich über
- * `fetch` bekäme.
- */
-/**
- * Vertrag der beiden Add-in-Routen seit T-104 (E-061 Punkt 3): Eine Form für
- * die Poolbewegung, dieselbe wie überall sonst — `poolMovement` statt der
- * drei Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames`.
- * `null` gilt hier wie an den Timer-Routen: kein Wert, wenn das Todo offen
- * ist und schon eine offene Buchung hat (T-104, Annahme 1); für ein
- * erledigtes Todo steht immer ein Wert da, sonst ginge der
- * Wiederöffnen-Satz verloren.
- */
+/** Für die direkte Testanbindung wird das Sitzungstoken verwendet. */
 export interface AddinTodoMatch {
   readonly id: string;
   readonly title: string;
@@ -673,18 +537,7 @@ export interface AddinBookResult {
   readonly poolMovement: PoolMovementNames | null;
 }
 
-/**
- * `POST /addin/todos/:todoId/time-entries` — die Bestätigung, nach der
- * Buchung (A-6.1, A-10.9). `startedAt`/`endedAt` im Format
- * `YYYY-MM-DDTHH:MM:SSZ` (Sekundengenauigkeit, `schema.ts` der Add-in-Routen).
- *
- * Nimmt bewusst **beliebige zusätzliche Felder** entgegen (`Record<string,
- * unknown>`), nicht nur die drei genannten — TP-ANH-13 (A-19.19, A-A-82,
- * A-10.9 in der Fassung von E-100) schickt hier probeweise ein `attachments`-
- * Feld mit, um zu prüfen, dass die Buchungstür es stillschweigend verwirft
- * und **kein** Anhang am gefundenen Todo entsteht — die einzige Tür, an der
- * das Add-in ein bereits vorhandenes Todo überhaupt berührt.
- */
+/** Zusätzliche Schlüssel erlauben Tests gegen eingeschleuste Anhangsdaten. */
 export async function addinBookOnTodo(
   todoId: string,
   input: { startedAt: string; endedAt: string; note?: string } & Record<string, unknown>,
@@ -696,13 +549,6 @@ export async function addinBookOnTodo(
   });
 }
 
-/**
- * Ein einzelner Anhang im Umschlag von `POST /addin/todos` (A-19.22 bis
- * A-19.33, E-108) — dieselbe unterschiedene Vereinigung wie
- * `emailAttachmentItemSchema` in `apps/local-api/src/routes/addin/schema.ts`
- * (fremde Hoheit, hier nur zeichengleich nachgebildet, damit dieser Testlauf
- * gültige Rümpfe bauen kann).
- */
 export type AddinEmailAttachmentItemInput =
   | { readonly kind: 'message'; readonly displayName: string; readonly contentBase64: string; readonly rebuilt: boolean }
   | { readonly kind: 'file'; readonly displayName: string; readonly contentBase64: string }
@@ -724,20 +570,7 @@ export interface AddinCreatedAttachmentsResult {
   }[];
 }
 
-/**
- * `POST /addin/todos` — Anlegen, wahlweise mit Anhängen aus einer E-Mail
- * (A-19.22 bis A-19.33, E-108, T-304) und für TP-ANH-13 (A-19.19, A-A-82,
- * E-100) außerdem als Trägerin eines Schmuggelversuchs: ein zusätzliches
- * Feld (z. B. `todoId`), mit dem ein Aufrufer versuchen könnte, den Anhang
- * an ein **vorhandenes** Todo statt an das neu angelegte zu hängen. Die Tür
- * führt kein Feld dafür (`AddinDeps.emailAttachments` hat keinen Parameter
- * vom Typ `TodoId`) — ein unbekannter Schlüssel fällt in zod still weg,
- * ändert also nichts an der Wirkung, und genau das prüft der Testfall, statt
- * es zu behaupten.
- *
- * Bewusst **ohne** `dueDate`: Diese Funktion trägt nur, was die
- * Anhangs-Testfälle brauchen.
- */
+/** Zusätzliche Schlüssel erlauben Tests gegen unerlaubte Verknüpfungen mit bestehenden Todos. */
 export interface AddinCreatedTodo {
   readonly todo: { readonly id: string; readonly title: string };
   readonly attachments: AddinCreatedAttachmentsResult | null;
@@ -752,9 +585,7 @@ export async function addinCreateTodo(
   });
 }
 
-/* ==================================================================== */
 /* Anhänge (A-19.8 bis A-19.15, E-071, E-072, T-150)                     */
-/* ==================================================================== */
 
 export type AttachmentKind = 'link' | 'image' | 'file';
 
@@ -766,12 +597,6 @@ export interface Attachment {
   readonly target: string;
   readonly position: number;
   readonly createdAt: string;
-  /**
-   * Herkunft, Absender, Anzeigename und Nachbau-Kennzeichnung (A-A-84,
-   * A-A-85, A-19.23a, A-19.22b) — seit Migration 0023 Teil jeder Antwort,
-   * hier nachgetragen, weil `attachment-handoff-to-app.spec.ts` sie über die
-   * echte Tür liest statt sie anzunehmen.
-   */
   readonly origin?: 'user' | 'email';
   readonly originSender?: string | null;
   readonly displayName?: string | null;
@@ -813,12 +638,7 @@ export async function getAttachmentImage(todoId: string, attachmentId: string): 
   return call<AttachmentImage>(`/todos/${todoId}/attachments/${attachmentId}/image`);
 }
 
-/**
- * `POST /todos/:id/attachments` roh — für die Formprüfung an der Tür
- * (TP-ANH-15 bis TP-ANH-18, R-21, R-22). Anders als {@link createAttachment}
- * wirft dieser Weg bei einer Ablehnung nicht, sondern liefert Status und
- * Antwortkörper zur Prüfung — dieselbe Bauart wie {@link attemptDeleteTagFolder}.
- */
+/** Liefert auch Fehlerantworten unverändert zur Prüfung. */
 export async function attemptCreateAttachment(
   todoId: string,
   body: unknown,

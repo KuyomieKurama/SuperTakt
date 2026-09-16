@@ -34,6 +34,33 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
   afterEach(() => db.close());
   const begin = (returned = true) => beginIdle(context, { entryId, startedAt: ts('2026-09-08T08:10:00Z'), ...(returned ? { returnedAt: ts('2026-09-08T08:50:00Z') } : {}) });
 
+  it('collects multiple absences in one pending session without reallocating the active gap', async () => {
+    expect((await begin()).ok).toBe(true);
+    const continued = await unit.timer.running();
+    clock = ts('2026-09-08T09:30:00Z');
+    const input = { entryId: continued!.id, startedAt: ts('2026-09-08T09:10:00Z'), returnedAt: clock };
+    expect((await beginIdle(context, input)).ok).toBe(true);
+    expect((await beginIdle(context, input)).ok).toBe(true);
+    const pending = (await loadIdle(context))!;
+    expect(pending.previousPeriods).toHaveLength(1);
+    expect(pending.previousPeriods?.[0]?.returnedAt).toBe('2026-09-08T08:50:00Z');
+    const tables = await unit.dataArchive.readAll();
+    await unit.dataArchive.replaceAll(tables);
+    expect((await loadIdle(context))?.previousPeriods).toEqual(pending.previousPeriods);
+    const result = await resolveIdle(context, { id: pending.id, resume: false, allocations: [
+      { todoId: second, seconds: 2700, note: 'Offline gearbeitet' }, { todoId: null, seconds: 900, note: '' },
+    ] });
+    expect(result).toMatchObject({ ok: true, value: { recordedSeconds: 2700, breakSeconds: 900 } });
+    expect(await loadIdle(context)).toBeNull();
+    const entries = await unit.timeEntries.search({ todoId: second });
+    expect(entries.items.map(entry => [entry.startedAt, entry.endedAt]).sort()).toEqual([
+      ['2026-09-08T08:10:00Z', '2026-09-08T08:50:00Z'], ['2026-09-08T09:10:00Z', '2026-09-08T09:15:00Z'],
+    ]);
+    expect(await unit.timeEntries.sumSeconds({ todoId: first })).toBe(1800);
+    expect((await unit.timer.running())?.startedAt).toBe(clock);
+    expect(await resolveIdle(context, { id: pending.id, resume: false, allocations: [{ todoId: null, seconds: 3600, note: '' }] })).toMatchObject({ ok: true, value: { alreadyResolved: true } });
+  });
+
   it('behandelt einen Timer aus der laufenden Dienstsitzung nicht als verwaist', async () => {
     context = { ...context, timerRecovery: { entryId: null } };
     await begin();

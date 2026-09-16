@@ -267,6 +267,10 @@ async function serve(
     return;
   }
 
+  // Office requires cacheable manifest icons; keep scripts and pages uncached.
+  if (/^\/assets\/takt-(16|32|64|80|128)\.png$/.test(requested)) {
+    delete headers['Cache-Control'];
+  }
   response.writeHead(200, { ...headers, 'Content-Type': type });
   createReadStream(file).pipe(response);
 }

@@ -1,29 +1,6 @@
-//! Takt — Ablageort der Anwendungsdaten und seine Rechte (E-018, B-7.1, B-7.2, R-13).
-//!
-//! `%LOCALAPPDATA%\Takt\` unter Windows, `~/.local/share/takt/` sonst.
-//! **Ausdrücklich nicht `%APPDATA%`.** Ein Roaming-Profil kopiert dieses
-//! Verzeichnis beim Abmelden auf einen Dateiserver: Die Kundendatenbank
-//! verlässt den Rechner (gegen E-001), und unabhängig synchronisierte
-//! WAL-Dateien beschädigen SQLite.
-//!
-//! ## Warum die Regel hier ein zweites Mal steht
-//!
-//! Dieselbe Regel steht in `apps/local-api/src/access/paths.ts`. Das ist eine
-//! bewusste Dopplung und keine Nachlässigkeit: Die Hülle muss das Verzeichnis
-//! **anlegen und seine Rechte setzen, bevor** der Sidecar startet — unter
-//! Windows trägt die ACL die Grenze, und `chmod` aus Node richtet dort nichts
-//! aus (T-011, Risiko 2). Der Sidecar wiederum darf keinen Pfad als Argument
-//! annehmen (B-1.6 Punkt 1), also kann die Hülle ihm den ihren nicht mitteilen.
-//! Beide Seiten müssen die Regel deshalb kennen.
-//!
-//! Die Dopplung ist die Stelle, an der etwas auseinanderlaufen kann. Deshalb
-//! ist die Auflösung hier eine reine Funktion mit Tests, die dieselben Fälle
-//! abdecken wie die TypeScript-Seite. Wer eine Seite ändert, ändert beide.
-//!
-//! **Ausdrücklich nicht benutzt:** `app.path().app_local_data_dir()` von Tauri.
-//! Das liefert `%LOCALAPPDATA%\de.takt.app` — die Kennung des Bündels, nicht
-//! `Takt`. Der Sidecar würde dann in ein anderes Verzeichnis schreiben als das,
-//! dessen Rechte die Hülle gesetzt hat, und niemandem fiele es auf.
+//! Datenverzeichnis vor dem Sidecar-Start anlegen und absichern.
+//! Die Pfadauflösung muss mit `apps/local-api/src/access/paths.ts` übereinstimmen.
+//! Roaming-Verzeichnisse und Tauris abweichender Standardpfad sind ungeeignet.
 
 use std::collections::BTreeMap;
 use std::fs;

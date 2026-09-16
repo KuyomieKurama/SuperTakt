@@ -1,3 +1,4 @@
+import { waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis, dass ein neuer Tagname beim Anlegen eines Todos **ein** Tag
  * ergibt und nicht zwei (T-058).
@@ -68,7 +69,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
-import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
 import { dienstEinstieg, migrationsVerzeichnis } from './source-resolve.mjs';
@@ -117,29 +117,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function portFree(port) {
-  return new Promise((done) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    socket.once('connect', () => {
-      socket.destroy();
-      done(false);
-    });
-    socket.once('error', () => done(true));
-    setTimeout(() => {
-      socket.destroy();
-      done(true);
-    }, 500).unref();
-  });
-}
 
-async function waitForPortFree(port, timeoutMs = 5000) {
-  const until = Date.now() + timeoutMs;
-  do {
-    if (await portFree(port)) return true;
-    await sleep(150);
-  } while (Date.now() < until);
-  return false;
-}
 
 function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
   return new Promise((resolve) => {
@@ -177,9 +155,7 @@ function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
   });
 }
 
-// ===========================================================================
 section('1  Die Faltung der Migration ist die Faltung der Domäne');
-// ===========================================================================
 //
 // Der Bestand wird **vor** 0008 angelegt und die Migration darüber gefahren.
 // Damit misst dieser Abschnitt den Text der Migrationsdatei und nicht eine
@@ -331,9 +307,7 @@ const NAMES = [
     tagNameKey('Straße') !== tagNameKey('Strasse'),
   );
 
-  // -------------------------------------------------------------------------
   section('2  Der eindeutige Index trägt, nicht die Prüfung davor');
-  // -------------------------------------------------------------------------
 
   let rejected = null;
   try {
@@ -366,10 +340,8 @@ const NAMES = [
   db.close();
 }
 
-// ---------------------------------------------------------------------------
 {
   section('3  Bestehende Doppelte brechen die Migration nicht ab');
-  // -------------------------------------------------------------------------
   //
   // Ein Bestand von vor 0008 kann „ backend“ und „Backend“ nebeneinander
   // führen — `ux_tag_name` aus 0001 lässt das durch. Unter dem neuen Schlüssel
@@ -457,9 +429,7 @@ const NAMES = [
   db.close();
 }
 
-// ===========================================================================
 // Der Dienst
-// ===========================================================================
 
 if (!(await waitForPortFree(PORT))) {
   console.error(
@@ -523,9 +493,7 @@ try {
   check('der Dienst kommt hoch', up, stderr.slice(-400));
   if (!up) throw new Error('Dienst nicht erreichbar');
 
-  // -------------------------------------------------------------------------
   section('4  Acht gleichzeitige Anfragen, ein Tag');
-  // -------------------------------------------------------------------------
   //
   // Acht Schreibweisen desselben Namens, alle zugleich unterwegs. Nichts davon
   // wird zwischendurch abgewartet — das ist der Punkt.
@@ -590,18 +558,14 @@ try {
     `${String((todosOnTag?.items ?? []).length)} statt 8`,
   );
 
-  // -------------------------------------------------------------------------
   section('5  Kein Tag ohne sein Todo — die achte Stelle aus T-047');
-  // -------------------------------------------------------------------------
   //
   // Das Tag wird angelegt, dann scheitert das Todo an einer Kanban-Spalte, die
   // es nicht gibt. Ohne gemeinsame Transaktion bliebe das Tag stehen: ein
   // Vokabular, das niemand bestellt hat, und beim nächsten Versuch ein Treffer,
   // der aus einem Fehlschlag stammt.
   //
-  // ===========================================================================
   // A-A-67 — dieser Abschnitt sichert seine eigene Vorbedingung
-  // ===========================================================================
   //
   // Bis T-235 stand hier nur „die Anfrage scheitert", und danach zweimal eine
   // Zahl. Beides ist wahr, wenn die Anfrage **vor** der Tag-Anlage scheitert —
@@ -671,9 +635,7 @@ try {
     `Status ${String(anchor.status)}: ${JSON.stringify(anchor.body?.data?.createdTags ?? anchor.text.slice(0, 200))}`,
   );
 
-  // -------------------------------------------------------------------------
   section('6  Zwei Schreibweisen in **einer** Anfrage sind ein Tag');
-  // -------------------------------------------------------------------------
 
   const twice = await post('/todos', {
     title: 'Zweimal derselbe Name',
@@ -696,9 +658,7 @@ try {
     JSON.stringify(twice.body?.data?.createdTags?.[0]?.name),
   );
 
-  // -------------------------------------------------------------------------
   section('7  Ein vorhandenes Tag wird gefunden, nicht verdoppelt');
-  // -------------------------------------------------------------------------
 
   const existing = await post('/tags', { name: 'Wartung' });
   check('ein Tag lässt sich wie bisher anlegen', existing.status === 201, existing.text.slice(0, 200));
@@ -720,9 +680,7 @@ try {
     (await allTags()).find((tag) => tag.id === existing.body?.data?.id)?.name === 'Wartung',
   );
 
-  // -------------------------------------------------------------------------
   section('8  Derselbe Name in zwei Ordnern wird gefragt, nicht geraten');
-  // -------------------------------------------------------------------------
 
   const folderA = await post('/tag-folders', { name: 'Kunde A' });
   const folderB = await post('/tag-folders', { name: 'Kunde B' });
@@ -750,13 +708,9 @@ try {
     ((await get('/todos?search=Mehrdeutig')).body?.data?.items ?? []).length === 0,
   );
 
-  // -------------------------------------------------------------------------
   section('9  Was der Nachweis nicht misst, steht als Prüfung da');
-  // -------------------------------------------------------------------------
 
-  // ===========================================================================
   // A-A-66 — „abgewiesen weil", nicht „abgewiesen"
-  // ===========================================================================
   //
   // Bis T-235 stand hier zweimal `status === 422`, und mehr nicht. Gemessen
   // (T-234, 31.2; in T-235 zeichengleich nachgestellt): Ein 600 Zeichen langer

@@ -1,83 +1,14 @@
-/**
- * Takt — die Schnittstelle der Hülle zur Oberfläche (E-004, E-010, E-018).
- *
- * Acht eigene Befehle und ein Systemdialog in zwei Ausprägungen, mehr gibt die
- * Hülle nicht heraus.
- * Sie liegen hier und nicht in `apps/web`, damit es genau eine Stelle gibt, an
- * der die Namen der Befehle und die Gestalt ihrer Antworten stehen — die
- * Rust-Seite und diese Datei müssen zusammenpassen, `apps/web` soll das nicht
- * wissen müssen.
- *
- * `chooseExportDirectory()` und `chooseAttachmentFile()` sind keine
- * `takt_`-Befehle, sondern derselbe Systemdialog von `tauri-plugin-dialog`
- * (Befund S-04, B-5.1 Punkt 1) — einmal mit `directory: true`, einmal mit
- * `directory: false`. Die Fähigkeitenliste gibt davon ausschließlich
- * `dialog:allow-open` frei; der Zuwachs an Fläche für den zweiten ist **null**.
- *
- * `installedVersion()` und `openReleasePage()` gehören zur Versionsprüfung
- * (Spezifikation Abschnitt 18, E-064, E-067); dort steht auch, warum der zweite
- * **keine** Adresse entgegennimmt.
- *
- * `openAttachmentLink()` und `openAttachmentFile()` gehören zu den Anhängen
- * (Abschnitt 19, E-072). Sie nehmen sehr wohl eine Adresse und einen Pfad
- * entgegen — und deshalb steht in `src-tauri/src/attachment.rs` erheblich mehr
- * Prüfung als in `release.rs`.
- *
- * ## Wie sich die Oberfläche gegenüber dem lokalen Dienst ausweist
- *
- * Über das **Sitzungsgeheimnis** aus `serviceHandshake()`, gesetzt in der
- * Kopfzeile `X-Takt-Token`. Ausdrücklich **nicht** über das Add-in-Token: Das
- * gehört allein der Add-in-Strecke, und diese Trennung ist der Grund, warum ein
- * entwendetes Add-in-Token sich weder anzeigen noch selbst austauschen kann
- * (T-011).
- *
- * Das Geheimnis gilt für einen Start, berührt die Platte nie und darf weder in
- * `localStorage` noch in `sessionStorage` noch in eine Adresszeile. Wer es
- * dorthin schreibt, hebt genau das auf, wofür es da ist.
- *
- * ## Läuft die Oberfläche außerhalb der Hülle
- *
- * Im reinen Browserbetrieb — `pnpm dev` ohne Tauri — gibt es die Hülle nicht.
- * `isShellAvailable()` sagt das, und jede Funktion wirft dann einen Fehler mit
- * einem verständlichen deutschen Text, statt `undefined` weiterzureichen.
- *
- * ## Benannte Ausnahme: `style-src 'unsafe-inline'` in der CSP
- *
- * Die Inhaltssicherheitsrichtlinie in `src-tauri/tauri.conf.json` führt
- * `style-src 'self' 'unsafe-inline'`. Der Prüfer (S-10) hat verlangt, dass der
- * Eintrag entweder verschwindet oder **als benannte Ausnahme** geführt wird.
- * Der Orchestrator hat sich in T-040 für das Zweite entschieden. Weil eine
- * JSON-Datei keine Kommentare trägt, steht die Begründung hier — an der
- * einzigen Stelle des Desktop-Pakets, die sie aufnehmen kann.
- *
- * **Warum der Eintrag bleibt.** `apps/web` setzt Stile am Element nur dort, wo
- * der Wert erst zur Laufzeit entsteht und deshalb in keinem Stylesheet stehen
- * kann: die Position eines Kontextmenüs am Zeiger (`Menu.tsx`), die Einrückung
- * einer Zeile nach ihrer Tiefe im Tag-Baum (`TagTree.tsx`), die Kantenlänge von
- * Ladeanzeiger und Platzhalterfläche (`Primitives.tsx`). Eine Klasse je Wert
- * wäre ein erzeugtes Stylesheet mit unbekannt vielen Regeln — dieselbe
- * Angriffsfläche, nur unübersichtlicher. React setzt diese Werte über
- * `element.style`, was `style-src` betrifft, und nicht über `<style>`-Blöcke.
- *
- * **Was die Ausnahme nicht abdeckt.** `script-src` bleibt `'self'` ohne
- * `'unsafe-inline'`; kein Skript wird je aus einer Zeichenkette ausgeführt.
- * `default-src 'none'`, `object-src 'none'`, `base-uri 'none'`,
- * `form-action 'none'` und `frame-ancestors 'none'` bleiben unverändert. Der
- * Rest der Oberfläche wird über Klassen gestaltet; die Musterseite hält die
- * Liste der Bausteine.
- *
- * **Wann sie fällt.** Sobald die drei genannten Stellen über
- * CSS-Eigenschaftsvariablen laufen, die eine Klasse liest. Das ist eine eigene
- * Aufgabe mit eigener Gegenprobe und war ausdrücklich nicht Teil von T-040.
- */
+/** Das Sitzungsgeheimnis bleibt im Speicher und gehört weder in Browser-Speicher noch URLs.
+ * CSP-Ausnahme: `style-src unsafe-inline` erlaubt dynamische Elementstile für Positionen und Größen; `script-src` bleibt ohne diese Freigabe.
+ * Rust-Befehle und Antworttypen müssen mit dieser Schnittstelle übereinstimmen. */
 
 import { invoke } from '@tauri-apps/api/core';
 import { parseIdleActivity, type IdleActivity } from './idleActivity';
 export type { IdleActivity, IdlePeriod } from './idleActivity';
 
-export async function idleActivity(): Promise<IdleActivity> {
+export async function idleActivity(wake?: { enabled: boolean; thresholdMinutes: number }): Promise<IdleActivity> {
   requireShell();
-  return parseIdleActivity(await invoke<unknown>('takt_idle_activity'));
+  return parseIdleActivity(await invoke<unknown>('takt_idle_activity', { wake }));
 }
 import { parseOutlookCertificate, type OutlookCertificateResult } from './outlookCertificate';
 export type { OutlookCertificateFacts, OutlookCertificateResult } from './outlookCertificate';
@@ -420,9 +351,7 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
   return { outcome: 'cancelled' };
 }
 
-/* ==================================================================== */
 /* Versionsprüfung (Spezifikation Abschnitt 18)                         */
-/* ==================================================================== */
 
 /**
  * Die installierte Fassung von Takt (A-18.1, Auflage A-V-15).
@@ -518,9 +447,7 @@ export async function openReleasePage(version: string): Promise<ReleasePageResul
   }
 }
 
-/* ==================================================================== */
 /* Anhänge (Spezifikation Abschnitt 19, E-072)                          */
-/* ==================================================================== */
 
 /**
  * Was beim Öffnen eines Anhangs herauskam.

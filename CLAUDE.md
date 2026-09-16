@@ -2,25 +2,43 @@
 
 SuperTakt ist eine lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export an ein
 externes Abrechnungstool und einem Outlook-Add-in.
-
 Verbindliche Quellen:
 
 - `docs/spec.md` — die Produktspezifikation. Keine Umsetzung ohne Deckung durch eine
   Anforderungs-ID daraus.
+
 - `docs/prototype/takt-ui-konzept.html` — liegt noch nicht vor. Bis dahin ist das Designsystem
   aus Aufgabe T-006 die visuelle Referenz.
+
 - `.claude/team/decisions.md` — getroffene Architektur- und Produktentscheidungen.
+
+## Ziel und Programmierstil
+
+Schreibe verständlichen Code, den ich mit grundlegenden Programmierkenntnissen
+nachvollziehen, warten und selbst ändern kann. So einfach wie möglich, ohne notwendige
+Funktionalität, Fehlerbehandlung oder Sicherheitsmaßnahmen zu entfernen.
+
+- Verständlichkeit geht vor wenigen Zeilen oder cleveren Lösungen. Verwende aussagekräftige
+  englische Namen und einen klaren Ablauf mit nachvollziehbaren Zwischenschritten.
+- Vermeide kryptische Abkürzungen, schwer lesbare Einzeiler, tiefe Verschachtelungen und
+  unnötig komplizierte Ausdrücke.
+- Jede Funktion hat eine klare Aufgabe. Zerteile einfache Abläufe nicht unnötig in viele
+  Mini-Funktionen oder Dateien.
+- Ergänze Klassen, Abstraktionen, Hilfsschichten oder Bibliotheken nur bei konkretem Bedarf.
+  Baue keine Erweiterbarkeit für hypothetische Anforderungen. Die bestehende Trennung von
+  Fachlogik, Speicherung und Oberfläche bleibt verbindlich.
+- Vereinfache komplizierte Logik, statt sie durch weitere Hilfsschichten oder lange Kommentare
+  zu verdecken. Die Dateigröße allein ist kein Grund für eine Aufteilung.
+- Weise auf widersprüchliche Projektregeln hin, statt sie stillschweigend zu ignorieren.
 
 ## Betriebsform
 
 Alles läuft lokal. Kein Cloud-Dienst, kein Datenbankserver, keine Telemetrie. Gespeichert wird
 in einer eingebetteten SQLite-Datei im Anwendungsdatenverzeichnis des Benutzers.
-
 Genau **eine** Ausnahme, und sie ist eng: die Versionsprüfung gegen die Releases des offiziellen
 GitHub-Bestands (Spezifikation Abschnitt 18, E-064). Sie fragt und liest, sonst nichts. Wer eine
 zweite Adresse außerhalb von `127.0.0.1` einbaut, hebt E-001 auf und braucht dafür eine
 Entscheidung, nicht eine Zeile Code.
-
 Zwei Adressen stehen seit dem 2026-09-09 **im Bau** und ausdrücklich nicht im Erzeugnis: der
 Zeitstempeldienst des Code-Signierens (`WINDOWS_TIMESTAMP_URL`, Vorgabe
 `http://timestamp.digicert.com`, `apps/desktop/scripts/sign-windows.mjs`) und der
@@ -43,7 +61,6 @@ Speicherung läuft über Ports in `packages/storage`; der SQLite-Adapter ist aus
 die Bedingung dafür, dass „lokal, zumindest derzeit" später ohne Umbau der Fachlogik aufgehoben
 werden kann.
 
-
 ## Wo was liegt — die Merkmalsstruktur (T-249 bis T-272)
 
 Beide Anwendungen sind **featureweise** geordnet. Ein neuer Entwickler soll an Ordnern und
@@ -59,17 +76,19 @@ apps/local-api/src/    features/{board,todos,timer,export,structure,settings,ver
 `screens/`, `components/` und `usecases/` gibt es **nicht mehr**. Ein Merkmal trägt seine
 Bausteine, seine Logik, seine API-Aufrufe und seine eigenen Typen flach im eigenen Ordner —
 keine Unterordner für ein bis zwei Dateien, keine Barrel-Dateien, keine `utils.ts`.
-
 Vier Regeln, die dabei gemessen und nicht geraten wurden:
 
 - **`features/<merkmal>/api.ts`, eine Ebene tief** (E-102). `request` darf nur dort und in
   `api/client.ts` stehen; `proof:callers` mißt die Menge gegen die Platte.
+
 - **`api/types.ts` bleibt** als geteilter Vertrag mit dem Dienst. Merkmalseigene Anfrage- und
   Antworttypen wandern mit; `Todo`, `Tag`, `TimeEntry` bleiben, weil sie mehrere Merkmale tragen.
-  **Kein `features/<merkmal>/types.ts`.**
+**Kein `features/<merkmal>/types.ts`.**
+
 - **`shared/ui/` nimmt auf, was mehr als ein Merkmal wirklich braucht** — jede der neunzehn
   Dateien wird aus mindestens drei Bereichen gelesen. `lib/` trägt die Nicht-JSX-Fachhelfer;
   `labels.ts` hat 8 Merkmale und 30 Leser.
+
 - **Zwei Dateien liegen flach unter `apps/local-api/src/`** und nicht in einem Merkmal:
   `pool-movement.ts` und `tag-names.ts`. Sie werden aus mehreren Merkmalen gelesen; ein Merkmal
   hätte den anderen einen Rückgriff aufgezwungen. Das ist Absicht, kein Rest.
@@ -83,11 +102,48 @@ Fehler, nicht die Kante. Wer einen neuen Kreis zieht, schreibt den Grund an die 
 Rust-Prüffälle stehen darin) und `packages/domain/src/attachment.ts`. Größe ist in diesem
 Bestand kein Maßstab: `packages/domain` hat 6 975 Zeilen und **1 790 Anweisungszeilen**.
 
+### Gemeinsam genutzte Logik und Dateien
+
+- Suche vor einer neuen Implementierung nach passenden vorhandenen Lösungen. Verwende sie
+  wieder, sofern sie zur Aufgabe passen.
+- Pflege echte Duplikate, gemeinsame Regeln und Werte an einer fachlich passenden Stelle.
+  Nutze Importe oder Referenzen statt Kopien und beachte die oben festgelegten Ablageorte.
+- Belasse ausschließlich lokal benötigte Logik im jeweiligen Merkmal. Keine vorsorgliche
+  Zentralisierung und keine allgemeine Sammeldatei für fachlich unabhängige Helfer.
+- Fasse ähnlich aussehenden Code nur zusammen, wenn Aufgabe und Änderungsgründe übereinstimmen.
+  Erzwinge keine gemeinsame Lösung durch zahlreiche Sonderfälle oder Parameter.
+- Aktualisiere alle betroffenen Aufrufstellen, Importe und Referenzen. Entferne ersetzte
+  Implementierungen erst nach Prüfung ihrer verbleibenden Nutzung; behalte keine Parallelversionen.
+- Die Zusammenführung muss den Code insgesamt einfacher machen. Vermeide unnötige Abhängigkeiten;
+  für fachlich begründete Kreise gilt die oben dokumentierte Projektregel.
+
 ## Sprache
 
-Oberflächentexte, Fehlermeldungen und Dokumentation auf Deutsch. Bezeichner im Code, Dateinamen,
-Commit-Präfixe und technische Schlüssel auf Englisch. Die Schlüssel im Exportformat (`Call`,
-`Zeit`, `Notiz`, `WindowsUser`) sind Vorgabe des Abrechnungstools und bleiben, wie sie sind.
+Kommunikation, Oberflächentexte, Fehlermeldungen und Projektdokumentation auf Englisch.
+Bezeichner im Code, Dateinamen, Commit-Präfixe und technische Schlüssel auf Englisch.
+**Codekommentare und Docstrings sind ebenfalls auf Englisch**; sie fallen nicht unter die
+Regel für Englisch Projektdokumentation. Die Schlüssel im Exportformat (`Call`, `Zeit`,
+`Notiz`, `WindowsUser`) sind Vorgabe des Abrechnungstools und bleiben, wie sie sind.
+Bestehende Schnittstellen und technische Kennungen nicht allein aus Sprachgründen umbenennen.
+
+### Codekommentare und Docstrings
+
+- Kommentiere nur, wenn klare Namen und einfacher Code nicht ausreichen. Erkläre nicht
+  offensichtliche Gründe, Einschränkungen oder Sicherheitsbedingungen, nicht den sichtbaren Ablauf.
+- Schreibe auf Englisch, normalerweise einen kurzen Satz in einer Zeile. Mehrere Zeilen nur,
+  wenn wesentlicher Kontext sonst verloren geht.
+- Keine automatischen Kommentare für jede Funktion, Variable oder jeden Arbeitsschritt.
+  Keine dekorativen Trenner, nacherzählenden Kommentarblöcke oder Wiederholungen offensichtlicher Typen.
+- Docstrings nur für notwendige Verträge oder wenn die Projektwerkzeuge sie verlangen.
+- Ausführliche Architekturbegründungen gehören nach `docs/architektur.md`, getroffene
+  Entscheidungen nach `.claude/team/decisions.md`. Im Code genügt bei Bedarf ein kurzer
+  englischer Hinweis mit Referenz. Die Zuständigkeiten im nächsten Abschnitt gelten auch hier.
+- Der vorgeschriebene Grund an einer neuen Abhängigkeitskante bleibt erhalten: kurz und auf Englisch.
+- Entferne bei Überarbeitungen überflüssige oder veraltete Kommentare im betroffenen Bereich.
+  Kürze und übersetze weiterhin benötigte Kommentare, ohne wesentliche Hinweise zu verlieren.
+  Keine projektweite Kommentarbereinigung ohne entsprechenden Auftrag.
+- Erhalte notwendige Sicherheitsinformationen, vorgeschriebene Lizenzvermerke und technisch
+  notwendige Direktiven. Vorgeschriebener Wortlaut und technische Funktion gehen vor Sprache und Kürze.
 
 ## Verzeichnisse und Hoheit
 
@@ -125,6 +181,20 @@ lokalen Dienstes und die Reihenfolge der Datenbankmigrationen.
 
 ## Ablauf
 
+### Änderungen und Kommunikation
+
+- Erkläre vor einer Überarbeitung kurz, welche betroffenen Stellen kompliziert oder redundant
+  sind und wie du sie vereinfachst. Beschränke Änderungen auf die konkrete Aufgabe.
+- Erhalte bei Vereinfachungen Verhalten und Schnittstellen, sofern keine Änderung beauftragt
+  wurde. Entferne keine notwendigen Validierungen, Fehlerbehandlungen oder Sicherheitsprüfungen.
+- Füge bei reinen Vereinfachungen keine Features hinzu. Prüfe im betroffenen Bereich echte
+  Duplikate nach den Regeln zur Wiederverwendung und arbeite in überprüfbaren Schritten.
+- Fasse Änderungen knapp und konkret zusammen. Nenne bei Zusammenführungen den gemeinsamen
+  Ablageort und die entfallenen Duplikate. Vermeide unnötigen Fachjargon und lange Vorreden.
+- Die folgenden Wellen, Zuständigkeiten, Berichte und Freigaben gelten auch für Überarbeitungen.
+
+### Wellen und Berichte
+
 Arbeit läuft in Wellen. Unabhängige Aufgaben werden als mehrere Task-Aufrufe in einer Nachricht
 gestartet und laufen parallel. Abhängige Aufgaben kommen in die nächste Welle.
 
@@ -157,7 +227,8 @@ Struktur als Kurzfassung zurück:
 Aufgabe: T-007 — Zeitbuchungen: Rundung und Exportstatus
 Status: fertig | blockiert | braucht Review | teilweise
 Artefakte: geänderte oder neue Dateien
-Zusammenfassung: 3 bis 5 Sätze, was gemacht wurde
+Zusammenfassung: 1 bis 3 kurze Sätze zu den wesentlichen Änderungen
+Prüfung: ausgeführte Prüfungen mit Ergebnis; nicht geprüfte Punkte und Grund
 Annahmen: was ich entschieden habe, ohne zu fragen
 Risiken: einschließlich Sicherheitshinweisen
 Offene Fragen: an den Orchestrator
@@ -171,21 +242,32 @@ Bei einer Blockade rät ein Agent nicht. Er meldet zurück und beendet seine Auf
 Eine Aufgabe ist erst fertig, wenn Code-Reviewer, Spezifikations- und UX-Reviewer, Tester und
 Security-Checker freigegeben haben. Der Dokumentierer arbeitet als Letzter.
 
+Führe vorhandene, passende Tests und die vorgeschriebenen Projektprüfungen aus; die Befehle
+stehen im Abschnitt „Befehle“. Berücksichtige bei Änderungen an gemeinsam genutztem Code
+auch die aufrufenden Bereiche. Berichte ausdrücklich über ausgeführte Prüfungen, Fehlschläge
+und nicht prüfbare Punkte. Behaupte keine erfolgreiche Prüfung, die nicht stattgefunden hat.
+Eine fehlende Prüfung oder Freigabe wird als offen dokumentiert und hebt das Qualitätstor nicht auf.
+
 ## Fachliche Punkte, die in Review und Test immer geprüft werden
 
 - Zeitbuchungen werden für den Export auf Schritte von 0,25 gerundet: 1,00 = 60 Minuten,
   0,75 = 45, 0,50 = 30, 0,25 = 15.
+
 - Standard-Exportformat: `Call`, `Zeit`, `Notiz` als UTF-8 nach Base64, `WindowsUser`. Die
   Struktur ist über Exportvorlagen konfigurierbar; die Standardvorlage bildet genau dieses
   Format ab.
+
 - Jede Buchung ist eindeutig exportiert oder offen, und das ist überall sichtbar.
 - Die Notiz der Buchung geht in die Abrechnung. Die Notiz des Todos bleibt intern und darf in
   keinem **Abrechnungsexport** auftauchen; die ausdrücklich vollständige Datensicherung nach
   A-20 enthält sie für den Round-Trip.
+
 - Wird der Timer auf einem erledigten Todo gestartet, hebt die Anwendung „Erledigt" automatisch
   auf; das Todo landet wieder in seinem Pool.
+
 - Tag-Ordner sind beliebig tief verschachtelbar, Pools werden über Tags definiert, Standard-Tags
   greifen bei jedem neuen Todo — auch bei Anlage aus dem Add-in.
+
 - Das Outlook-Add-in holt Tags, Ordner und Pools über die lokale API, erkennt die Call-Nummer
   über einen konfigurierbaren regulären Ausdruck und **weist auf einen bereits vorhandenen Call
   hin**, bevor ein Duplikat entsteht. Gehandelt wird am gefundenen Todo nicht — weder gebucht
@@ -204,6 +286,7 @@ und R-20. Die Regeln gelten ohne Ausnahme und sind bei jeder Freigabe zu prüfen
   `build-app.mjs` als zweite Datei über die Konfiguration legt, statt die kommentierte
   JSON5-Datei neu zu schreiben. **`tauri.conf.json` ist damit der Rückfallwert, nicht die
   führende Quelle einer Veröffentlichung** — die führende Quelle ist das Etikett (T-144 U-06).
+
 - **Gefragt wird der lokale Dienst, nicht die Oberfläche.** Die CSP der Hülle lässt den Webview
   in `connect-src` an genau vier Marken: `'self'`, `ipc:`, `http://ipc.localhost` und
   `http://127.0.0.1:17843`. Sie wird dafür nicht geöffnet, und `proof:shell-surface` misst die
@@ -211,23 +294,29 @@ und R-20. Die Regeln gelten ohne Ausnahme und sind bei jeder Freigabe zu prüfen
   Dienst holt die Releases des offiziellen Bestands, die Adresse steht fest im Erzeugnis, ist
   nicht einstellbar und wird von keiner Antwort verlegt — auch nicht über eine Weiterleitung auf
   einen fremden Wirt.
+
 - **Der Vergleich der Fassungen liegt in `packages/domain`** als reine Fachlogik, mit ihm die
   Regel, wann überhaupt etwas erscheint: neuer **und** nicht übersprungen. Kein
   Zeichenkettenvergleich — `0.10.0` steht über `0.9.0`.
+
 - **Es wird nie etwas heruntergeladen und nie etwas installiert.** Nicht im Hintergrund, nicht
   nach einer Rückfrage, nicht als Bequemlichkeit. „Installieren" öffnet die Release-Seite dieser
   Fassung, mehr nicht. Den Download und die Installation löst ausschließlich der Benutzer aus,
   außerhalb von Takt.
+
 - **Die Adresse zum Öffnen baut die Hülle selbst.** Der Befehl nimmt keine Adresse entgegen,
   höchstens die Fassungsbezeichnung, prüft sie gegen eine enge Form und setzt sie in eine fest
   hinterlegte Adresse ein. Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen ist
   verboten.
+
 - **„Überspringen" überspringt eine Fassung, nicht die Prüfung.** Der Wert steht als Einstellung
   im Bestand, nicht im Arbeitsspeicher und nicht im Browserspeicher; eine spätere, höhere
   Fassung meldet sich wieder. Der Prüffall dazu misst einen Neustart.
+
 - **Ein Fehlschlag ist still.** Nicht erreichbar, unerwartete Antwort, fehlende Fassungsangabe,
   gar keine Veröffentlichung: kein Hinweis, keine Fehlerfläche, kein zweiter Versuch im selben
   Lauf. Der Grund steht im Protokoll.
+
 - **Die Prüfung überträgt nichts** über Benutzer, Bestand oder Nutzung.
 
 ## Frist und Anhänge
@@ -237,36 +326,39 @@ R-22. Bei jeder Freigabe zu prüfen:
 
 - Die Frist ist **ein Tag**, keine Uhrzeit, und es ist derselbe Tagesbegriff wie bei der
   Tagesgruppierung des Exports (E-025). „Überfällig", „heute fällig" und „später fällig" werden
-  **gerechnet**, nicht gespeichert.
+**gerechnet**, nicht gespeichert.
+
 - In der Oberfläche heißt sie ausschließlich **„Frist"**.
 - Verweis und Datei speichern eine Zeichenkette. Ein **Bild** wird ins Anwendungsdatenverzeichnis
   kopiert und als `data:`-Adresse angezeigt — die CSP bleibt, wie sie ist.
+
 - **Über das Add-in entstehen Anhänge nur beim Anlegen** (E-108, A-19.19 in der Fassung vom
   2026-09-11). An einem **bereits vorhandenen** Todo entsteht keiner — weder im Duplikatfall
   (A-10.9) noch sonst; das ist strukturell, nicht per Voreinstellung, und die Naht führt keinen
   Parameter, mit dem ein vorhandenes Todo benannt werden könnte. Was beim Anlegen entsteht, ist
   ein von außen geschriebener Öffnen-Befehl und wird entsprechend behandelt: erzeugter Name auf
   der Platte, fremder Name nur als Anzeigename, Endung stets sichtbar (A-19.23a/b).
+
 - Der Öffnen-Befehl der Hülle prüft **bei jedem Aufruf** und nach Art getrennt: Verweis nur `http`
   und `https`, kein UNC; Datei nur ein vorhandener absoluter Pfad, kein UNC; ein Bild öffnet gar
   nichts. Eine Prüfung allein im Eingabefeld trägt nicht — zwischen Eingabe und Öffnen liegt der
   Bestand.
+
 - Vor dem Öffnen einer **Datei** fragt die Oberfläche und nennt dabei den vollen Pfad. Eine Datei
   mit der Standardanwendung zu öffnen ist bei `.bat`, `.lnk` oder `.exe` eine Ausführung.
+
 - Nichts öffnet sich von selbst. Weder Frist noch Anhang gelangen in einen
-  **Abrechnungsexport**; die vollständige Datensicherung nach A-20 enthält beide.
+**Abrechnungsexport**; die vollständige Datensicherung nach A-20 enthält beide.
 
 ## Entschieden — der Widerspruch an A-19.19 ist aufgelöst
 
 Festgestellt am 2026-09-10 beim Einlesen der Pull Requests #5 bis #16, **entschieden am selben
 Tag durch den Auftraggeber** (F-21, E-100). Von den beiden möglichen Wegen ist der zweite
 gewählt: **gegen das Anhängen**.
-
 A-19.19 steht damit unverändert in der Spezifikation — „Über das Outlook-Add-in entstehen
 **keine** Anhänge" — und wird nicht geändert, sondern wieder wahr. Es fällt statt dessen
 `POST /api/v1/addin/todos/{todoId}/attachments` samt `attachments.ts`, dem Aufrufer im Add-in,
 der Beschreibung in der OpenAPI-Datei und `proof-followup.mjs`. Umgesetzt in T-247.
-
 Drei Dinge, die aus diesem Fall über ihn hinaus gelten:
 
 - **Der Wächter wird schärfer, nicht abgeräumt.** `proof:addin` Abschnitt 18 zählte Zeilen in
@@ -274,10 +366,12 @@ Drei Dinge, die aus diesem Fall über ihn hinaus gelten:
   die aufging. Er mißt künftig die Abwesenheit **jeder** Anhangstür unter `/addin`. Wer eine
   Abwesenheit zusichert, spannt seine Menge an der Anforderung auf, nicht an der Route, die er
   kennt (E-099 Punkt 3).
+
 - **A-10.9 ist mitgeändert.** Sie verlangte ein Angebot auf dem gefundenen Todo. Der
   Aufgabenbereich weist auf einen vorhandenen Call nur noch **hin**; gehandelt wird dort nicht,
   weder buchend noch anhängend. Ohne diese Änderung wäre neben A-19.19 ein zweiter ungedeckter
   Widerspruch entstanden, diesmal in die andere Richtung.
+
 - **Ein Satz, der eine Handlung nennt, die es nicht gibt, ist derselbe Fehler.** Die Warnung im
   Duplikatfall forderte „Hängen Sie diese E-Mail an das passende Todo" und wäre nach dem Rückbau
   eine Anweisung ins Leere geblieben. Sie verweist jetzt auf SuperTakt selbst. Beim Streichen
@@ -299,18 +393,22 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   nicht. A-24.7 beziffert die Fassung seit dem 2026-09-11 **nicht mehr**; die führende Angabe
   ist `DATA_ARCHIVE_VERSION`. Unbekannte Fassungen werden **abgewiesen, nicht geraten**, und ein
   ungültiges Archiv verändert nichts.
+
 - **Der Pfad reist nicht mit.** `todo_attachment.target` trägt den vollen Pfad des
   Quellrechners. Das Einspielen setzt ihn neu — **vor** dem Schreiben und **auch ohne Bytes** —,
   sonst liest die Rückfrage vor dem Öffnen eine Ortsangabe über einen fremden Rechner vor.
+
 - **Der Round-Trip ist die Anforderung**, nicht das Herunterladen (A-20.4): Export und
   anschließender Import stellen denselben fachlichen Bestand her, einschließlich Kennungen,
   Zeitstempeln und Protokollen. Zugriffstoken und Migrationsbuch bleiben draußen.
+
 - **Fremdimporte ergänzen, sie ersetzen nicht** (A-20.7). Todoist-CSV und
   Super-Productivity-JSON. Der Call-Nummern-Regex des Imports ist einstellbar, sein Vorgabewert
   `call[\s#:_-]*(\d{5,6})` ohne Groß-/Kleinschreibung; ein ungültiges oder zu langsames Muster
   bricht **vor** dem ersten Schreibzugriff ab. Aus einem Fremdbackup entstehen Verweise und
   Dateipfade als Anhänge — die Prüfung aus Abschnitt 19 gilt dort genauso, denn ein Pfad aus
   einer fremden Datei ist ein von außen geschriebener Öffnen-Befehl.
+
 - **Drei Rumpfgrenzen, nicht mehr eine.** 1 MB im Normalfall (`MAX_BODY_BYTES`, B-1.7);
   64 MB für die **Fremdimporte** (`DATA_TRANSFER_MAX_BODY_BYTES`); **256 MiB** für
   `POST /data-transfer/archive` (`DATA_ARCHIVE_MAX_BODY_BYTES`), seit die Datensicherung die
@@ -320,16 +418,19 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   25-MiB-Dateien — und bereits ohne A-19.34 bei sechs Bildkopien. **Der Preis steht dabei:**
   die Speicherspitze je Anfrage steigt gemessen von 333 MB auf 934 MB, und ein Riegel im
   Anwendungsfall hilft nicht, weil der Rumpf vorher gelesen ist.
+
 - **Darstellung (A-21).** Die sichtbare Marke heißt SuperTakt; technische Kennungen und
   Datenpfade behalten ihre Namen — `identifier` bleibt `de.takt.desktop`, `generator` im Archiv
   bleibt `Takt`, die Kopfzeile bleibt `X-Takt-Token`. **Klassisch ist der Standard**, die alte
   Auswahl `clear` wird klassisch dargestellt. Farbmodus und Zeilendichte werden **getrennt**
   gespeichert; eine feste helle oder dunkle Palette wendet ihren Modus an, ohne die Vorliebe
   des Benutzers zu überschreiben. Alle Paletten liegen lokal; zur Laufzeit lädt nichts nach.
+
 - **Leistungsabfrage (A-22).** Einstellbar, Vorgabe eingeschaltet. Ausgeschaltet bucht der
   Stopp ohne Dialog; vorhandener Leistungstext bleibt, fehlender wird in der Buchungsübersicht
   nachgetragen. **Die Exportregeln ändern sich nicht** — eine Buchung ohne Leistung ist eine
   Frage der Vollständigkeit, nicht des Formats.
+
 - **Outlook-Einrichtung (A-23).** Der schwerste neue Punkt: Die Hülle darf nach **ausdrücklicher**
   Bestätigung ein Zertifikat in `Cert:\CurrentUser\Root` legen. Das ist ein Wurzelspeicher.
   Deshalb: **die Hülle bestimmt den Pfad selbst**, der Auftrag enthält nur den bestätigten
@@ -339,6 +440,7 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   Eintrag im Speicher allein gilt **nicht** als bestandener HTTPS-Test — geprüft wird über
   Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats. Im Browser und
   auf anderen Betriebssystemen behauptet nichts eine Windows-Vertrauensprüfung.
+
 - **Inaktivität (A-24).** Systemweit gemessen und ausschließlich als Dauer: Windows
   `GetLastInputInfo`, macOS CoreGraphics, Linux Wayland `ext-idle-notify`, Mutter oder X11
   ScreenSaver. **Keine Eingabeinhalte, keine Fenstertitel, keine Telemetrie**, und XWayland gilt
@@ -347,6 +449,7 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   aktive Zeit ab und führt ihn atomar fort. Die Zuordnung muss **sekundengenau** den ganzen
   Zeitraum treffen, ohne Überlappung und ohne Doppelbuchung bei Wiederholung; gerundet wird
   weiterhin ausschließlich im Export.
+
 - **Offene Phasen überleben Neuladen, Neustart und Datensicherung** (A-24.7). Sie stehen in
   SQLite, nicht im Arbeitsspeicher und nicht im Browserspeicher — dieselbe Regel wie beim
   übersprungenen Fassungswert, und aus demselben Grund.
@@ -370,17 +473,13 @@ ein Satz, den ein Prüfer verlangt hat, fällt nur mit dessen Zustimmung (E-078 
 
 Keine Zugangsdaten, keine Kundendaten und keine echten Call-Nummern im Repository. Testdaten
 sind erfunden und liegen unter `tests/fixtures/`.
-
 Base64 ist eine Kodierung, keine Verschlüsselung. Exportdateien enthalten lesbare Kundendaten.
-
 Der lokale Dienst hört ausschließlich auf `127.0.0.1` und ist damit für jeden Prozess auf dem
 Rechner erreichbar. Diese Vertrauensgrenze wird im Bedrohungsmodell bewertet, nicht ignoriert.
-
 Seit der Versionsprüfung geht außerdem **eine** Verbindung nach außen (R-19). Damit betritt eine
 fremde Antwort den Prozess, und aus ihr kann Text in die Oberfläche und eine Adresse in den
 Browser des Benutzers wandern. Beide Wege sind im Bedrohungsmodell bewertet, bevor sie gebaut
 werden.
-
 Seit den Abschnitten 20 bis 24 kamen drei Wege dazu. Einer davon ist mit E-100 wieder entfallen;
 die beiden übrigen sind noch **nicht** im Bedrohungsmodell bewertet (R-23 bis R-25):
 
@@ -388,12 +487,13 @@ die beiden übrigen sind noch **nicht** im Bedrohungsmodell bewertet (R-23 bis R
   dort liegt, gilt dem Benutzerkonto für **jede** TLS-Verbindung als vertrauenswürdig, nicht nur
   für den Aufgabenbereich. Die Enge des Auftrags — nur ein Fingerabdruck, Pfad von der Hülle
   gewählt, kein CA-Zertifikat — ist die ganze Sicherheit dieser Fläche.
+
 - **Die fremde Datei.** Todoist-CSV und Super-Productivity-JSON sind von außen geschriebener
   Inhalt, und aus ihnen entstehen Anhänge: Verweise und **Dateipfade**. Damit reicht ein
   präpariertes Fremdbackup bis an den Öffnen-Befehl aus Abschnitt 19 heran (R-21).
+
 - **Der Deep-Link aus Outlook.** Mit E-100 entfallen; die Route ist gefallen, nicht nur die
   Schaltfläche. Der Weg ist damit zu, bevor er bewertet werden mußte.
-
 Base64 ist auch im Datenarchiv keine Verschlüsselung. Eine Datensicherung nach A-20 enthält
 **mehr** lesbare Kundendaten als jeder Abrechnungsexport: interne Vermerke, Fristen, Anhänge
 samt Bildkopien.
@@ -405,7 +505,6 @@ Die aktuellen Befehle stehen im Wurzel-`package.json` und in den jeweiligen Pake
 Die sichtbare Marke heißt seit A-21 SuperTakt; technische Kennungen und Datenpfade
 behalten aus Kompatibilitätsgründen ihre bisherigen Namen. Die Layoutänderungen
 sind in `docs/design/supertakt-layout.md` beschrieben.
-
 Das Tor heißt `pnpm check` und fährt in dieser Reihenfolge: `typecheck`, `boundaries`,
 `contrast`, `proof:all`, `verify:bundle`, `test:coverage`, `test:rust`, `build`, `audit`.
 `proof:all` sind **zweiundzwanzig** Nachweisläufe. Einer steht ausdrücklich **nicht** darin
@@ -413,7 +512,6 @@ und läuft einzeln: `proof:engines` (braucht WebKitGTK und seit PR #9 auch `pyth
 `proof:followup` gibt es seit T-247 nicht mehr — es prüfte ausschließlich die Anhangsroute des
 Add-ins und ist mit ihr gefallen (E-100).
 `pnpm test:e2e` fährt drei Playwright-Konfigurationen nacheinander.
-
 Drei GitHub-Abläufe: `pruefung.yml` bei Push und Pull Request, `release.yml` am Etikett,
 `addin-build.yml` baut den Aufgabenbereich und prüft die Add-in-Aufrufe gegen den Dienst.
 `rust:test` legt vor `cargo test --lib` über `prepare-rust-test.mjs` leere, nie ausgeführte

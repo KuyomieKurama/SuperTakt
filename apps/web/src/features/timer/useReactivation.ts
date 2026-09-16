@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { errorMessage } from "../../api/client";
-import { deleteTimeEntry } from "../../api/endpoints";
+import { deleteTimeEntry } from "../bookings/api";
 import { markTodoDone } from "../todos/api";
 import type { ForeignText, Id, PoolMovement } from "../../api/types";
 import { reactivationTitle } from "../../lib/labels";
@@ -40,9 +40,7 @@ export function useReactivation(refresh: () => void) {
     });
   }, []);
 
-  /* ---------------------------------------------------------------- */
   /* I-05 — Rückgängig nach der Wiederaufnahme                          */
-  /* ---------------------------------------------------------------- */
 
   const undoReactivation = useCallback(
     (todoId: Id, todoTitle: ForeignText) => {
@@ -84,9 +82,7 @@ export function useReactivation(refresh: () => void) {
     [bump, clearReactivated, refresh, toasts],
   );
 
-  /* ---------------------------------------------------------------- */
   /* Nach dem Start                                                    */
-  /* ---------------------------------------------------------------- */
 
   /**
    * Was der Start bewirkt hat — in **einem** Toast und aus **einer** Quelle

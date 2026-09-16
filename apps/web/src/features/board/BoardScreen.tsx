@@ -1,6 +1,8 @@
+import { Select } from "../../shared/ui/Select";
+import { listPriorities } from "../settings/api";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../../api/client";
-import { updatePool } from "../../api/endpoints";
+import { updatePool } from "../structure/api";
 import type { Id, Pool, PoolRuleTerm, Todo } from "../../api/types";
 import { loadExportSummaries } from "../../app/exportSummary";
 import { useRefresh } from "../../app/RefreshContext";
@@ -137,6 +139,9 @@ export function BoardScreen() {
   const toasts = useToasts();
   const { version, bump } = useRefresh();
 
+  const priorities = useAsync(listPriorities, [], [version]);
+  const [priority, setPriority] = useState("");
+  const [prioritySort, setPrioritySort] = useState("priority");
   const [showDone, setShowDone] = useState(false);
   const [perColumn, setPerColumn] = useState(PAGE_SIZE);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -158,11 +163,11 @@ export function BoardScreen() {
 
   const data = useAsync(async () => {
     const [board, summaries] = await Promise.all([
-      getBoard({ includeCompleted: showDone, limit: perColumn }),
+      getBoard({ includeCompleted: showDone, limit: perColumn, sortByPriority: prioritySort === "priority", ...(priority === "none" ? { withoutPriority: true } : priority ? { priorityId: priority } : {}) }),
       loadExportSummaries(),
     ]);
     return { board, summaries };
-  }, [showDone, perColumn], [version]);
+  }, [showDone, perColumn, priority, prioritySort], [version]);
 
   const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
@@ -372,22 +377,31 @@ export function BoardScreen() {
       */}
       <ScreenHeader
         title="Kanban"
-        lead={RULE_WHAT_MOVES_A_CARD}
-        actions={
-          <>
+        lead="Aufgaben im Blick – nach Ihren Spalten und Prioritäten."
+        actions={<Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
+          Spalten verwalten
+        </Button>}
+      />
+      <div className="screen__bar">
+        <section className="board__filters" aria-label="Kanban filtern und sortieren">
+            <Select label="Priorität" value={priority} onChange={value => { setPriority(value); setPerColumn(PAGE_SIZE); }} options={[
+              { value: "", label: "Alle Prioritäten" }, { value: "none", label: "Ohne Priorität" },
+              ...(priorities.state.status === "ready" ? priorities.state.value.map(item => ({ value: item.id, label: `${item.name} · ${item.weight}` })) : []),
+            ]} />
+            <Select label="Sortierung" value={prioritySort} onChange={setPrioritySort} options={[{ value: "priority", label: "Priorität: wichtigste zuerst" }, { value: "updated", label: "Zuletzt geändert" }]} />
             <FilterToggle
               label="Erledigte einblenden"
               pressed={showDone}
               onChange={setShowDone}
-              hint="Voreingestellt ausgeblendet. Spalten, die ausdrücklich nach „Erledigt“ fragen, zeigen ihre Karten trotzdem."
             />
-            <Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
-              Spalten verwalten
-            </Button>
-          </>
-        }
-      />
+          <details className="board__help"><summary>Wie funktionieren die Spalten?</summary>
+            <p>{RULE_WHAT_MOVES_A_CARD}</p>
+            <p>Erledigte Aufgaben sind ausgeblendet. Spalten, die ausdrücklich danach fragen, zeigen sie trotzdem.</p>
+          </details>
+        </section>
+      </div>
 
+      <p role="alert">{priorities.state.status === "error" ? priorities.state.message : null}</p>
       <p className="visually-hidden" role="status" aria-live="polite">
         {announcement}
       </p>
@@ -442,6 +456,10 @@ export function BoardScreen() {
                       ? ""
                       : ` · ${plural(value.board.appearances.length, "Karte steht", "Karten stehen")} in mehreren Spalten`}
                   </p>
+                  {partial ? <Button size="sm" variant="secondary"
+                    onClick={() => setPerColumn(current => current + PAGE_SIZE)}>
+                    Mehr Karten laden
+                  </Button> : null}
                   <RefreshHint active={refreshing} />
                   <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
                     Neu berechnen
@@ -463,9 +481,10 @@ export function BoardScreen() {
                 kein neuer Oberflaechentext (A-25.7).
               */}
               <ScreenFrame>
-                <div className="board" {...runAreaSurface("Kanban", true)}>
+                <div className={`board${value.board.columns.length === 1 ? " board--single" : ""}`} {...runAreaSurface("Kanban", true)}>
                   {value.board.columns.map((view) => (
                     <BoardColumn
+                    priorities={priorities.state.status === "ready" ? priorities.state.value : []}
                       key={view.column.id}
                       view={view}
                       columnName={columnName}
@@ -506,20 +525,7 @@ export function BoardScreen() {
                   ))}
                 </div>
 
-                {partial ? (
-                  <div className="list-more">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setPerColumn((current) => current + PAGE_SIZE)}
-                    >
-                      Mehr Karten je Spalte laden (derzeit {perColumn})
-                    </Button>
-                    <p className="list-more__hint">
-                      Das Board wird dabei neu berechnet — nur so bleibt die Auskunft „steht auch
-                      in …“ für jede Karte vollständig.
-                    </p>
-                  </div>
-                ) : null}
+
               </ScreenFrame>
             </>
           );

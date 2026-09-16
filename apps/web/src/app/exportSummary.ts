@@ -1,4 +1,4 @@
-import { listTimeEntries } from "../api/endpoints";
+import { listTimeEntries } from "../features/bookings/api";
 import type { Id } from "../api/types";
 import {
   exportDisplayState,

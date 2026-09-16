@@ -1,3 +1,4 @@
+import { waitFor } from './wait-for';
 /**
  * Takt — eigener, kleiner Vite-Start für TP-ANH-10 Stufe 2 (T-150,
  * `docs/testplan.md` Abschnitt 25.2).
@@ -31,24 +32,6 @@ import { API_BASE_URL, SESSION_SECRET, WEB_BASE_URL } from './session';
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError: unknown = null;
-  while (Date.now() < deadline) {
-    try {
-      if (await check()) return;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
-  }
-  throw new Error(`Zeitüberschreitung beim Warten auf: ${label}. Letzter Fehler: ${String(lastError)}`);
-}
 
 export async function startAttachmentPersistenceWeb(): Promise<ChildProcessWithoutStdin> {
   const child = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {

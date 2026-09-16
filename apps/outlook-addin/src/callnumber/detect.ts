@@ -20,7 +20,7 @@
  * Treffer dort spart die Auswertung über den langen Text vollständig.
  */
 
-import { checkCallNumber, type CallNumberRejection } from '@takt/domain';
+import { baseCallNumber, checkCallNumber, type CallNumberRejection } from '@takt/domain';
 import { checkPattern } from './pattern.ts';
 import type { Evaluator } from './evaluate.ts';
 
@@ -28,7 +28,7 @@ import type { Evaluator } from './evaluate.ts';
 export type DetectionOrigin = 'subject' | 'body';
 
 export type Detection =
-  | { readonly kind: 'match'; readonly value: string; readonly origin: DetectionOrigin }
+  | { readonly kind: 'match'; readonly value: string; readonly origin: DetectionOrigin; readonly warning?: string }
   /** Der Ausdruck hat nichts gefunden. Der Normalfall bei einer E-Mail ohne Vorgang. */
   | { readonly kind: 'no_match' }
   /**
@@ -67,10 +67,14 @@ export const detectCallNumber = async (
   mail: MailText,
   evaluate: Evaluator,
 ): Promise<Detection> => {
+  const baseline = (warning?: string): Detection => {
+    const value = baseCallNumber(mail.subject);
+    if (value !== null) return { kind: 'match', value, origin: 'subject', ...(warning ? { warning } : {}) };
+    return warning ? { kind: 'pattern_invalid', message: warning } : { kind: 'no_match' };
+  };
+  if (typeof pattern !== 'string' || pattern.trim() === '') return baseline();
   const checked = checkPattern(pattern);
-  if (!checked.ok) {
-    return { kind: 'pattern_invalid', message: checked.message };
-  }
+  if (!checked.ok) return baseline(`${checked.message} Die Basiserkennung wird verwendet.`);
 
   const places: readonly (readonly [DetectionOrigin, string])[] = [
     ['subject', mail.subject],
@@ -89,7 +93,7 @@ export const detectCallNumber = async (
       return { kind: 'unavailable', message: outcome.message };
     }
     if (outcome.kind === 'invalid') {
-      return { kind: 'pattern_invalid', message: `Der Ausdruck ist nicht gültig: ${outcome.message}` };
+      return baseline(`Der Ausdruck ist nicht gültig: ${outcome.message}. Die Basiserkennung wird verwendet.`);
     }
     if (outcome.kind === 'no_match') {
       continue;
@@ -110,5 +114,5 @@ export const detectCallNumber = async (
     return { kind: 'implausible', raw, reason: plausible.reason, origin };
   }
 
-  return { kind: 'no_match' };
+  return baseline();
 };

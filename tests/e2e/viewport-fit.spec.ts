@@ -277,9 +277,7 @@ async function teardownFixtures(seed: Seed): Promise<void> {
   for (const id of [...seed.tagFolderIds].reverse()) await deleteTagFolder(id).catch(() => undefined);
 }
 
-/* ==================================================================== */
 /* Meßwerkzeug                                                          */
-/* ==================================================================== */
 
 interface WindowSize {
   readonly label: string;
@@ -616,9 +614,7 @@ async function scrollPositionOfAnchorOrAncestor(page: Page, axis: A9Axis): Promi
   }, axis);
 }
 
-/* ==================================================================== */
 /* Die Läufe                                                            */
-/* ==================================================================== */
 
 test.describe('T-323 Abschnitt 9 — Meßsatz für fensterfeste Flächen (T-330)', () => {
   let seed: Seed;
@@ -1146,9 +1142,7 @@ test.describe('T-323 Abschnitt 9 — Meßsatz für fensterfeste Flächen (T-330)
   });
 });
 
-/* ==================================================================== */
 /* Gegenprobe — "Rot zuerst" für A8 (T-345, Auftrag Abschnitt 1)         */
-/* ==================================================================== */
 
 /**
  * Weist nach, daß die A8-Meßfunktion oben (`measureRunAreaChildren`s
@@ -1230,10 +1224,8 @@ test.describe('Gegenprobe (T-334, A8) — Flexbox-Mindesthöhe-Null ohne die Beh
   });
 });
 
-/* ==================================================================== */
 /* Gegenprobe — "Rot zuerst" für die Rahmen-Ausnahme aus 9.6 Punkt 2     */
 /* (T-352, B-19 aus `T-351-spec-ux-reviewer.md`)                        */
-/* ==================================================================== */
 
 /**
  * Weist nach, daß `measureRunAreaChildren` den einzigen heute bekannten

@@ -86,7 +86,7 @@ const DEFAULT_ROUTE: Route = { name: "dashboard", id: null, query: {} };
 export function href(name: RouteName, id?: string, query?: Readonly<Record<string, string>>): string {
   const segments: string[] = [SEGMENT[name]];
   if (id !== undefined && id.length > 0) segments.push(encodeURIComponent(id));
-  const search = new URLSearchParams(query ?? {}).toString();
+  const search = new URLSearchParams(name === "bookings" ? { status: "", von: "", bis: "", ...query } : query ?? {}).toString();
   return `#/${segments.filter((part) => part.length > 0).join("/")}${search.length === 0 ? "" : `?${search}`}`;
 }
 
@@ -96,7 +96,7 @@ const SEGMENT: Readonly<Record<RouteName, string>> = {
   todo: "todos",
   board: "kanban",
   time: "zeiterfassung",
-  bookings: "buchungen",
+  bookings: "export",
   export: "export",
   // Zwei Segmente, weil S-14 zum Export gehört und nicht neben ihn: Die
   // Adresse sagt dasselbe wie die Navigation.
@@ -149,8 +149,9 @@ export function parseRoute(hash: string): Route {
     case "zeiterfassung":
       return { name: "time", id: null, query };
     case "buchungen":
-      return { name: "bookings", id: null, query };
+      return { name: "export", id: null, query: { status: "", von: "", bis: "", ...query } };
     case "export":
+      if (tail === "buchungen") return { name: "export", id: null, query: { status: "", von: "", bis: "", ...query } };
       // `#/export` ist S-07, `#/export/vorlagen[/id]` ist S-14,
       // `#/export/protokoll` ist das Exportprotokoll (R-10).
       if (tail === "vorlagen") {
@@ -164,7 +165,7 @@ export function parseRoute(hash: string): Route {
         ? { name: "exportAudit", id: null, query }
         : { name: "export", id: null, query };
     case "tags":
-      return { name: "tags", id: null, query };
+      return { name: "settings", id: null, query: { ...query, bereich: "tags" } };
     case "einstellungen":
       return { name: "settings", id: null, query };
     default:
@@ -172,9 +173,7 @@ export function parseRoute(hash: string): Route {
   }
 }
 
-/* ==================================================================== */
 /* Das erneute Ansteuern derselben Adresse                              */
-/* ==================================================================== */
 
 /**
  * Wer erfährt, daß dieselbe Adresse noch einmal angesteuert wurde.

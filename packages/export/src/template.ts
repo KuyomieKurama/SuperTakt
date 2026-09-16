@@ -1,17 +1,4 @@
-/**
- * Takt — Prüfung einer Exportvorlage (E-005, E-017, A-7.2, A-8.7, R-06, R-18).
- *
- * Hier verläuft die Datenschutzgrenze aus A-7.2 zum zweiten Mal — das erste Mal
- * verläuft sie im Typ `ExportSourcePath` der Domäne, wo der interne Vermerk
- * schlicht nicht vorkommt. Diese Datei sorgt dafür, dass auch eine Vorlage, die
- * nicht durch den Editor kam, ihn nicht benennen kann: aus einer Datei, über
- * die HTTP-Schnittstelle, aus einem alten Bestand.
- *
- * Der Unterschied zwischen „nicht vorgesehen" und „nicht möglich" ist genau
- * dieser: Die Liste ist geschlossen, der Abgleich wörtlich, und was nicht
- * darauf steht, wird abgewiesen — nicht ausgelassen, nicht ersetzt, nicht
- * zurechtgebogen.
- */
+/** Auch importierte Vorlagen müssen die geschlossene Quellenliste einhalten; interne Vermerke dürfen nicht exportierbar werden. */
 
 import type { ExportSourcePath } from '@takt/domain/export';
 

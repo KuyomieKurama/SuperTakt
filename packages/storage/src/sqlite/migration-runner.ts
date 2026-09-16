@@ -1,37 +1,8 @@
 /**
- * Takt — der Migrationsläufer (E-003, ecc:database-migrations).
- *
- * ---------------------------------------------------------------------------
- * Das Verfahren
- * ---------------------------------------------------------------------------
- *
- * Zwei Dateien je Migration, gleiche Nummer: `NNNN_name.up.sql` und
- * `NNNN_name.down.sql`. Beide Richtungen laufen **jeweils in genau einer
- * Transaktion**. SQLite führt auch DDL transaktional aus, anders als etwa
- * MySQL: Bricht eine Migration in der Mitte ab, bleibt kein halb angelegtes
- * Schema zurück.
- *
- * `schema_migration` hält je gelaufene Migration Nummer, Namen, Prüfsumme und
- * Zeitpunkt. Die Prüfsumme ist der SHA-256 der **Vorwärtsdatei**. Sie erkennt
- * den Fall, der sonst still bleibt: Jemand ändert eine bereits gelaufene
- * Migration, und auf seinem Rechner läuft dann ein anderes Schema als auf dem
- * des Kunden. Der Läufer weigert sich dann zu arbeiten, statt zu raten.
- *
- * ---------------------------------------------------------------------------
- * Die Sicherungskopie ist der eigentliche Rückweg
- * ---------------------------------------------------------------------------
- *
- * `migrateToLatest` legt vorher eine Kopie der Datei an. Das ist wichtiger als
- * die Rückwärtsrichtung: Eine Rückwärtsmigration kann Spalten und damit Daten
- * verlieren — `0003_timer_heartbeat.down.sql` wirft die Tabelle mit den
- * Lebenszeichen weg —, eine Kopie nicht. Die Rückwärtsrichtung ist Werkzeug
- * für Entwicklung und für einen fehlgeschlagenen Aktualisierungslauf, nicht die
- * Rettung eines benutzten Bestands.
- *
- * Kopiert wird mit `VACUUM INTO`. Ein `copyFile` auf eine geöffnete Datenbank
- * im WAL-Modus liefert eine Datei ohne den Inhalt des Journals — also eine
- * Sicherung ohne die zuletzt geschriebenen Buchungen. `VACUUM INTO` schreibt
- * einen in sich stimmigen Bestand.
+ * Migrationen je Richtung transaktional ausführen; geänderte Prüfsummen bereits gelaufener
+ * Vorwärtsdateien ablehnen.
+ * Vorher mit VACUUM INTO sichern: Einfaches Kopieren kann WAL-Inhalte verlieren,
+ * Rückwärtsmigrationen können Nutzdaten entfernen.
  */
 
 import { createHash } from 'node:crypto';

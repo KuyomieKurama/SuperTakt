@@ -68,9 +68,7 @@ export type {
   TimeEntrySource,
 };
 
-/* ==================================================================== */
 /* Zeitbuchung — Herkunft (`time_entry.source`, E-041)                  */
-/* ==================================================================== */
 
 /**
  * Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`.
@@ -81,9 +79,7 @@ export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> 
   manual: "Von Hand",
 };
 
-/* ==================================================================== */
 /* Darstellung (`app_setting.theme`, E-041)                             */
-/* ==================================================================== */
 
 /**
  * Farbmodus der Anwendung. Spalte `app_setting.theme`.
@@ -100,9 +96,7 @@ export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
   dark: "Dunkel",
 };
 
-/* ==================================================================== */
 /* Rundung (`app_setting.rounding_mode`, `export_run.rounding_mode`)    */
-/* ==================================================================== */
 
 /**
  * Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008).
@@ -113,9 +107,7 @@ export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
   nearest: "kaufmännisch",
 };
 
-/* ==================================================================== */
 /* Exportprotokoll (`export_audit.event`)                               */
-/* ==================================================================== */
 
 /**
  * Ereignis im Exportprotokoll.
@@ -131,9 +123,7 @@ export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>
   not_billed: "nicht abgerechnet",
 };
 
-/* ==================================================================== */
 /* Anzeigeort einer Regel (`pool.placement`, E-054)                     */
-/* ==================================================================== */
 
 /**
  * Wo eine Regel erscheint. Spalte `pool.placement`.
@@ -219,9 +209,7 @@ export function poolPlacementMessage(
   };
 }
 
-/* ==================================================================== */
 /* Erledigt-Kennzeichen — die drei Anzeigezustaende (A-2.5, E-023)      */
-/* ==================================================================== */
 
 /**
  * Was am Todo ueber „Erledigt" steht.
@@ -304,9 +292,7 @@ export function reactivationTitle(todoTitle: ForeignText): string {
  * kommt, wird hier nicht noch einmal getippt.
  */
 
-/* ==================================================================== */
 /* Die Achsen einer Regel (T-076, T-079)                                */
-/* ==================================================================== */
 
 /**
  * Wie viele der **erforderlichen** Tags zutreffen muessen (`pool.match_mode`).
@@ -466,9 +452,7 @@ export const POOL_EXPORT_EXPORTED_NOTE =
  */
 export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";
 
-/* ==================================================================== */
 /* Was eine Spalte ist — die eine Fassung (S-2 aus R-2, E-054, E-055)   */
-/* ==================================================================== */
 
 /**
  * Bis T-091 stand an elf Oberflaechenstellen „eine Regel **ueber Tags**", und

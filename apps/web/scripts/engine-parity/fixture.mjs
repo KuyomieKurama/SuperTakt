@@ -92,9 +92,7 @@ export const QUELLEN = {
 /** Der Inhalt der beiden gesuchten Stilblätter, einmal gelesen. */
 const GEFUNDEN = { [QUELLEN.base]: BASE.text, [QUELLEN.components]: COMPONENTS.text };
 
-/* ==================================================================== */
 /* 1  Ausschneiden statt abschreiben                                    */
-/* ==================================================================== */
 
 /**
  * Schneidet den Rumpf einer Regel aus einem Stilblatt.
@@ -183,9 +181,7 @@ export function collectRules() {
   return regeln;
 }
 
-/* ==================================================================== */
 /* 2  Geometrie — jede Zahl ist zugleich eine Schnittkoordinate         */
-/* ==================================================================== */
 
 /**
  * **Zwei Seiten und nicht eine — der Grund ist ein gemessener Fehlschlag.**
@@ -286,9 +282,7 @@ export function schienenschnitte() {
   }));
 }
 
-/* ==================================================================== */
 /* 3  Die eingesetzten Verletzungen                                     */
-/* ==================================================================== */
 
 /**
  * Die Gegenproben. Beide greifen **in die ausgeschnittenen Deklarationen**
@@ -343,9 +337,7 @@ export const GEGENPROBEN = Object.freeze({
   },
 });
 
-/* ==================================================================== */
 /* 4  Die zwei Seiten                                                   */
-/* ==================================================================== */
 
 /**
  * Baut eine der zwei Vorrichtungsseiten als freistehende HTML-Datei ohne

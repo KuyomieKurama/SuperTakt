@@ -1,3 +1,4 @@
+import { recordLogs } from '../support/record-logs.ts';
 /**
  * Takt — T-317 (unit-tester): das gemeinsame Verfahren `sweepOrphanedBlobs`
  * (A-A-18, A-A-36, A-A-83, A-A-98, E-111, T-315).
@@ -42,18 +43,10 @@ import {
   sweepOrphanedEmailFiles,
   type OrphanedEmailFileSweep,
 } from '../../src/features/todos/email-file-sweep.ts';
-import { createLogger, type Logger } from '../../src/logger.ts';
 
-interface Recorded {
-  readonly logger: Logger;
-  readonly lines: { level: string; message: string; reason?: string }[];
-}
 
-function recording(): Recorded {
-  const lines: { level: string; message: string; reason?: string }[] = [];
-  const logger = createLogger((line) => lines.push(JSON.parse(line) as never));
-  return { logger, lines };
-}
+
+
 
 const KNOWN_KINDS: readonly string[] = ATTACHMENT_KINDS;
 
@@ -124,8 +117,8 @@ describe('sweepOrphanedBlobs — dieselbe Prozedur trägt beide Läufe', () => {
       },
     };
 
-    const imageReport = await sweepOrphanedImages(imagePorts, recording().logger);
-    const emailReport = await sweepOrphanedEmailFiles(emailPorts, recording().logger);
+    const imageReport = await sweepOrphanedImages(imagePorts, recordLogs().logger);
+    const emailReport = await sweepOrphanedEmailFiles(emailPorts, recordLogs().logger);
 
     // Dieselben Zahlen, derselbe Verweigerungsgrund (null) -- unabhängig
     // davon, welcher der beiden Läufe sie erzeugt hat.
@@ -168,7 +161,7 @@ describe('sweepOrphanedBlobs — dieselbe Prozedur trägt beide Läufe', () => {
           throw new Error('darf nicht gerufen werden');
         },
       },
-      recording().logger,
+      recordLogs().logger,
     );
     const emailReport = await sweepOrphanedEmailFiles(
       {
@@ -197,7 +190,7 @@ describe('sweepOrphanedBlobs — dieselbe Prozedur trägt beide Läufe', () => {
           throw new Error('darf nicht gerufen werden');
         },
       },
-      recording().logger,
+      recordLogs().logger,
     );
 
     expect(imageReport.refused).toBe('unknown_kinds');
@@ -240,7 +233,7 @@ describe('sweepOrphanedBlobs — die Verschärfung "claimed > owned" (T-315), am
       erwartetUnterOrdner: new Set(),
       beansprucht: 10,
     });
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedBlobs(ports, TEST_VOICE, logger);
 
@@ -276,7 +269,7 @@ describe('sweepOrphanedBlobs — die Verschärfung "claimed > owned" (T-315), am
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedBlobs(ports, TEST_VOICE, logger);
 

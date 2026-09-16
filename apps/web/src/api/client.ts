@@ -20,9 +20,7 @@
 
 import type { ApiError, ApiFieldError, Envelope, ErrorEnvelope, RunningTimeEntry } from "./types";
 
-/* ==================================================================== */
 /* Fehler                                                               */
-/* ==================================================================== */
 
 /**
  * Ein Fehler des Dienstes, mit seinem deutschen Text.
@@ -81,9 +79,7 @@ export function errorCode(cause: unknown): string | null {
   return cause instanceof TaktApiError ? cause.code : null;
 }
 
-/* ==================================================================== */
 /* Verbindung                                                           */
-/* ==================================================================== */
 
 export interface Connection {
   /** Grundadresse aller Routen, etwa `http://127.0.0.1:17843/api/v1`. */
@@ -102,9 +98,7 @@ export function hasConnection(): boolean {
   return connection !== null;
 }
 
-/* ==================================================================== */
 /* Anfragen                                                             */
-/* ==================================================================== */
 
 export type QueryValue = string | number | boolean | readonly string[] | undefined;
 

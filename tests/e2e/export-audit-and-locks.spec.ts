@@ -1,48 +1,14 @@
+import { todayAt } from './support/local-time';
 /**
- * Fünf bei mir angemeldete Fälle (T-048), aus drei Berichten zusammengezogen:
- *
- *  - TP-SEC-13 — Exportieren, Exportstatus zurücksetzen, erneut exportieren.
- *    Der Weg, den R-10 nachvollziehbar halten soll: Der Verlauf dieser
- *    Buchung zeigt danach drei Protokollzeilen in der richtigen Reihenfolge,
- *    mit der Begründung des Zurücksetzens dazwischen (T-040, offene Frage 2a).
- *    Reset und der zweite Export laufen hier bewusst in schneller Folge — das
- *    ist genau das Szenario, für das Migration 0007 die Reihenfolge im
- *    Protokoll von `occurred_at` auf `rowid` umgestellt hat, weil zwei
- *    Protokollzeilen derselben Sekunde sonst vertauscht sein konnten.
- *  - „Verlauf dieser Buchung" bei einer nie exportierten Buchung (T-040,
- *    offene Frage 2c): Leerzustand statt Fehler.
- *  - Der gesperrte Export (T-045, offene Frage 1): Vorschau antwortet nicht →
- *    „Export ausführen" ist gesperrt, Meldung mit Ursache, Wiederholung holt
- *    die Zahlen zurück.
- *  - Derselbe Fehlschlag, während der Bestätigungsdialog bereits offen ist:
- *    der Dialog muss verschwinden und darf nicht von selbst wiederkommen.
- *
- * Die beiden letzten Fälle bilden die Vorschau-Fehlschläge über
- * `page.route()` gegen `POST /export/preview` nach — es gibt in diesem Aufbau
- * keinen anderen Weg, den Dienst gezielt für genau diese eine Route
- * scheitern zu lassen, ohne den Dienst selbst zu verändern (nicht meine
- * Dateihoheit). Der zweite Fall braucht zusätzlich einen Kniff: Der
- * Bestätigungsdialog ist ein echtes Modal (`.scrim` mit `position: fixed;
- * inset: 0`) und blockiert jeden echten Klick auf die Auswahl dahinter — ein
- * Testklick käme nie an. `locator.click({ force: true })` überspringt genau
- * die Erreichbarkeitsprüfung (sichtbar, nicht verdeckt), löst aber weiterhin
- * ein echtes, vertrauenswürdiges Klickereignis über die Eingabe-Pipeline des
- * Browsers aus — React reagiert also genauso, wie es auf einen normalen
- * Klick reagieren würde. Das bildet denselben Codepfad nach, den in
- * Wirklichkeit z. B. eine zweite gleichzeitige Sitzung auslösen könnte, die
- * eine der ausgewählten Buchungen während der Bestätigung ändert.
+ * Reset und erneuten Export schnell nacheinander ausführen, um die Protokollreihenfolge
+ * innerhalb derselben Sekunde zu prüfen.
+ * Erzwungene Klicks hinter dem Modal bilden eine externe Änderung während der Bestätigung nach.
  */
 import { test, expect } from '@playwright/test';
 
 import { createTimeEntry, createTodo, deleteTimeEntry, listTimeEntriesByTodo } from './support/api';
 import { runExportFromScreen } from './support/actions';
 import { gotoExport, gotoTodo } from './support/nav';
-
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 /** Öffnet das Zeilenmenü der einzigen Buchung auf S-03 und wählt einen Eintrag. */
 async function chooseEntryMenuItem(

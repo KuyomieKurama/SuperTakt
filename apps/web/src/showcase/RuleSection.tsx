@@ -258,9 +258,7 @@ function ShapeSummary({ shape }: { readonly shape: (typeof SHAPES)[number] }) {
   );
 }
 
-/* ==================================================================== */
 /* Die vier Zustaende der beiden Chip-Auswahlen (T-091, B-5 aus R-2)     */
-/* ==================================================================== */
 
 const LOADING: PickerSource<FolderOption> = { status: "loading" };
 

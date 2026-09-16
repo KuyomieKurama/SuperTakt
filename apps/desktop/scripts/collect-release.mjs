@@ -1,3 +1,4 @@
+import { cargoTargetDir, targetTriple } from './rust-target.mjs';
 /**
  * Takt — die gebauten Installationsdateien einsammeln (T-075).
  *
@@ -50,7 +51,6 @@
  * Signatur verloren.
  */
 
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
@@ -84,36 +84,7 @@ function fail(message) {
   process.exit(1);
 }
 
-/**
- * Das Ziel-Tripel kommt von `rustc` — dieselbe Regel wie überall in dieser
- * Kette. Daraus wird die Kennung, unter der die Dateien abgelegt werden, damit
- * die drei Plattformen sich beim Zusammenführen nicht überschreiben.
- */
-function targetTriple() {
-  const result = spawnSync('rustc', ['-vV'], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    fail('`rustc -vV` ist fehlgeschlagen. Ohne die Rust-Toolchain gibt es kein Ziel-Tripel.');
-  }
-  const line = String(result.stdout)
-    .split('\n')
-    .find((entry) => entry.startsWith('host:'));
-  if (line === undefined) {
-    fail('`rustc -vV` nennt kein `host:`.');
-  }
-  return line.slice('host:'.length).trim();
-}
 
-/**
- * Der Ausgabeordner von Cargo. `CARGO_TARGET_DIR` wird beachtet, weil es ihn
- * tatsächlich verschiebt — dieselbe Rücksicht wie in `build-taskpane.mjs`.
- */
-function cargoTargetDir() {
-  const fromEnv = process.env['CARGO_TARGET_DIR'];
-  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
-    return resolve(repoRoot, fromEnv.trim());
-  }
-  return join(appDir, 'src-tauri', 'target');
-}
 
 /**
  * Die Fassung, die dieser Lauf einsammeln darf — und warum es sie braucht.

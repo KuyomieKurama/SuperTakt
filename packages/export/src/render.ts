@@ -1,15 +1,4 @@
-/**
- * Takt — der Renderer (R-17, E-020, E-026, E-034, A-8.2 bis A-8.5).
- *
- * **Ein Renderer für Vorschau und Datei.** Zwei Wege wären genau an der Stelle
- * blind, für die die Vorschau da ist: Der Benutzer sähe das eine und
- * verschickte das andere, und der Unterschied fiele erst dem Empfänger auf.
- * Deshalb gibt es hier eine einzige Funktion, die aus einer Tagesgruppe eine
- * Zeile macht — S-07, S-14 und der Exportlauf rufen dieselbe.
- *
- * Rein: keine Uhr, keine Datei, kein Netz. Alles, was von außen kommt, steht in
- * `ExportSystemContext` und wird übergeben.
- */
+/** Gemeinsamer Renderer für Vorschau und Datei (R-17); Feldquellen bleiben ausdrücklich freigegeben. */
 
 import type { ExportGroup, ExportSystemContext } from '@takt/domain/export';
 import { quarterHoursToExportNumber } from '@takt/domain/export';
@@ -26,14 +15,7 @@ import type {
 import type { ExportGroupAggregate } from './sources.ts';
 import { aggregateExportGroup, readExportSource } from './sources.ts';
 
-/**
- * Wendet die Transformation eines Feldes an.
- *
- * `null` bleibt `null`. Ein fehlender Wert wird nicht zu `""` und nicht zu
- * `"null"` kodiert: Für das Abrechnungstool ist eine leere Zeichenkette etwas
- * anderes als ein fehlender Wert, und Base64 über das Wort „null" wäre eine
- * erfundene Angabe.
- */
+/** Fehlende Werte bleiben null, auch bei der Kodierung. */
 const applyTransformation = (
   transformation: ExportTransformation,
   value: ExportValue,
@@ -55,13 +37,7 @@ const applyTransformation = (
   }
 };
 
-/**
- * Trifft die Bedingung eines Feldes zu (A-8.7)?
- *
- * „Belegt" heißt: nicht `null` und nicht nur aus Leerzeichen bestehend. Ein
- * Feld, dessen Quelle bloß Leerzeichen enthält, gilt als leer — sonst hinge die
- * Ausgabe an einem unsichtbaren Zeichen.
- */
+/** Nur nichtleere Werte erfüllen „belegt“; Leerzeichen allein zählen nicht. */
 const conditionHolds = (
   condition: ExportFieldCondition | undefined,
   group: ExportGroup,
@@ -87,29 +63,8 @@ const summarize = (group: ExportGroup, aggregate: ExportGroupAggregate): ExportG
 });
 
 /**
- * Erzeugt aus einer Tagesgruppe genau eine Exportzeile — oder meldet, dass sie
- * nicht exportierbar ist.
- *
- * Die Schlüssel der Zeile stehen in der Reihenfolge der Felder der Vorlage; ein
- * Feld mit nicht erfüllter Bedingung fehlt vollständig.
- *
- * **E-034, die leere Tagesgruppe.** Führt die Vorlage ein Feld mit der Quelle
- * `group.bookingNotes` und ist der zusammengeführte Leistungstext leer, ist die
- * Gruppe nicht exportierbar: Das Abrechnungstool nimmt keine leere Notiz an.
- * Das Ergebnis ist `not_exportable` mit Grund — kein Fehler, kein Abbruch. Der
- * übrige Export läuft durch, die Gruppe bleibt offen und erscheint beim
- * nächsten Mal wieder. Ein Platzhaltertext käme nicht in Frage; das hieße,
- * erfundene Daten an den Kunden zu schicken.
- *
- * Die Regel hängt am tatsächlich konfigurierten Feld, nicht an der Buchung an
- * sich: Eine Vorlage ohne Leistungsfeld kann von einer leeren Notiz nicht
- * aufgehalten werden.
- *
- * **Der interne Vermerk kommt hier nicht vor** — weder im Klartext noch
- * base64-kodiert, weder in dieser noch in irgendeiner anderen Vorlage. Nicht
- * weil diese Funktion ihn auslässt, sondern weil `ExportGroup` ihn nicht trägt
- * und `readExportSource` keinen Zweig hat, der ihn liefern könnte (A-7.2, R-06,
- * R-18).
+ * Eine Tagesgruppe ergibt eine Zeile. Vorlagen mit Leistungsfeld überspringen
+ * Gruppen ohne Leistungstext (E-034). Interne Todo-Vermerke sind keine Feldquelle.
  */
 export const renderExportGroup = (
   group: ExportGroup,
@@ -124,34 +79,8 @@ export const renderExportGroup = (
     return { kind: 'not_exportable', reason: 'empty_note', group: summary };
   }
 
-  /**
-   * Die Zeile wird **ohne Prototyp** gebaut (B-3.2, T-034).
-   *
-   * `{}` erbt von `Object.prototype`, und eine Zuweisung an `__proto__` ist
-   * dort keine Zuweisung, sondern ein Aufruf des Setters: Der Wert verschwindet
-   * spurlos, und je nach Sorte nimmt er die ganze Zeile mit. In T-023 gemessen:
-   * `{"Call":null,"Zeit":0.25}` ohne das konfigurierte Feld, im anderen Fall
-   * `{}`.
-   *
-   * `validateExportTemplateField` weist einen solchen Namen inzwischen beim
-   * Speichern ab, und das ist die Schicht, die dem Benutzer etwas sagt. Diese
-   * hier sagt niemandem etwas — sie sorgt nur dafür, dass ein Feldname, wie er
-   * auch heiße, in dieser Zeile eine gewöhnliche Eigenschaft wird und keine
-   * Sonderbedeutung hat. Zwei Schichten, weil ein stiller Feldverlust in einer
-   * Abrechnungsdatei nirgends auffällt.
-   *
-   * **Warum die Zeile hier steht und nicht in der Prüfung** (nachgemessen in
-   * T-046): Diese Funktion ist die Stelle, an der alle Wege zusammenlaufen.
-   * Vorschau und Lauf rufen `planExportRun` und damit dieselbe Zeile (R-17),
-   * und ein Aufrufer, der den Motor als Bibliothek benutzt, kommt ebenfalls
-   * hier vorbei — auch dann, wenn er `validateExportTemplateDefinition` nie
-   * aufgerufen hat. Genau das ist der Zustand, den ein `INSERT` in
-   * `export_template` oder ein Bestand von vor T-034 herstellt. Die Prüfung
-   * kann er umgehen; diesen Aufruf nicht.
-   *
-   * `JSON.stringify` behandelt ein Objekt ohne Prototyp wie jedes andere; an
-   * der erzeugten Datei ändert sich nichts.
-   */
+  // Ohne Prototyp bleibt auch __proto__ ein gewöhnlicher Schlüssel (B-3.2).
+  // Das schützt Bibliotheksaufrufer, die die Vorlagenvalidierung umgehen.
   const row = Object.create(null) as Record<string, ExportValue>;
 
   for (const field of fields) {

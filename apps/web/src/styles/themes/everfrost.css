@@ -1,0 +1,38 @@
+/* @theme {"label":"Everfrost","mode":"auto","hint":"Waldgrün und warme Naturtöne · Everforest-Palette","order":5} */
+:root[data-design-theme="everfrost"] {
+  --preset-canvas: #fdf6e3;
+  --preset-surface: #fffbf0;
+  --preset-ink: #4b5961;
+  --preset-muted: #59666c;
+  --preset-accent: #667800;
+  --preset-link: #5e6f1b;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #617201;
+  --preset-accent-active: #5d6e02;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="everfrost"]:not([data-theme="light"]) {
+  --preset-canvas: #2d353b;
+  --preset-surface: #343f44;
+  --preset-ink: #d3c6aa;
+  --preset-muted: #cdc1a6;
+  --preset-accent: #a7c080;
+  --preset-link: #b6c28e;
+  --preset-on: #101010;
+  --preset-accent-hover: #acc488;
+  --preset-accent-active: #b0c68d;
+  }
+}
+
+:root[data-design-theme="everfrost"][data-theme="dark"] {
+  --preset-canvas: #2d353b;
+  --preset-surface: #343f44;
+  --preset-ink: #d3c6aa;
+  --preset-muted: #cdc1a6;
+  --preset-accent: #a7c080;
+  --preset-link: #b6c28e;
+  --preset-on: #101010;
+  --preset-accent-hover: #acc488;
+  --preset-accent-active: #b0c68d;
+}

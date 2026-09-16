@@ -71,9 +71,7 @@ export const REQUEST_SCHEMAS = Object.freeze({
 export function createExportRoutes(context: AppContext): Hono<TaktEnv> {
   const routes = new Hono<TaktEnv>();
 
-  // -------------------------------------------------------------------------
   // Vorlagen (A-8.7)
-  // -------------------------------------------------------------------------
   routes.get('/templates', async (c) => data(c, await listTemplates(context)));
 
   routes.post('/templates', async (c) => {
@@ -104,9 +102,7 @@ export function createExportRoutes(context: AppContext): Hono<TaktEnv> {
     return result.ok ? c.body(null, 204) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Die Auswahlliste (E-049, E-017) — reine Auskunft, ohne Bestand
-  // -------------------------------------------------------------------------
 
   /**
    * Damit die Oberfläche **fragt**, statt zu wissen.
@@ -121,9 +117,7 @@ export function createExportRoutes(context: AppContext): Hono<TaktEnv> {
    */
   routes.get('/sources', (c) => data(c, exportSourceCatalog()));
 
-  // -------------------------------------------------------------------------
   // Vorschau (R-17, E-051) — schreibt nichts
-  // -------------------------------------------------------------------------
   routes.post('/preview', async (c) => {
     const body = await readJson(c.req.raw);
     const parsed = previewSchema.safeParse(body);
@@ -163,9 +157,7 @@ export function createExportRoutes(context: AppContext): Hono<TaktEnv> {
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Der Lauf (A-8.8)
-  // -------------------------------------------------------------------------
   routes.get('/runs', async (c) => data(c, await listExportRuns(context, readPagination(c.req.query()))));
 
   routes.post('/runs', async (c) => {
@@ -216,9 +208,7 @@ export function createExportRoutes(context: AppContext): Hono<TaktEnv> {
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Protokoll (R-10)
-  // -------------------------------------------------------------------------
   /**
    * Das Protokoll, gefiltert (R-10, T-042).
    *

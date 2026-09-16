@@ -1,0 +1,12 @@
+/* @theme {"label":"Catppuccin Macchiato","mode":"dark","hint":"Pastell auf tiefem Blau","order":17} */
+:root[data-design-theme="catppuccin-macchiato"] {
+  --preset-canvas: #24273a;
+  --preset-surface: #1e2030;
+  --preset-ink: #cad3f5;
+  --preset-muted: #a4acca;
+  --preset-accent: #c6a0f6;
+  --preset-link: #c6a0f6;
+  --preset-on: #101010;
+  --preset-accent-hover: #c9a6f7;
+  --preset-accent-active: #ccaaf7;
+}

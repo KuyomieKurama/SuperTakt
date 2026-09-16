@@ -1,17 +1,29 @@
 # Takt — Outlook-Add-in
 
-Aus einer geöffneten E-Mail heraus ein Todo in Takt anlegen oder Zeit auf ein
-vorhandenes Todo buchen. Deckt Abschnitt 10 der Spezifikation (A-10.1 bis
-A-10.10) und die Screens S-12 und S-13.
+Aus einer geöffneten E-Mail eine Aufgabe anlegen oder die Mail samt Anhängen
+zu einer vorhandenen Aufgabe ergänzen: über „Schnell in Inbox“ als Outlook-
+Funktionsbefehl oder „Aufgabe erstellen“ als Seitenleiste. Mail-Ergänzungen
+verändern keine Aufgabenfelder, Zeitbuchungen oder Erledigt-Zustände.
+
+Stand und Nachweise: [Funktionsabgleich](../../docs/outlook-bridge-alignment.md).
+A-10.11–15 erweitern die bisherigen Regeln gezielt. Lokale Standardvorgaben
+bestehen aus Status und Tags; Pools bleiben regelbasierte Ansichten.
+Zeitschätzung sowie Frist mit optionaler Ortszeit werden in SuperTakt gespeichert.
+Die Basiserkennung benötigt kein eigenes Muster; benutzerdefinierte Ausdrücke
+laufen einschließlich der Leertextprüfung ausschließlich im begrenzten Worker.
 
 ## Aufbau
 
 ```
 manifest.xml                 Office-Manifest, ReadItem, enge AppDomains
 index.html                   Aufgabenbereich, CSP, Einbindung von office.js
+commands.html                ExecuteFunction-Einstieg mit gleichem CSP
+src/commands.ts              Office.actions.associate
+src/quick-command.ts         Schnellbefehl, wartet Sammlung und Speicherung ab
+src/office/save-mail.ts      gemeinsame Metadaten- und Speicherlogik
 src/config.ts                feste Betriebswerte, darunter die Add-in-Herkunft
 src/office/office-js.d.ts    die benutzte Office-Fläche, handgeschrieben
-src/office/host.ts           die EINZIGE Datei, die `Office.*` anfasst
+src/office/host.ts           Lesen und Fähigkeiten der geöffneten Nachricht
 src/office/mail.ts           MailFacts, Titelvorschlag, Textübernahme
 src/callnumber/pattern.ts    Musterprüfung (B-4.1, B-4.2, B-4.3) + Begründung
 src/callnumber/run.ts        die einzige Stelle, an der ein Benutzerausdruck läuft
@@ -27,7 +39,7 @@ src/tags/tree.ts             Baum abflachen und durchsuchen, vier Ebenen und meh
 src/tags/new-name.ts         ein Tag, das es noch nicht gibt — die Regel kommt aus der Domäne
 src/ui/                      S-12 (TaskPane) und S-13 (SettingsView)
 scripts/fixtures.mjs         erfundene Prüfdaten und die Attrappe der Speicherung
-scripts/proof-addin.mjs      der ausführbare Nachweis, 100 Prüfungen
+scripts/proof-addin.mjs      ausführbarer Nachweis mit Gegenproben
 ```
 
 ## Befehle

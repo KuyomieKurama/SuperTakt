@@ -1019,3 +1019,20 @@ unsichtbar wäre: Eine Umsetzungsreihenfolge, die vier Einträge in einer Zeile 
 ihnen eine gemeinsame Vorbedingung, die sie nicht haben. **Vier Einträge in einer Zeile sind eine
 Behauptung über vier Messungen.** Wer bündelt, misst jeden einzeln — sonst erbt der eine, der eine
 fremde Datei hat, die Harmlosigkeit der drei anderen.
+
+### Gezielte Änderung SP-A-27/SP-A-28 (15.09.2026)
+
+Durch A-10.11 ist der reine Duplikathinweis ersetzt. Der aktuelle Satz lautet:
+„Wählen Sie eine Aufgabe zum Ergänzen oder legen Sie bewusst eine neue Aufgabe an.
+Das Ergänzen erfasst keine Zeit und lässt erledigte Aufgaben erledigt.“
+Die neue Aussage wird im bestehenden Add-in-Nachweis einschließlich Gegenprobe geprüft.
+
+
+### Präzisierung A-10.16 (15.09.2026)
+
+Der erste Satz lautet jetzt „Die E-Mail wird als Anhang an der ausgewählten Aufgabe
+ gespeichert.“ Die Zusicherungen aus SP-A-27/SP-A-28 bleiben erhalten. Der Button
+„Stattdessen neue Aufgabe erstellen“ blendet ausschließlich die Neuanlagefelder ein.
+Die veraltete Prüfung auf Abwesenheit jedes Buttons ist durch die Prüfung auf
+Abwesenheit direkter Speicher- und Zeitfunktionen ersetzt; der Browsernachweis prüft
+Zielwahl, Formularanzeige und EML-Auftrag.

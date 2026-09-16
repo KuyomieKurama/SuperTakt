@@ -1,5 +1,11 @@
-//! A-23: two narrow desktop commands, no caller-controlled file or URL.
+//! Die Befehle nehmen keine vom Aufrufer bestimmten Dateien oder URLs entgegen.
 use crate::StartupState;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "outlook_certificate_unix.rs"]
+mod unix;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use unix::run;
 
 fn fingerprint_is_valid(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(&b))
@@ -25,12 +31,11 @@ fn run(path: std::path::PathBuf, fingerprint: Option<String>) -> Result<serde_js
     let trusting = fingerprint.is_some();
     let mut command = Command::new(executable);
     command.args(["-NoLogo", "-NoProfile"]);
-    // Windows may ask for its own root-store confirmation. Keep that dialog
-    // available only for the operation the user explicitly requested.
+    // Windows darf den Vertrauensdialog nur beim ausdrücklich angeforderten Import öffnen.
     if !trusting { command.arg("-NonInteractive"); }
     let mut child = command
         .args(["-Command", include_str!("outlook_certificate.ps1")])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW; no shell, no elevation.
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW; ohne Shell oder Rechteerhöhung.
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn().map_err(|_| "Die Zertifikatsprüfung konnte nicht gestartet werden.")?;
     let written = child.stdin.take().ok_or("Eingabe nicht verfügbar.")
@@ -74,7 +79,7 @@ async fn execute(
     startup: tauri::State<'_, StartupState>,
     fingerprint: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     {
         // `lib.rs` registriert `StartupState`, nicht den fertigen `Startup`-
         // Wert. Auf dieselbe Startvorbereitung warten wie die übrigen Befehle,
@@ -86,7 +91,7 @@ async fn execute(
         tauri::async_runtime::spawn_blocking(move || run(path, fingerprint)).await
             .map_err(|_| "Die Zertifikatsprüfung wurde unterbrochen.".to_string())?
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         let _ = (startup, fingerprint);
         Ok(serde_json::json!({ "supported": false }))

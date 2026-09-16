@@ -217,9 +217,7 @@ const FORMSCHRANKEN = Object.freeze({
   chromium: Object.freeze({ striche: 4, luecken: 3 }),
 });
 
-/* ==================================================================== */
 /* 1  Werkzeug                                                          */
-/* ==================================================================== */
 
 let passed = 0;
 let failed = 0;
@@ -334,9 +332,7 @@ function form(schiene, schranke) {
   return 'unklar';
 }
 
-/* ==================================================================== */
 /* 2  Verfuegbarkeit — und was ihr Fehlen ungemessen laesst             */
-/* ==================================================================== */
 
 process.stdout.write('Takt — Engine-Vergleich der Fokusbaender und Schienenformen (T-232)\n');
 process.stdout.write(`${'='.repeat(70)}\n\n`);
@@ -483,9 +479,7 @@ if (!hatPil || (!hatWebKit && chromiumTyp === null)) {
   process.exit(urteileUeberUebersprung('vollstaendig'));
 }
 
-/* ==================================================================== */
 /* 3  Vorrichtung und Auftraege                                         */
-/* ==================================================================== */
 
 const regeln = collectRules();
 const tafel = tokenTafel(regeln.tokens.rumpf);
@@ -623,9 +617,7 @@ process.stdout.write(
     `(${FARBEN.ring} / ${FARBEN.gegenband} / ${FARBEN.fuellung} auf ${FARBEN.flaeche}).\n\n`,
 );
 
-/* ==================================================================== */
 /* 4  Lauf                                                              */
-/* ==================================================================== */
 
 /**
  * @typedef {{ farbe: string; laenge: number }} Band
@@ -687,9 +679,7 @@ if (chromiumTyp !== null) {
 
 const engines = [...messungen.keys()];
 
-/* ==================================================================== */
 /* 5  Was gemessen wurde — Zahlen, bevor darueber geurteilt wird (P-5)  */
-/* ==================================================================== */
 
 process.stdout.write(`Stand: ${new Date().toISOString().slice(0, 10)}\n\n`);
 process.stdout.write('Waagerechter Schnitt durch die Knopfmitte:\n\n');
@@ -746,9 +736,7 @@ for (const engine of engines) {
 }
 process.stdout.write('\n');
 
-/* ==================================================================== */
 /* 6  Urteil                                                            */
-/* ==================================================================== */
 
 process.stdout.write('Regeln\n------\n');
 
@@ -1015,9 +1003,7 @@ if (engines.length >= 2) {
   });
 }
 
-/* ==================================================================== */
 /* 7  Ergebnis                                                          */
-/* ==================================================================== */
 
 if (behalten === undefined) rmSync(arbeitsplatz, { recursive: true, force: true });
 

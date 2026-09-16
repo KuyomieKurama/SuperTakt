@@ -1,3 +1,4 @@
+import { resolveTheme } from '../settings/theme.ts';
 /**
  * Takt — Zusammenbau des Aufgabenbereichs.
  *
@@ -33,6 +34,19 @@ export function App() {
   const [hostAttempt, setHostAttempt] = useState(0);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    const system = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      let background: string | undefined;
+      try { background = Office.context.officeTheme?.bodyBackgroundColor; } catch { /* Office is optional here. */ }
+      document.documentElement.dataset.theme = resolveTheme(settings.defaults?.theme ?? 'auto', background, system.matches);
+    };
+    apply();
+    system.addEventListener('change', apply);
+    const timer = setInterval(apply, 2000);
+    return () => { clearInterval(timer); system.removeEventListener('change', apply); };
+  }, [settings.defaults?.theme, host]);
 
   const evaluate = useMemo<Evaluator>(
     () =>
@@ -75,16 +89,7 @@ export function App() {
    * — und mit ihm dem Satz, der sagt, warum eine laufende Übernahme gerade
    * abgebrochen wurde.
    */
-  useEffect(
-    () =>
-      onItemChanged(() => {
-        setDetection(null);
-        void readHost().then((state) => {
-          setHost(state);
-        });
-      }),
-    [],
-  );
+  useEffect(() => onItemChanged(retryHost), [retryHost]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +235,7 @@ function Body({
 
   return (
     <TaskPane
+      {...(settings.defaults ? { defaults: settings.defaults } : {})}
       mail={host.mail}
       detection={detection}
       api={api}

@@ -1,14 +1,3 @@
-/**
- * Takt — Tags, Tag-Ordner und Standard-Tags (A-4.*, A-9.*).
- *
- * Drei Tabellen und ein Baum: `tag`, `tag_folder`, `default_tag`.
- *
- * **Die Pools sind seit T-261 nebenan** (`pool.ts`). Sie standen hier, solange
- * eine Regel nur aus Tags bestand; seit E-055 nennt sie fünf Achsen, von denen
- * vier keine Tags sind. Die Trennung hat nichts gekostet: Diese Datei benutzt
- * aus `pool.ts` nichts, und `pool.ts` benutzt von hier nichts.
- */
-
 import type {
   Result,
   TagFolderId,
@@ -18,9 +7,7 @@ import type {
 } from './kernel.ts';
 import { err, ok, taktError } from './kernel.ts';
 
-// ---------------------------------------------------------------------------
 // Tag-Ordner (A-4.2, A-4.3, A-4.6) — Tabelle `tag_folder`
-// ---------------------------------------------------------------------------
 
 /**
  * Ein Ordner für Tags. `parentId === null` bedeutet Wurzelebene.
@@ -54,26 +41,9 @@ export interface TagTree {
   readonly rootTags: readonly Tag[];
 }
 
-// ---------------------------------------------------------------------------
 // Zyklusfreiheit (A-4.6)
-// ---------------------------------------------------------------------------
 
-/**
- * Darf `folderId` unter `newParentId` gehängt werden?
- *
- * Unzulässig ist beides: ein Ordner als eigener Vorfahr und ein Ordner als
- * Nachfahr seiner selbst. Beide Fälle sind dieselbe Bedingung — der Zielordner
- * darf nicht im Teilbaum des verschobenen Ordners liegen und nicht der Ordner
- * selbst sein.
- *
- * Die Prüfung braucht die Vorfahrenkette des Ziels. Sie wird über einen Port
- * geladen, nicht über einen Tabellendurchlauf: `TagFolderPort.ancestors`
- * liefert sie mit einer rekursiven Abfrage, die je Ebene einen Indexzugriff
- * macht. Bei vier und mehr Ebenen bleibt das ein Indexzugriff je Ebene und
- * lädt nie die gesamte Tabelle in den Speicher (E-022).
- *
- * Rein: Die Funktion bekommt die Kette als Eingabe und liest nichts nach.
- */
+/** Die Vorfahrenkette des Ziels über den Port laden, statt den gesamten Ordnerbestand einzulesen. */
 export type CheckFolderMove = (input: {
   readonly folderId: TagFolderId;
   readonly newParentId: TagFolderId | null;
@@ -81,9 +51,7 @@ export type CheckFolderMove = (input: {
   readonly targetAncestors: readonly TagFolderId[];
 }) => Result<void, TaktError<'tag_folder_cycle'>>;
 
-// ---------------------------------------------------------------------------
 // Tag (A-4.1, A-4.5)
-// ---------------------------------------------------------------------------
 
 export interface Tag {
   readonly id: TagId;
@@ -95,9 +63,7 @@ export interface Tag {
   readonly updatedAt: Timestamp;
 }
 
-// ---------------------------------------------------------------------------
 // Standard-Tags (A-9.1 bis A-9.5) — Tabelle `default_tag`
-// ---------------------------------------------------------------------------
 
 /**
  * Tags, die jedes neu angelegte Todo automatisch bekommt.
@@ -122,28 +88,9 @@ export type ApplyDefaultTags = (
   defaults: readonly DefaultTag[],
 ) => readonly TagId[];
 
-// ---------------------------------------------------------------------------
 // Umsetzung (T-009)
-// ---------------------------------------------------------------------------
 
-/**
- * Darf `folderId` unter `newParentId` gehängt werden? (A-4.6)
- *
- * Drei Fälle, und der mittlere ist der, den man vergisst:
- *
- *  1. Wurzelebene (`newParentId === null`) ist immer erlaubt. Ein Ordner ohne
- *     Elternteil kann in keinem Zyklus stehen.
- *  2. Der Ordner selbst als Ziel — ein Zyklus der Länge eins.
- *  3. Ein Nachfahr als Ziel. Erkennbar daran, dass der verschobene Ordner in
- *     der Vorfahrenkette des Ziels vorkommt: Wäre `a` ein Vorfahr von `d`, so
- *     hinge `a` nach dem Zug unter seinem eigenen Nachfahren.
- *
- * Die Kette kommt als Eingabe herein und wird nicht nachgeladen. Sie liefert
- * `TagFolderPort.ancestors` mit einer rekursiven Abfrage, die je Ebene einen
- * Indexzugriff macht und nie die ganze Tabelle in den Speicher lädt (E-022).
- * Genau deshalb bleibt diese Regel rein und ohne laufenden Dienst prüfbar,
- * obwohl sie über einen beliebig tiefen Baum urteilt.
- */
+/** Selbstzuordnung und Zuordnung unter eigene Nachfahren verhindern; die Wurzelebene ist zulässig. */
 export const checkFolderMove: CheckFolderMove = ({ folderId, newParentId, targetAncestors }) => {
   if (newParentId === null) return ok(undefined);
 
@@ -165,18 +112,9 @@ export const checkFolderMove: CheckFolderMove = ({ folderId, newParentId, target
   return ok(undefined);
 };
 
-
 /**
- * Vereinigt die gewählten Tags mit den Standard-Tags (A-9.1, A-9.3, A-9.5).
- *
- * Erst die Standard-Tags in ihrer konfigurierten Reihenfolge, dann die
- * ausdrücklich gewählten; Doppelte fallen weg, ohne die Reihenfolge zu
- * verschieben.
- *
- * Die Funktion ist rein und hält keinen Zustand. Das ist die Umsetzung von
- * A-9.5: Oberfläche und Outlook-Add-in rufen denselben Anwendungsfall auf, und
- * der ruft diese eine Funktion — es gibt keinen zweiten Erzeugungspfad, der
- * abweichen könnte.
+ * Standard-Tags zuerst, danach gewählte Tags; beim Entfernen von Duplikaten die Reihenfolge
+ * erhalten.
  */
 export const applyDefaultTags: ApplyDefaultTags = (selected, defaults) => {
   const ordered = [...defaults].sort((left, right) => left.position - right.position);

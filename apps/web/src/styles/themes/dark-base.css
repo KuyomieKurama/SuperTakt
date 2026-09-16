@@ -1,0 +1,12 @@
+/* @theme {"label":"Dark-base","mode":"dark","hint":"Neutrales Schwarz mit pinken Akzenten","order":3} */
+:root[data-design-theme="dark-base"] {
+  --preset-canvas: #0a0a0a;
+  --preset-surface: #141414;
+  --preset-ink: #e0e0e0;
+  --preset-muted: #b3b3b3;
+  --preset-accent: #ff4081;
+  --preset-link: #fd4a87;
+  --preset-on: #101010;
+  --preset-accent-hover: #ff4b89;
+  --preset-accent-active: #ff538e;
+}

@@ -79,16 +79,17 @@ async function openApp(page: Page): Promise<void> {
 }
 
 function updateDialog(page: Page) {
-  return page.getByRole('dialog', { name: 'Eine neuere Fassung von SuperTakt ist verfügbar' });
+  return page.getByRole('dialog', { name: 'Update verfügbar' });
 }
 
 async function expectDialogFacts(page: Page, available: string): Promise<void> {
+  await page.getByRole("button", { name: "Ansehen", exact: true }).click();
   const dialog = updateDialog(page);
   await expect(dialog).toBeVisible();
-  const values = dialog.locator('.facts dd');
+  const values = dialog.locator('.update-dialog__versions dd');
   await expect(values.nth(0)).toHaveText(INSTALLED_VERSION);
   await expect(values.nth(1)).toHaveText(available);
-  await expect(values.nth(2)).toHaveText(`${RELEASE_URL_PREFIX}${available}`);
+  await expect(dialog.locator('.update-dialog__source p')).toHaveText(`${RELEASE_URL_PREFIX}${available}`);
 }
 
 test.describe.serial('TP-VER-10 bis TP-VER-13 — Versionsprüfung im Browser', () => {
@@ -140,7 +141,7 @@ test.describe.serial('TP-VER-10 bis TP-VER-13 — Versionsprüfung im Browser', 
     // A-18.7 wörtlich: „Es gibt keine Vorauswahl, die eine der beiden
     // Antworten für ihn trifft." Geprüft an zwei unabhängigen Signalen, nicht
     // an einem: derselben Knopfgestalt **und** dem Fokusziel.
-    const installButton = dialog.getByRole('button', { name: 'Installieren' });
+    const installButton = dialog.getByRole('button', { name: 'Release-Seite öffnen' });
     const skipButton = dialog.getByRole('button', { name: 'Überspringen' });
     await expect(installButton).toBeVisible();
     await expect(skipButton).toBeVisible();
@@ -163,6 +164,7 @@ test.describe.serial('TP-VER-10 bis TP-VER-13 — Versionsprüfung im Browser', 
     context: BrowserContext;
   }) => {
     await openApp(page);
+    await page.getByRole("button", { name: "Ansehen", exact: true }).click();
     const dialog = updateDialog(page);
     await expect(dialog).toBeVisible();
 
@@ -233,7 +235,7 @@ test.describe.serial('TP-VER-10 bis TP-VER-13 — Versionsprüfung im Browser', 
     context.on('download', (download) => downloads.push(download.url()));
     context.on('page', (opened) => newPages.push(opened.url()));
 
-    await dialog.getByRole('button', { name: 'Installieren' }).click();
+    await dialog.getByRole('button', { name: 'Release-Seite öffnen' }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText('Die Release-Seite ist im Browser geöffnet.')).toBeVisible();
 

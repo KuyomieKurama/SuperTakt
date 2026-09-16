@@ -1,87 +1,8 @@
 /**
- * Takt — was ein **doppelter Name** ist (A-4.1, A-4.5, A-3.1, T-058, T-074).
- *
- * Diese Datei ist der einzige Ort im Projekt, an dem die Regel beschrieben ist.
- * Weder der SQLite-Adapter noch der lokale Dienst noch die Oberfläche noch das
- * Add-in führen eine eigene Fassung. Wer eine zweite anlegt, bekommt zwei Tags
- * „backend“, die sich für den Benutzer nicht unterscheiden.
- *
- * ---------------------------------------------------------------------------
- * Seit T-074 gilt sie auch für Pools und Kanban-Spalten
- * ---------------------------------------------------------------------------
- *
- * Die Regel war ursprünglich für Tagnamen aufgeschrieben, aber nichts an ihr
- * ist tagspezifisch: Sie beantwortet die Frage „bezeichnen zwei getippte Namen
- * dasselbe Ding?“, und die stellt sich bei einem Pool — seit E-054 zugleich
- * eine Kanban-Spalte — Wort für Wort genauso. Bis T-074 hatte der Pool
- * stattdessen `ux_pool_name` mit `COLLATE NOCASE`, also eine **zweite,
- * schwächere** Regel: `Backend` und `backend` fielen zusammen, `Änderung` und
- * `änderung` nicht, `back  end` und `back end` auch nicht.
- *
- * Deshalb tragen die Funktionen unten seit T-074 zwei Namen. Die neutralen
- * (`normalizeName`, `nameKey`, `checkName`) sind die Sache selbst; die
- * tagbezogenen (`normalizeTagName`, `tagNameKey`, `checkTagName`) bleiben
- * bestehen, weil die Oberfläche (`apps/web/src/features/tags/TagInput.tsx`) und
- * das Add-in (`apps/outlook-addin/src/tags/new-name.ts`) sie unter diesem Namen
- * aufrufen. Es sind **dieselben** Funktionen und nicht zwei Fassungen — ein
- * `===`-Vergleich der Bezeichner ist wahr.
- *
- * ---------------------------------------------------------------------------
- * Die Regel in Worten
- * ---------------------------------------------------------------------------
- *
- * Zwei Tagnamen bezeichnen **dasselbe** Tag, wenn ihr Vergleichsschlüssel
- * gleich ist. Der Schlüssel entsteht in vier Schritten, und jeder beantwortet
- * genau eine der drei Fragen aus der Aufgabenstellung:
- *
- *  1. **Unicode-Zusammensetzung (NFC).** „ä“ als ein Zeichen und „a“ mit
- *     nachgestelltem Trema sehen gleich aus und sind es danach auch.
- *  2. **Leerzeichen.** Jede Art Leerraum — Tabulator, Zeilenumbruch, geschütztes
- *     Leerzeichen — wird zum gewöhnlichen Leerzeichen, Folgen davon werden zu
- *     einem, und vorn und hinten fällt es weg. `„ backend “`, `„backend“` und
- *     `„back  end“` gegen `„back end“`: die ersten beiden sind gleich, die
- *     letzten beiden auch.
- *  3. **Groß- und Kleinschreibung.** „Backend“ und „backend“ sind **dasselbe
- *     Tag.** Ebenso „Änderung“ und „änderung“ — die Faltung deckt die
- *     lateinischen Buchstaben mit Akzent und Umlaut mit ab, nicht nur A–Z.
- *  4. **Sonst nichts.** Keine Umschrift, keine Entfernung von Bindestrichen,
- *     kein „ß“ zu „ss“. „Straße“ und „Strasse“ bleiben zwei Tags, und „Ä“ und
- *     „AE“ ebenfalls. Das ist eine Entscheidung und keine Auslassung: Eine
- *     Umschrift würde Namen zusammenwerfen, die der Benutzer unterschieden
- *     hat, und ließe sich nicht rückgängig machen.
- *
- * **Der angezeigte Name behält seine Schreibweise.** Wer „Backend“ tippt und
- * damit ein bestehendes „backend“ trifft, bekommt „backend“ — das zuerst
- * angelegte Tag gewinnt. Der Schlüssel entscheidet über die Gleichheit, nicht
- * über die Darstellung.
- *
- * ---------------------------------------------------------------------------
- * Warum die Faltung aufgezählt ist und nicht `toLowerCase()` heißt
- * ---------------------------------------------------------------------------
- *
- * Der Schlüssel steht als Spalte `tag.name_key` in der Datenbank und trägt dort
- * einen eindeutigen Index. Damit ist „kein doppeltes Tag“ eine Zusage des
- * Schemas und nicht eine Hoffnung des Adapters — auch gegen zwei gleichzeitige
- * Anfragen (T-058).
- *
- * Das geht nur, wenn die **Migration** denselben Schlüssel errechnet wie diese
- * Datei. SQLite kennt keine Unicode-Faltung: sein `lower()` fasst A–Z an und
- * sonst nichts. `toLowerCase()` in JavaScript fasst dagegen jedes Schriftsystem
- * an. Beides nebeneinander ergäbe zwei Regeln, von denen die Datenbank die
- * schwächere erzwingt — und genau dort entstünde das doppelte Tag, das der
- * Index verhindern soll.
- *
- * Deshalb ist die Faltung hier **aufgezählt**: ASCII A–Z, der lateinische
- * Ergänzungsblock U+00C0–U+00DE ohne das Malzeichen, und das große ẞ. Genau
- * diese Aufzählung bildet `0008_tag_name_key.up.sql` mit einer rekursiven
- * Abfrage Zeichen für Zeichen nach; `pnpm --filter @takt/local-api proof:tags`
- * misst die Gleichheit beider Fassungen, statt sie zu behaupten.
- *
- * Der Preis steht ausdrücklich da: Griechische, kyrillische und türkische
- * Großbuchstaben werden **nicht** gefaltet. „ΑΛΦΑ“ und „αλφα“ sind zwei Tags.
- * Für eine deutschsprachige Anwendung ist das der richtige Tausch — eine Regel,
- * die überall gleich gilt, gegen eine, die weiter reicht und an einer Stelle
- * anders ausfällt.
+ * Namensschlüssel müssen mit der SQL-Migration übereinstimmen; deshalb ist die Unicode-Faltung
+ * ausdrücklich begrenzt.
+ * Keine Umschrift: „Straße“ und „Strasse“ bleiben verschieden. Bei gleichen Schlüsseln bleibt die
+ * zuerst gespeicherte Schreibweise erhalten.
  */
 
 import type { Result, TaktError } from './kernel.ts';
@@ -115,16 +36,7 @@ export interface NameCandidate {
 /** Derselbe Typ unter seinem tagbezogenen Namen. Siehe Kopf der Datei. */
 export type TagNameCandidate = NameCandidate;
 
-/**
- * Wovon in einer Fehlermeldung die Rede ist.
- *
- * Eine deutsche Nominalphrase im Nominativ, die vor „muss Text sein“, „darf
- * nicht leer sein“ und „darf höchstens … Zeichen lang sein“ passt. Sie steht
- * hier als Aufzählung und nicht als freier Text am Aufrufer: Die Meldungen der
- * Domäne sind Konstanten, und ein Aufrufer, der seinen eigenen Satz einsetzen
- * dürfte, wäre die Stelle, an der eines Tages eine Eingabe darin landet
- * (B-2.4).
- */
+/** Geschlossene Bezeichnungen verhindern, dass freie Eingaben in Fehlermeldungen eingesetzt werden. */
 export const NAME_SUBJECT = Object.freeze({
   tag: 'Ein Tagname',
   /**
@@ -189,15 +101,7 @@ export function normalizeName(raw: string): string {
   return out.endsWith(' ') ? out.slice(0, -1) : out;
 }
 
-/**
- * Der Vergleichsschlüssel eines getippten Namens.
- *
- * `normalizeName` und darauf die aufgezählte Faltung. Das Ergebnis steht bei
- * Tags als `tag.name_key` in der Datenbank und trägt dort den eindeutigen
- * Index. Bei Pools und Kanban-Spalten steht es nirgends: Dort vergleicht der
- * Anwendungsfall die Schlüssel der wenigen vorhandenen Regeln, siehe
- * `features/structure/structure.ts` und die Begründung im Bericht zu T-074.
- */
+/** Der Schlüssel bestimmt die Gleichheit, nicht die angezeigte Schreibweise. */
 export function nameKey(raw: string): string {
   const normalized = normalizeName(raw);
   let out = '';
@@ -209,14 +113,8 @@ export function nameKey(raw: string): string {
 }
 
 /**
- * Prüft **einen** getippten Namen und liefert Anzeigeform und Schlüssel.
- *
- * Der Fehlschlag ist ein Wert und kein Wurf: Ein leerer Name ist eine Eingabe
- * des Benutzers und kein Programmierfehler.
- *
- * `subject` sagt, wovon in der Meldung die Rede ist — siehe `NAME_SUBJECT`. Es
- * ist der einzige Unterschied zwischen der Prüfung eines Tagnamens und der
- * eines Regelnamens; alles andere daran ist dieselbe Regel.
+ * Ungültige Eingaben sind fachliche Fehlerwerte; `subject` bestimmt nur die Bezeichnung in der
+ * Meldung.
  */
 export function checkName(
   raw: unknown,
@@ -258,30 +156,13 @@ export function checkTagName(raw: unknown): Result<TagNameCandidate, TaktError<'
   return checkName(raw, NAME_SUBJECT.tag);
 }
 
-/**
- * Prüft **einen** Regelnamen — Pool oder Kanban-Spalte, seit E-054 dasselbe.
- *
- * `checkName` mit dem Betreff „Der Name einer Regel“. Es gibt hier keine
- * eigene Normalisierung und keine eigene Faltung: Die Frage, wann zwei Namen
- * derselbe sind, ist bei einer Regel dieselbe wie bei einem Tag, und eine
- * zweite Antwort darauf wäre genau die Doppelung, gegen die diese Datei
- * geschrieben ist.
- */
 export function checkPoolName(raw: unknown): Result<NameCandidate, TaktError<'validation_error'>> {
   return checkName(raw, NAME_SUBJECT.pool);
 }
 
 /**
- * Prüft eine **Liste** von Tagnamen und wirft Doppelte innerhalb der Liste weg.
- *
- * Das ist der Fall, den man ohne diese Funktion übersieht: Wer in einem Zug ein
- * Todo mit den Tags „Backend“ und „backend“ anlegt, meint ein Tag und nicht
- * zwei. Ohne Entdoppelung liefe die zweite Anlage in den eindeutigen Index —
- * und der Benutzer bekäme für eine Eingabe, die er für richtig hält, die
- * Meldung „Name bereits vergeben“.
- *
- * Die Reihenfolge bleibt die der Eingabe; von zwei gleichen Schlüsseln gewinnt
- * die zuerst genannte Schreibweise.
+ * Doppelte Schlüssel vor dem Anlegen entfernen; Reihenfolge und zuerst genannte Schreibweise
+ * bleiben erhalten.
  */
 export function checkTagNames(
   raws: readonly unknown[],

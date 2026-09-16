@@ -1,3 +1,7 @@
+import { DEFAULT_TARGET } from '../settings/store.ts';
+import { detectCallNumber } from '../callnumber/detect.ts';
+import type { AddinContextDto } from '../api/types.ts';
+import { TagPicker } from './TagPicker.tsx';
 /**
  * Takt — S-13, die Einstellungen des Add-ins (A-10.3, A-10.8, E-009, E-019, R-09, B-2.3).
  *
@@ -17,12 +21,10 @@
  * und erfährt erst bei der nächsten E-Mail, ob er trifft.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { PATTERN_CATALOG, DEFAULT_PATTERN } from '../callnumber/catalog.ts';
 import { checkPattern } from '../callnumber/pattern.ts';
-import { checkCallNumber } from '@takt/domain';
-import { REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Evaluator } from '../callnumber/evaluate.ts';
 import { DEFAULT_BASE_URL, describeToken, isAcceptableBaseUrl, looksLikeToken } from '../settings/store.ts';
 import type { AddinSettings, SettingsStore } from '../settings/store.ts';
@@ -62,6 +64,13 @@ export function SettingsView({
   onChanged,
   onClose,
 }: SettingsViewProps) {
+  const defaults = settings.defaults ?? DEFAULT_TARGET;
+  const [context, setContext] = useState<AddinContextDto | null>(null);
+  useEffect(() => {
+    let live = true;
+    void api.loadContext().then(result => { if (live && result.ok) setContext(result.value); });
+    return () => { live = false; };
+  }, [api]);
   const [tokenInput, setTokenInput] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
@@ -97,9 +106,11 @@ export function SettingsView({
     onChanged();
   };
 
-  const savePattern = (candidate: string): void => {
+  const patternSaveGeneration = useRef(0);
+  const savePattern = async (candidate: string): Promise<void> => {
+    const generation = ++patternSaveGeneration.current;
     const checked = checkPattern(candidate);
-    if (!checked.ok) {
+    if (candidate.trim() !== '' && !checked.ok) {
       // Der zuletzt gültige Ausdruck bleibt in Kraft. Ein Speichern, das den
       // alten Wert überschreibt und dann scheitert, wäre die Sackgasse aus
       // B-4.2: kein Add-in mehr und kein Weg zurück.
@@ -107,49 +118,27 @@ export function SettingsView({
       setPatternSaved(false);
       return;
     }
+    if (candidate.trim() !== '') {
+      const outcome = await evaluate(candidate, '');
+      if (generation !== patternSaveGeneration.current) return;
+      if (outcome.kind !== 'no_match') {
+        setPatternError('message' in outcome ? outcome.message : 'Das Muster konnte nicht sicher geprüft werden.');
+        setPatternSaved(false);
+        return;
+      }
+    }
     setPatternError(undefined);
-    store.writePattern(checked.source);
-    setPattern(checked.source);
+    store.writePattern(candidate.trim());
+    setPattern(candidate.trim());
     setPatternSaved(true);
     onChanged();
   };
 
   const runSample = async (): Promise<void> => {
-    const checked = checkPattern(pattern);
-    if (!checked.ok) {
-      setSampleResult({ kind: 'problem', message: checked.message });
-      return;
-    }
-
-    const outcome = await evaluate(checked.source, sample);
-
-    if (outcome.kind === 'timeout') {
-      setSampleResult({
-        kind: 'problem',
-        message:
-          'Der Ausdruck hat für diesen Beispieltext länger als 100 Millisekunden gerechnet und wurde abgebrochen.',
-      });
-      return;
-    }
-    if (outcome.kind === 'unavailable') {
-      setSampleResult({ kind: 'problem', message: outcome.message });
-      return;
-    }
-    if (outcome.kind === 'invalid') {
-      setSampleResult({ kind: 'problem', message: outcome.message });
-      return;
-    }
-    if (outcome.kind === 'no_match' || outcome.group === null) {
-      setSampleResult({ kind: 'none' });
-      return;
-    }
-
-    const plausible = checkCallNumber(outcome.group);
-    setSampleResult(
-      plausible.ok
-        ? { kind: 'match', value: plausible.value }
-        : { kind: 'implausible', raw: outcome.group, message: REJECTION_LABEL[plausible.reason] },
-    );
+    const outcome = await detectCallNumber(pattern, { subject: sample, body: '' }, evaluate);
+    setSampleResult(outcome.kind === 'match' ? { kind: 'match', value: outcome.value }
+      : outcome.kind === 'no_match' ? { kind: 'none' }
+      : { kind: 'problem', message: 'message' in outcome ? outcome.message : 'Das Muster konnte nicht sicher ausgewertet werden.' });
   };
 
   const testConnection = async (): Promise<void> => {
@@ -167,6 +156,18 @@ export function SettingsView({
 
   return (
     <div className="pane">
+      <Section title="Standardvorgaben">
+        <Field label="Darstellung" htmlFor="theme">{(aria) => <select {...aria} className="input" value={defaults.theme} onChange={event => { store.writeDefaults({ ...defaults, theme: event.target.value as 'auto' | 'light' | 'dark' }); onChanged(); }}>
+          <option value="auto">Automatisch</option><option value="light">Hell</option><option value="dark">Dunkel</option>
+        </select>}</Field>
+        <label className="mail-option"><input type="checkbox" checked={defaults.includeExcerpt} onChange={event => { store.writeDefaults({ ...defaults, includeExcerpt: event.target.checked }); onChanged(); }} />E-Mail-Auszug in der Seitenleiste vorauswählen</label>
+        {context ? <>
+          <Field label="Standard-Status" htmlFor="default-status">{(aria) => <select {...aria} className="input" value={defaults.statusId ?? ''} onChange={event => { store.writeDefaults({ ...defaults, statusId: event.target.value || null }); onChanged(); }}>
+            <option value="">SuperTakt-Standard</option>{context.statuses.map(status => <option key={status.id} value={status.id}>{status.name}</option>)}
+          </select>}</Field>
+          <Field label="Standard-Tags" htmlFor="default-tags">{(aria) => <TagPicker allowNew={false} aria={aria} tree={context.tagTree} selected={defaults.tagIds} defaultTagIds={context.defaultTagIds} onChange={tagIds => { store.writeDefaults({ ...defaults, tagIds }); onChanged(); }} newNames={[]} onNewNamesChange={() => undefined} />}</Field>
+        </> : <p>Die Zielvorgaben sind verfügbar, sobald SuperTakt verbunden ist.</p>}
+      </Section>
       <Section
         title="Verbindung zu SuperTakt"
         description="SuperTakt läuft auf diesem Rechner. Das Add-in spricht ausschließlich mit dem lokalen Dienst."
@@ -357,7 +358,7 @@ export function SettingsView({
           <Button
             variant="primary"
             onClick={() => {
-              savePattern(pattern);
+              void savePattern(pattern);
             }}
           >
             Ausdruck speichern
@@ -366,7 +367,7 @@ export function SettingsView({
             variant="ghost"
             onClick={() => {
               setPattern(DEFAULT_PATTERN);
-              savePattern(DEFAULT_PATTERN);
+              void savePattern(DEFAULT_PATTERN);
             }}
           >
             Auslieferungswert

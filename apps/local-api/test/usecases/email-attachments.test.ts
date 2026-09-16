@@ -186,9 +186,7 @@ const untouchableTransactions = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // A-A-83, erste Hälfte: Scheitert das Anlegen, ist NICHTS geschrieben
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — scheitert das Anlegen des Todos (A-A-83, erste Hälfte)', () => {
   it('KEIN Byte wird geschrieben und KEINE Transaktion begonnen — der Fehler des Anlegevorgangs geht unverändert zurück', async () => {
@@ -215,9 +213,7 @@ describe('attachEmailToNewTodo — scheitert das Anlegen des Todos (A-A-83, erst
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die Größengrenze — vor dem ersten Byte, an einem echten Puffer (A-A-81)
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — die Größengrenze greift, bevor der Blob-Port gerufen wird (A-A-81)', () => {
   it(
@@ -277,11 +273,22 @@ describe('attachEmailToNewTodo — die Größengrenze greift, bevor der Blob-Por
   }, 30_000);
 });
 
-// ---------------------------------------------------------------------------
 // A-19.29: Ein Fehlschlag je Datei ist ein Ergebnis, kein Abbruch
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — ein Fehlschlag je Datei ist ein Ergebnis, kein Abbruch (A-19.29)', () => {
+  it('reports a rejected cloud-link row even though no file was written', async () => {
+    const blobs = fakeBlobs();
+    const context = fakeContext({ attachmentBlobs: blobs,
+      unitCreate: async () => err(taktError('validation_error', 'Zeile abgelehnt')) });
+    const result = await attachEmailToNewTodo(context,
+      { sender: null, message: null, files: [], links: [{ displayName: 'Cloud-Datei', url: 'https://example.test/file' }], failed: [] },
+      succeedingCreate({}), testLogger);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.value.attachments).toEqual({ attached: [], failed: [{ displayName: 'Cloud-Datei', reason: 'rejected', bytes: null }] });
+    expect(blobs.storeCalls).toHaveLength(0);
+  });
+
   it('3 Dateien, die MITTLERE scheitert an der Datenbankzeile: die beiden anderen kommen an, die mittlere wird NAMENTLICH gemeldet und ihre Datei wieder entfernt (A-A-83, zweite Hälfte)', async () => {
     const blobs = fakeBlobs();
     let callCount = 0;
@@ -324,9 +331,7 @@ describe('attachEmailToNewTodo — ein Fehlschlag je Datei ist ein Ergebnis, kei
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die Reihenfolge am Todo (A-19.33) und "rebuilt" nur an der Nachricht
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — Reihenfolge und Herkunft (A-19.33, A-A-84, A-A-97)', () => {
   it('Nachricht zuerst, dann Dateien in Reihenfolge der Nachricht, dann Cloud-Verweise zuletzt — "rebuilt" nur an der Nachricht, "origin" immer "email"', async () => {
@@ -360,9 +365,7 @@ describe('attachEmailToNewTodo — Reihenfolge und Herkunft (A-19.33, A-A-84, A-
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die Fehlschläge des Aufgabenbereichs stehen VORN (A-19.29, A-19.31)
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — Fehlschläge aus dem Aufgabenbereich (A-19.29, A-19.31)', () => {
   it('sie stehen VOR den Fehlschlägen dieses Laufs, unverändert bis auf Kürzung bei Überlänge (Endung bleibt)', async () => {
@@ -398,9 +401,7 @@ describe('attachEmailToNewTodo — Fehlschläge aus dem Aufgabenbereich (A-19.29
   });
 });
 
-// ---------------------------------------------------------------------------
 // Keine zweite Namensprüfung an der Naht (A-A-78, T-297)
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — keine zweite Namensprüfung, nameEmailFile der Domäne entscheidet allein (A-A-78, T-297)', () => {
   it('Gerätenamen, Doppelendungen, fehlende Endung und eine zu lange Endung laufen unverändert durch — nichts davon wird an dieser Naht zusätzlich abgelehnt', async () => {
@@ -440,9 +441,7 @@ describe('attachEmailToNewTodo — keine zweite Namensprüfung, nameEmailFile de
   });
 });
 
-// ---------------------------------------------------------------------------
 // Cloud-Verweise: Anzahlgrenze VOR Formprüfung, ungültige Adresse
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — Cloud-Verweise (A-19.25)', () => {
   it('eine ungültige Adresse wird "not_a_web_address", eine gültige kommt an', async () => {
@@ -528,9 +527,7 @@ describe('attachEmailToNewTodo — Cloud-Verweise (A-19.25)', () => {
   );
 });
 
-// ---------------------------------------------------------------------------
 // Der Absender (Migration 0023)
-// ---------------------------------------------------------------------------
 
 describe('attachEmailToNewTodo — der Absender wird normalisiert (Migration 0023)', () => {
   it.each([

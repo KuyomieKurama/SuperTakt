@@ -60,9 +60,7 @@ interface ExportFieldDefinition {
   readonly transformation: 'raw' | 'base64' | 'quarter_hours_to_number';
 }
 
-// ---------------------------------------------------------------------------
 // TP-NOTE-01 — todo.notiz ist als Feldquelle strukturell nicht wählbar
-// ---------------------------------------------------------------------------
 
 describe('TP-NOTE-01 — Feldquelle todo.notiz/todo.note ist strukturell nicht wählbar (A-7.2, R-06)', () => {
   const forbiddenSources = ['todo.notiz', 'todo.note', 'todo.vermerk', 'Todo.Note'];
@@ -95,9 +93,7 @@ describe('TP-NOTE-01 — Feldquelle todo.notiz/todo.note ist strukturell nicht w
   });
 });
 
-// ---------------------------------------------------------------------------
 // TP-NOTE-02 — Eigenschaftstest über generierte Vorlagen
-// ---------------------------------------------------------------------------
 
 const todoId = (value: string) => value as unknown as TodoId;
 const timeEntryId = (value: string) => value as unknown as TimeEntryId;

@@ -23,7 +23,8 @@
 // Läuft nie gleichzeitig mit `playwright.config.ts`: derselbe Port (17843).
 //
 // Aufruf: pnpm exec playwright test -c tests/e2e/playwright.attachment-persistence.config.ts
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
+import { browserUse, chromiumProjects } from './playwright.shared.ts';
 
 export default defineConfig({
   testDir: '.',
@@ -47,18 +48,9 @@ export default defineConfig({
   outputDir: '../../test-results-attachment-persistence',
 
   use: {
+    ...browserUse,
     baseURL: 'http://127.0.0.1:5173',
-    locale: 'de-DE',
-    timezoneId: 'Europe/Berlin',
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-    video: 'off',
   },
 
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  projects: chromiumProjects,
 });

@@ -1,0 +1,12 @@
+/* @theme {"label":"Nord-Polar-Night","mode":"dark","hint":"Kühle Blau- und Grautöne","order":9} */
+:root[data-design-theme="nord-polar-night"] {
+  --preset-canvas: #2e3440;
+  --preset-surface: #3b4252;
+  --preset-ink: #eceff4;
+  --preset-muted: #ced2d8;
+  --preset-accent: #88c0d0;
+  --preset-link: #a6cedb;
+  --preset-on: #101010;
+  --preset-accent-hover: #8fc4d3;
+  --preset-accent-active: #94c6d5;
+}

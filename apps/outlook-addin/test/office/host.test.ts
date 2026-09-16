@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { readHost } from '../../src/office/host.ts';
+import { onItemChanged, readHost } from '../../src/office/host.ts';
 
 describe('Outlook host diagnostics', () => {
   afterEach(() => {
@@ -31,6 +31,24 @@ describe('Outlook host diagnostics', () => {
       context: { mailbox: {} },
     });
 
+    await expect(readHost(20)).resolves.toEqual({ kind: 'no_item' });
+  });
+});
+
+
+describe('Office.js ohne initialisierten Kontext', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('abonniert ohne Kontext keine Nachrichtenwechsel', () => {
+    vi.stubGlobal('Office', { onReady: vi.fn() });
+    const handler = vi.fn();
+    const unsubscribe = onItemChanged(handler);
+    expect(() => unsubscribe()).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('meldet ohne Kontext auch nach onReady keine geöffnete E-Mail', async () => {
+    vi.stubGlobal('Office', { onReady: (callback: () => void) => callback() });
     await expect(readHost(20)).resolves.toEqual({ kind: 'no_item' });
   });
 });

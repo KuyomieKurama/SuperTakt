@@ -420,7 +420,7 @@ export function TagCombobox(props: TagComboboxProps) {
                     "Tippen Sie einen Namen — SuperTakt bietet Ihnen dann an, ihn anzulegen."
                   ) : (
                     <>
-                      Neue Tags legen Sie unter <a href={href("tags")}>Tags</a> an.
+                      Neue Tags legen Sie unter <a href={href("settings", undefined, { bereich: "tags" })}>Tags</a> an.
                     </>
                   )}
                 </p>
@@ -435,9 +435,7 @@ export function TagCombobox(props: TagComboboxProps) {
   );
 }
 
-/* ==================================================================== */
 /* Angebunden an den Aufbau                                             */
-/* ==================================================================== */
 
 /**
  * Die Tag-Eingabe, wie die Anwendung sie benutzt.

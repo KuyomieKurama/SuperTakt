@@ -38,3 +38,4 @@ src-tauri/.release-config.json
 # Die eingesammelten Installationsdateien aus `release:collect`. Kopien der
 # Erzeugnisse aus `src-tauri/target/`, dreistellig in MiB.
 release/
+.claude/team/reports/*

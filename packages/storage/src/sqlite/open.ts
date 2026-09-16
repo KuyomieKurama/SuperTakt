@@ -1,15 +1,4 @@
-/**
- * Takt — Datenbank öffnen, migrieren, Ports bauen.
- *
- * Die eine Stelle, an der aus einem Dateipfad eine benutzbare Speicherung
- * wird. Der Dienst ruft sie im Zusammenbau auf (architektur.md 1.3) und
- * bekommt genau drei Dinge zurück: die Transaktionsklammer, den
- * Migrationsläufer und das Schließen.
- *
- * **Der Pfad kommt nie aus einer Anfrage.** Er wird aus dem
- * Anwendungsdatenverzeichnis gebildet (E-018), und der Sidecar kennt kein
- * Argument, mit dem man ihn verstellen könnte (B-1.6 Punkt 1).
- */
+/** Der Datenbankpfad stammt aus dem Anwendungsdatenverzeichnis, niemals aus einer Anfrage. */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
