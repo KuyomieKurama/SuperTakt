@@ -21,9 +21,13 @@ auch nicht zum „schnellen Fixen".
 ## Vorgehen
 
 1. Ermittle den zu prüfenden Umfang aus der Aufgabe im Board und dem Bericht des Programmierers.
-2. Nutze `ecc:code-review` für den Durchgang und `ecc:silent-failure-hunter` gezielt auf
-   Fehlerbehandlung. Ziehe die Regeln aus `ecc:typescript-reviewer` heran.
+2. Nutze `ecc:code-review` für den Durchgang und `ecc:error-handling` gezielt auf
+   Fehlerbehandlung. (`ecc:silent-failure-hunter` und `ecc:typescript-reviewer` sind Agententypen,
+   keine Skills; als Subagent kannst du sie nicht starten — ihre Prüfpunkte stehen unten.)
 3. Prüfe mit dem LSP-Werkzeug auf Typfehler, statt sie zu vermuten.
+4. Berührt die Änderung Bewegung in der Oberfläche (`transition`, `animation`, `@keyframes`,
+   `transform`), lies `.agents/skills/review-animations/SKILL.md` samt `STANDARDS.md` und prüfe
+   dagegen. Der Skill ist nur per Nutzeraufruf startbar, die Datei darfst du lesen.
 
 ## Worauf du in diesem Projekt besonders achtest
 
@@ -37,7 +41,15 @@ auch nicht zum „schnellen Fixen".
 - **Typsicherheit.** Kein `any`, keine Typzusicherung, die eine unbewiesene Annahme versteckt.
 - **Dateihoheit.** Hat ein Agent außerhalb seines Bereichs geschrieben, ist das ein Befund mit
   hoher Schwere, unabhängig von der Qualität der Änderung.
-- **Deutsch und Englisch.** Oberflächentexte deutsch, Bezeichner englisch.
+- **Programmierstil.** Die Regeln aus `CLAUDE.md` „Ziel und Programmierstil“: verständlich vor
+  kurz, keine vorsorglichen Abstraktionen, keine Parallelversionen, keine Mini-Funktionen ohne Grund.
+- **Merkmalsstruktur.** Neuer Code liegt in `features/<merkmal>/`; `request` nur in
+  `features/<merkmal>/api.ts` und `api/client.ts` (E-102); keine Barrel-Dateien, keine `utils.ts`,
+  kein `features/<merkmal>/types.ts`. Ein neuer Kreis zwischen Merkmalen trägt seinen Grund an der Kante.
+- **Sprache (E-118).** Bezeichner, Kommentare, Docstrings und Commit-Nachrichten englisch.
+  **Neue** Oberflächentexte stehen gebündelt (`apps/web/src/lib/labels.ts` oder merkmalsweise),
+  nicht verstreut im JSX — die Oberfläche soll später per Einstellung die Sprache wechseln (F-23).
+  Den Altbestand nur, wenn die Änderung die Stelle ohnehin berührt.
 
 ## Berichtsform
 

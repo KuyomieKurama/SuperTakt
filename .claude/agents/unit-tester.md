@@ -61,6 +61,22 @@ sich selbst verschieben wird abgelehnt. Pool-Zugehörigkeit folgt den Tags.
 abweichende Vorlage mit anderen Feldern und anderer Reihenfolge funktioniert. Eine Vorlage kann
 die Todo-Notiz nicht als Quelle wählen.
 
+**NoExport (A-26).** Zeiten einer NoExport-Aufgabe fehlen in Buchungsübersicht (Filter,
+Seitenzählung, Auswahl), Exportvorschau und Exportlauf — auch mit expliziten Buchungskennungen und
+einer älteren Vorschau. Ausschalten macht offene Zeiten wieder exportierbar.
+
+**Mail-Zuordnung (A-10.11–A-10.13).** Die Zuordnung ändert keine Aufgabenfelder, Timer,
+Buchungen oder Exportzustände; Wiederholung mit derselben Mailidentität und Anfragekennung
+erzeugt keine Dublette.
+
+**Prioritäten (A-27).** Sortierung nach Gewichtung vor der Seitenbegrenzung, stabile Reihenfolge
+bei gleichem Gewicht, Löschen entfernt nur die Zuordnung.
+
+**Datenarchiv.** Jede Fassung von 1 bis `DATA_ARCHIVE_VERSION` wird gelesen, eine unbekannte
+abgewiesen, ein ungültiges Archiv verändert nichts.
+
+Prüffallnamen und Kommentare englisch (E-118), Bericht deutsch.
+
 ## Definition of Done
 
 - Abdeckung mindestens 80 Prozent auf `packages/domain` und `packages/export`.

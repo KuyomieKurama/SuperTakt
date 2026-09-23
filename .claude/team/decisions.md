@@ -3246,3 +3246,39 @@ Buchungsübersicht und Export ausgeschlossen sein. Schaltbares Aufgabenflag,
 standardmäßig aus; keine neue Zeitbuchungsart und keine Löschung von Zeiten.
 Ausschluss in SQL vor Pagination und im finalen Export-Schreibpfad. Beim
 Ausschalten werden offene Zeiten wieder exportierbar. Historie bleibt erhalten.
+
+## E-118 — Sprachen: Deutsch spricht, Englisch steht im Code, die Oberfläche wird umschaltbar
+
+**Entschieden am 2026-09-23 durch den Auftraggeber.** Die Regel aus PR #19 („Kommunikation,
+Oberflächentexte … auf Englisch") hat den Bestand nie getroffen: Oberfläche, Spezifikation und
+`labels.ts` sind deutsch. Sie wird ersetzt:
+
+1. **Deutsch:** Kommunikation mit dem Auftraggeber, Agentenberichte, Board, Entscheidungen, Risiken.
+2. **Englisch:** Bezeichner, Codekommentare, Docstrings, Commit-Nachrichten, Pull-Request-Texte
+   und die Projektdokumentation (`docs/**` außer `docs/spec.md`, `README.md`).
+3. **Oberfläche:** soll per Einstellung die Sprache wechseln. Ohne Anforderungs-ID wird das nicht
+   gebaut (F-23). Bis dahin bleibt die Oberfläche deutsch, und neue Texte entstehen gebündelt
+   (`apps/web/src/lib/labels.ts` oder merkmalsweise), nicht verstreut im JSX.
+
+Bestehende deutsche Kommentare und Dokumente werden nicht in einem Zug übersetzt, sondern wenn ein
+Auftrag sie ohnehin berührt. Eine Umbenennung der Oberflächentexte fällt unter E-087.
+
+## E-119 — Die Skills bleiben lokal; versioniert wird nur `skills-lock.json`
+
+**Entschieden am 2026-09-23 durch den Auftraggeber**, nach T-386. Technisch hatten T-385 bis T-387
+das Versionieren getragen (`proof:codepoints` grün, `proof:all` grün, Review freigegeben). Blockiert
+hat allein die Lizenzlage: 26 der 34 Skills (emilkowalski/skills, Leonxlnx/taste-skill) tragen
+keine Lizenz, `ui-styling` zwei widersprüchliche, `brand`, `slides` und `ui-ux-pro-max` keine
+Angabe. Ohne Lizenz ist Weitergabe nicht erlaubt; die Upstream-Lizenzen ließen sich in der
+Sitzung nicht abrufen.
+
+1. `.agents/`, `.claude/skills/` und `.hermes/` stehen in `.gitignore`. Versioniert wird nur
+   `skills-lock.json`; wer klont, installiert die Skills daraus lokal nach (`npx skills`).
+2. Die Anpassung an `proof:codepoints` aus T-385 ist **zurückgenommen** — ohne die Dateien im
+   Baum hätten `ttf` und die Ausnahme nichts mehr getroffen und wären nach E-103 rot geworden.
+3. Agenten dürfen die lokalen Skill-Dateien lesen (`.agents/skills/...`); fehlen sie, ist das kein
+   Befund gegen den Auftrag, sondern ein Hinweis auf die Nachinstallation.
+4. Skill-Vorgaben zu externen Quellen gelten in SuperTakt nicht (E-001, `CLAUDE.md`).
+
+Klärt der Auftraggeber die Lizenzen später, hebt eine neue Entscheidung Punkt 1 auf, und T-385
+wird aus dem Bericht wiederhergestellt.

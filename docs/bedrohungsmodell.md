@@ -14642,3 +14642,32 @@ einen erfolgreichen HTTPS-Test vortäuschen. Werkzeugprozesse haben Fristen;
 Ausgaben sind begrenzt, Aufrufe benutzen keine Shell. Tests arbeiten ausschließlich
 mit temporären Zertifikaten und Zertifikatsspeichern. Siehe
 [Implementierung und Testgrenzen](outlook-certificate-setup.md).
+
+## Nachtrag: Lokal installierte, nicht versionierte Fremd-Skills als Anweisungsquelle (T-386, 23.09.2026)
+
+Nach E-119 werden die Skills **nicht** versioniert: `.agents/`, `.claude/skills/` und `.hermes/`
+stehen in `.gitignore`, versioniert wird nur `skills-lock.json`; wer klont, installiert lokal nach
+(`npx skills`). Die Weitergabe fremden, großteils unlizenzierten Textes im Repository entfällt
+damit. **Die Bedrohung bleibt:** Agenten laden die lokal installierten Skills (34 aus vier fremden
+Beständen) weiterhin als Anweisung. Keine Laufzeitfläche des Erzeugnisses — kein
+`package.json`-Skript, kein Ablauf unter `.github/**`, keine Vitest-Einbindung führt die Python-
+und `.cjs`-Skripte aus (gemessen T-386). Die Fläche ist die Entwicklungsumgebung.
+
+- **Kein Wächter liest die Skills mehr.** `proof:codepoints` zählt über `git ls-files` samt
+  unversionierter, nicht ausgeschlossener Dateien; was in `.gitignore` steht, bleibt draußen. Die
+  Anpassung aus T-385 ist zurückgenommen. Stand 23.09.2026 gemessen: keine versteckten Zeichen
+  außer 4 × U+200B (`improve-animations/PLAN-TEMPLATE.md`) und 12 × U+FE0F nach Emoji, keine
+  Tag-Zeichen U+E0000–E007F; 68 Verzeichnis-Links, alle der Form
+  `../../.agents/skills/<[a-z0-9-]+>`. Jede Nachinstallation oder Aktualisierung aus
+  `skills-lock.json` holt fremden Text, den niemand im Bestand mehr prüft. Gegenmittel: Skills
+  nur über die Lock-Datei installieren, Änderungen an `skills-lock.json` (Quelle, Hash) im Review
+  wie eine neue Abhängigkeit behandeln.
+- **Anweisungen gegen E-001.** Mehrere Skills schreiben externe Quellen vor (`picsum.photos`,
+  Google Fonts, `cdn.jsdelivr.net`) oder rufen Bilddienste mit Schlüsseln auf (Gemini, Atlas
+  Cloud, MuAPI; Schlüssel aus Umgebung und `~/.claude/.env`). In SuperTakt gehen E-001, die CSP
+  der Hülle und `CLAUDE.md` vor (E-119 Punkt 4); eine Übernahme solcher Vorgaben in Produktcode
+  ist ein Befund.
+- **Schlüssel im Fremdskript.** `design/scripts/logo/generate.py` sendet `MUAPI_API_KEY` an eine
+  Abfrageadresse aus der Antwort des Anbieters (jeder öffentliche HTTPS-Wirt) und behält
+  Kopfzeilen bei Weiterleitungen. Nicht Teil eines Projektablaufs; ohne Anlass nicht mit
+  Schlüsseln ausführen.

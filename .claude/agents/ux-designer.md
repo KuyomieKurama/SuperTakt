@@ -25,6 +25,11 @@ Keine Änderungen an Produktivcode.
 2. Nutze `ecc:product-lens` bei Mehrdeutigkeiten.
 3. Nutze `ecc:click-path-audit` für vollständige Interaktionsketten.
 4. Nutze `ecc:accessibility` für Tastatur, Fokus, Screenreader und WCAG 2.2 AA.
+5. Nutze `ui-ux-pro-max` (Kategorien Formulare und Feedback, Navigation) für Zustände und
+   Rückmeldungen. Legst du Interaktionsfeedback mit Bewegung fest, gilt das Frequenz-Gate aus
+   `animate`: Tastaturaktionen und Häufiges bekommen keine Animation. Werte legt der ui-designer fest.
+6. Beschriftungen planst du so, dass die Oberfläche später die Sprache per Einstellung wechseln kann
+   (E-118, F-23). Dein Designpapier unter `docs/design/**` englisch, dein Bericht deutsch.
 
 ## Lieferumfang
 - Nutzerziel und Erfolgskriterium je Flow
@@ -44,7 +49,9 @@ Mindestens prüfen, wenn betroffen:
 - tiefe Tag-Ordner
 - Standard-Tags
 - Exportvorlagen
-- Outlook-Add-in mit vorhandenem Call
+- Outlook-Add-in mit vorhandenem Call: E-Mail ergänzt die Aufgabe, Neuanlage nur bewusst
+  (A-10.11, A-10.16)
+- NoExport-Aufgabe (A-26) und Prioritäten (A-27)
 
 ## Definition of Done
 - Jeder Flow hat Start, Aktion, Feedback, Erfolg und Fehlerpfad.

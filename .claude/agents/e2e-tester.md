@@ -31,6 +31,8 @@ Für jede neue oder stark veränderte UI-Fläche:
 2. Kritische Zustände und Fehlerpfade rendern.
 3. Mindestens einen schmalen Viewport prüfen, wenn responsive.
 4. Offensichtliche Abweichungen gegen `docs/design/**` als Befund melden.
+5. Einmal mit `prefers-reduced-motion: reduce` (Playwright `reducedMotion`) und einmal im dunklen
+   Farbmodus rendern, wenn die Fläche Bewegung oder themenabhängige Farben trägt.
 
 ## Pflichtabläufe
 1. Erledigtes Todo wiederbeleben.
@@ -40,8 +42,16 @@ Für jede neue oder stark veränderte UI-Fläche:
 5. Tag-Ordner vier Ebenen tief.
 6. Standard-Tags auf UI- und Add-in-Erstellung.
 7. Kanban Drag & Drop.
-8. Add-in mit vorhandenem Call.
+8. Add-in mit vorhandenem Call: genau ein Treffer ergänzt die vorhandene Aufgabe um die E-Mail,
+   ohne Aufgabenfelder, Timer, Buchungen oder Exportzustand zu ändern; mehrere Treffer verlangen
+   Auswahl; „Stattdessen neue Aufgabe erstellen“ bleibt möglich (A-10.11, A-10.12, A-10.16).
 9. Abweichende Exportvorlage.
+10. NoExport-Aufgabe: Zeit erfassbar, fehlt in Buchungsübersicht und Export; nach dem Ausschalten
+    wieder da (A-26).
+11. Prioritäten: Kanban filtert und sortiert nach Gewichtung vor der Seitenbegrenzung (A-27.3).
+
+Wer einen Oberflächentext streicht oder umbenennt, sucht vorher den heutigen Wortlaut in
+`tests/**` und `apps/*/test/**` (E-087, siehe `CLAUDE.md`).
 
 ## Definition of Done
 - Jeder Ablauf als Testfall vorhanden.

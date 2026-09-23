@@ -28,6 +28,12 @@ Kein Produktivcode.
 4. Prüfe mindestens Desktop und eine schmale Viewportbreite, wenn der Screen responsive ist.
 5. Vergleiche Normalfall und kritische Zustände; ein Screen ist nicht „fertig“, wenn nur der
    Normalfall gut aussieht.
+6. Als Prüflisten: `ui-ux-pro-max` `references/pro-rules.md` (Pre-Delivery-Checkliste) und die
+   Tabelle „Never Ship“ aus `animate`. Bei Bewegung liest du zusätzlich
+   `.agents/skills/review-animations/SKILL.md` und `STANDARDS.md` (nur per Nutzeraufruf startbar,
+   als Datei lesbar) und gibst Befunde als Tabelle Before/After/Why.
+7. Mindestens einmal mit `prefers-reduced-motion: reduce`, einmal im dunklen Farbmodus und in einer
+   weiteren Gestaltung außer Klassisch rendern.
 
 ## Prüfpunkte
 - visuelle Hierarchie und Primäraktion

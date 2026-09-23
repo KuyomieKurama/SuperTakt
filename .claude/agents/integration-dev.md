@@ -43,23 +43,43 @@ transformation  roh | base64 | runde_auf_viertelstunde | datum(format) | konstan
   nicht neu.
 - Base64 wird über UTF-8 kodiert. Umlaute und Emoji müssen den Rückweg unbeschadet überstehen.
 - Die Todo-Notiz ist intern und darf in keiner Vorlage als Quelle auswählbar sein. Das ist eine
-  Datenschutzgrenze, keine Voreinstellung.
+  Datenschutzgrenze, keine Voreinstellung. Dasselbe gilt für Mail-Einträge, Frist und Anhänge.
+- Zeiten einer NoExport-Aufgabe (A-26) erreichen keinen Export, auch nicht über explizite
+  Buchungskennungen oder eine ältere Vorschau.
 - Export ist transaktional: Datei geschrieben und alle enthaltenen Buchungen markiert, oder
   nichts.
 
 ## Outlook-Add-in
 
-- Der reguläre Ausdruck für die Call-Nummer steht in den Add-in-Einstellungen, nicht im Code.
-  Nutze `ecc:regex-vs-llm-structured-text`, um die Erkennungsstrategie zu begründen, und behandle
-  einen ungültigen Ausdruck als Benutzereingabe, nicht als Absturz.
-- Existiert bereits ein Todo mit derselben Call-Nummer, bietet das Add-in an, auf dieses Todo zu
-  buchen. Entscheidung trifft der Benutzer; nichts wird stillschweigend angelegt oder
-  zusammengeführt.
+Maßgeblich ist Spezifikation Abschnitt 25 (A-10.11 bis A-10.17, Auftrag vom 2026-09-15) und
+`docs/outlook-bridge-alignment.md`. Er ersetzt die älteren Verbote aus A-10.9, A-19.19, A-19.27,
+B-4.3 sowie E-100 und E-108; deren Begründungen sind nur noch Verlauf.
+
+- **Call-Erkennung (A-10.15).** Der reguläre Ausdruck steht in den Add-in-Einstellungen, nicht im
+  Code. Benutzerdefiniert gilt Gruppe 1, sonst der Gesamttreffer; ein leeres, ungültiges oder
+  erfolgloses Muster fällt auf die Basiserkennung zurück und wird erklärt. Worker-Isolation und
+  harte Laufzeitgrenze bleiben. `ecc:regex-vs-llm-structured-text` für die Begründung.
+- **Vorhandene Aufgabe (A-10.11, A-10.16).** Bei genau einem passenden Call ergänzt die E-Mail die
+  vorhandene Aufgabe; das Neuanlageformular bleibt verborgen, bis „Stattdessen neue Aufgabe
+  erstellen“ gewählt wird. Mehrdeutige Treffer verlangen Auswahl. Das Add-in bietet **keine**
+  Zeiterfassung und keine Zeitschätzung an.
+- **Enges Recht (A-10.12).** Mail-Metadaten und Auszüge liegen getrennt von persönlichen
+  Vermerken. Das Ergänzen ändert keine Aufgabenfelder, Erledigt-Kennzeichen, Timer, Buchungen oder
+  Exportzustände. Nur ein enger Zuordnungsendpunkt, kein allgemeines Ändern mit dem Add-in-Token.
+- **Wiederholung und Anhänge (A-10.13, A-10.17).** Mailidentität und persistente Anfragekennung
+  verhindern Dubletten bei Wiederholung und Parallelität. Die E-Mail kommt als EML
+  (`getAsFileAsync`, sonst gekennzeichneter Nachbau, E-109). Größen- und Dateisicherheitsregeln
+  bleiben; Teilfehler werden anhand der Serverbestätigung ausgewiesen. Ein Menübandbefehl
+  „E-Mail anhängen“ öffnet den Aufgabenbereich.
 - Tags, Ordner und Pools kommen über die lokale API, nicht aus einer Kopie im Add-in.
 - Standard-Tags greifen auch bei Anlage aus dem Add-in.
-- Die Referenzbilder aus der Spezifikation liegen nicht vor. Gestalte aus dem Designsystem der
-  Hauptanwendung heraus.
+- Die Referenzbilder aus der Spezifikation liegen nicht vor (A-10.10). Gestalte aus dem
+  Designsystem der Hauptanwendung heraus (`packages/ui-tokens`, `docs/design/**`); für
+  Bewegung im Aufgabenbereich gelten `animate` und `emil-design-eng` wie in der Hauptanwendung,
+  die Marketing-Skills (`design-taste-frontend` und Stil-Skills) nicht.
 - Für Office.js Context7 nutzen, nicht aus dem Gedächtnis schreiben.
+- Sprache (E-118): Code, Kommentare, Commits englisch; Oberflächentexte des Aufgabenbereichs
+  heute deutsch und gebündelt, weil die Sprache später per Einstellung wechseln soll (F-23).
 
 ## Definition of Done
 

@@ -49,7 +49,7 @@ Benutzers, und heben E-001 damit nicht auf. Wer sie in Laufzeitcode zieht, tut e
 
 | Schicht | Technik |
 |---|---|
-| Hülle | Tauri, Rust-Anteil dünn gehalten, aber **nicht mehr nur Fenster und Menü**: elf Befehle — Fenster, Menü, Lebenszyklus des Sidecars, Windows-Benutzername, Fassung und Öffnen der Release-Seite (`release.rs`), Öffnen von Verweis und Datei (`attachment.rs`), systemweite Inaktivität (`idle.rs`, `idle/linux.rs`), Prüfen und Vertrauen des lokalen Outlook-Zertifikats (`outlook_certificate.rs` samt `outlook_certificate.ps1`) |
+| Hülle | Tauri, Rust-Anteil dünn gehalten, aber **nicht mehr nur Fenster und Menü**: elf Befehle — Fenster, Menü, Lebenszyklus des Sidecars, Windows-Benutzername, Fassung und Öffnen der Release-Seite (`release.rs`), Öffnen von Verweis und Datei (`attachment.rs`), systemweite Inaktivität (`idle.rs`, `idle/linux.rs`), Prüfen und Vertrauen des lokalen Outlook-Zertifikats (`outlook_certificate.rs` samt `outlook_certificate.ps1` für Windows und `outlook_certificate_unix.rs` für Linux und macOS) |
 | Oberfläche | React + Vite + TypeScript |
 | Lokaler Dienst | Node als Tauri-Sidecar, gebunden auf `127.0.0.1`, versorgt Oberfläche und Outlook-Add-in. **Zwei Ports:** `17843` die API über HTTP mit Prüfschicht, `17844` ausschließlich HTTPS und ausschließlich die statischen Dateien des Aufgabenbereichs (E-046, `apps/local-api/src/config.ts`) |
 | Speicherung | Eingebettetes SQLite, eine Datei, kein Serverprozess |
@@ -97,10 +97,11 @@ Vier Regeln, die dabei gemessen und nicht geraten wurden:
 `bookings ↔ todos`, `timer ↔ todos`, `structure ↔ tags`. Eine erfundene Zwischenschicht wäre der
 Fehler, nicht die Kante. Wer einen neuen Kreis zieht, schreibt den Grund an die Kante.
 
-**Nicht aufgeteilt, begründet:** `apps/desktop/src-tauri/src/attachment.rs` (1352 Zeilen, davon
-**150 Produktivcode** — der Rest sind 609 Zeilen Prüfcode und 500 Zeilen Prosa; 30 der 69
-Rust-Prüffälle stehen darin) und `packages/domain/src/attachment.ts`. Größe ist in diesem
-Bestand kein Maßstab: `packages/domain` hat 6 975 Zeilen und **1 790 Anweisungszeilen**.
+**Nicht aufgeteilt, begründet:** `apps/desktop/src-tauri/src/attachment.rs` (1218 Zeilen, davon
+**150 Produktivcode** — der Rest sind 165 Kommentarzeilen im Produktivteil und 879 Zeilen
+Prüfblock; 36 der 82 Rust-Prüffälle stehen darin) und `packages/domain/src/attachment.ts`. Größe
+ist in diesem Bestand kein Maßstab: `packages/domain/src` hat 4 183 Zeilen, davon **2 076 ohne
+Kommentar- und Leerzeilen** (gemessen am 2026-09-23).
 
 ### Gemeinsam genutzte Logik und Dateien
 
@@ -119,12 +120,34 @@ Bestand kein Maßstab: `packages/domain` hat 6 975 Zeilen und **1 790 Anweisungs
 
 ## Sprache
 
-Kommunikation, Oberflächentexte, Fehlermeldungen und Projektdokumentation auf Englisch.
-Bezeichner im Code, Dateinamen, Commit-Präfixe und technische Schlüssel auf Englisch.
-**Codekommentare und Docstrings sind ebenfalls auf Englisch**; sie fallen nicht unter die
-Regel für Englisch Projektdokumentation. Die Schlüssel im Exportformat (`Call`, `Zeit`,
-`Notiz`, `WindowsUser`) sind Vorgabe des Abrechnungstools und bleiben, wie sie sind.
-Bestehende Schnittstellen und technische Kennungen nicht allein aus Sprachgründen umbenennen.
+Festgelegt am 2026-09-23 durch den Auftraggeber (E-118):
+
+| Was | Sprache |
+|---|---|
+| Kommunikation mit dem Auftraggeber, Agentenberichte, `board.md`, `decisions.md`, `risks.md` | Deutsch |
+| Bezeichner, Dateinamen, Codekommentare, Docstrings, technische Schlüssel | Englisch |
+| Commit-Nachrichten und Pull-Request-Texte | Englisch |
+| Projektdokumentation (`docs/**` außer Spezifikation, `README.md`) | Englisch |
+| Oberflächentexte und Fehlermeldungen | **Per Einstellung umschaltbar** (Ziel, siehe unten) |
+
+**Oberflächensprache.** Die Oberfläche soll ihre Sprache über eine Einstellung wechseln. Dafür
+gibt es noch **keine Anforderungs-ID** (F-23); gebaut wird erst mit Deckung in `docs/spec.md`.
+Bis dahin gilt der Bestand: Die Oberfläche ist deutsch, Beschriftungen entstehen an einer Stelle
+(`apps/web/src/lib/labels.ts`), und neue Texte werden dort oder merkmalsweise gebündelt, nicht
+verstreut im JSX — damit die spätere Umschaltung keinen Suchlauf über alle Ansichten braucht.
+
+Die Schlüssel im Exportformat (`Call`, `Zeit`, `Notiz`, `WindowsUser`) sind Vorgabe des
+Abrechnungstools und bleiben, wie sie sind. Bestehende Schnittstellen und technische Kennungen
+nicht allein aus Sprachgründen umbenennen; bestehende deutsche Kommentare und Dokumente werden
+nur übersetzt, wenn ein Auftrag sie ohnehin berührt.
+
+**Frontend-Skills.** Welcher Design- und Animations-Skill wann greift, steht global in
+`~/.claude/CLAUDE.md`. Für diese Anwendung gilt die Zeile „Dashboard / Produkt-UI“: zuerst
+`docs/design/**` und `packages/ui-tokens`, dann `ui-ux-pro-max`, `emil-design-eng`, `animate`.
+`design-taste-frontend` und die Stil-Skills sind für Marketingseiten gebaut und greifen hier nicht.
+Schreibt ein Skill externe Quellen vor (`picsum.photos`, Google Fonts, `cdn.jsdelivr.net`,
+Bild- oder Logo-Dienste), gilt das in SuperTakt **nicht**: Zur Laufzeit lädt nichts nach (E-001);
+Schriften, Bilder und Skripte liegen lokal im Erzeugnis (T-386).
 
 ### Codekommentare und Docstrings
 
@@ -268,10 +291,15 @@ Eine fehlende Prüfung oder Freigabe wird als offen dokumentiert und hebt das Qu
 - Tag-Ordner sind beliebig tief verschachtelbar, Pools werden über Tags definiert, Standard-Tags
   greifen bei jedem neuen Todo — auch bei Anlage aus dem Add-in.
 
-- Das Outlook-Add-in holt Tags, Ordner und Pools über die lokale API, erkennt die Call-Nummer
-  über einen konfigurierbaren regulären Ausdruck und **weist auf einen bereits vorhandenen Call
-  hin**, bevor ein Duplikat entsteht. Gehandelt wird am gefundenen Todo nicht — weder gebucht
-  noch angehängt (A-10.9 in der Fassung von E-100).
+- Das Outlook-Add-in holt Tags, Ordner und Pools über die lokale API und erkennt die
+  Call-Nummer über einen konfigurierbaren regulären Ausdruck mit Rückfall auf die Basiserkennung
+  (A-10.15). Bei **genau einem** vorhandenen Call **ergänzt die E-Mail die vorhandene Aufgabe**;
+  mehrere Treffer verlangen Auswahl, eine Neuanlage ist nur bewusst möglich (A-10.11, A-10.16).
+  Das Ergänzen ändert weder Aufgabenfelder noch Erledigt, Timer, Buchungen oder Exportzustand,
+  und das Add-in bietet keine Zeiterfassung an (A-10.12, A-10.16).
+
+- Aufgaben mit **NoExport** erfassen Zeit, erscheinen aber weder in der Buchungsübersicht noch in
+  einem Abrechnungsexport — serverseitig, auch über explizite Buchungskennungen (A-26).
 
 ## Versionsprüfung
 
@@ -324,20 +352,23 @@ und R-20. Die Regeln gelten ohne Ausnahme und sind bei jeder Freigabe zu prüfen
 Spezifikation Abschnitt 19 (A-19.1 bis A-19.19), Entscheidungen E-070 bis E-072, Risiken R-21 und
 R-22. Bei jeder Freigabe zu prüfen:
 
-- Die Frist ist **ein Tag**, keine Uhrzeit, und es ist derselbe Tagesbegriff wie bei der
-  Tagesgruppierung des Exports (E-025). „Überfällig", „heute fällig" und „später fällig" werden
-**gerechnet**, nicht gespeichert.
+- Die Frist ist **ein Kalendertag** mit **optionaler Ortszeit** (A-10.14, A-27.7: ein gemeinsames
+  Frist-Feld, 00:00 solange keine Uhrzeit gesetzt ist; ohne Datum keine Uhrzeit). Der Tag ist
+  derselbe Tagesbegriff wie bei der Tagesgruppierung des Exports (E-025). „Überfällig", „heute
+  fällig" und „später fällig" werden **gerechnet**, nicht gespeichert.
 
 - In der Oberfläche heißt sie ausschließlich **„Frist"**.
 - Verweis und Datei speichern eine Zeichenkette. Ein **Bild** wird ins Anwendungsdatenverzeichnis
   kopiert und als `data:`-Adresse angezeigt — die CSP bleibt, wie sie ist.
 
-- **Über das Add-in entstehen Anhänge nur beim Anlegen** (E-108, A-19.19 in der Fassung vom
-  2026-09-11). An einem **bereits vorhandenen** Todo entsteht keiner — weder im Duplikatfall
-  (A-10.9) noch sonst; das ist strukturell, nicht per Voreinstellung, und die Naht führt keinen
-  Parameter, mit dem ein vorhandenes Todo benannt werden könnte. Was beim Anlegen entsteht, ist
-  ein von außen geschriebener Öffnen-Befehl und wird entsprechend behandelt: erzeugter Name auf
-  der Platte, fremder Name nur als Anzeigename, Endung stets sichtbar (A-19.23a/b).
+- **Über das Add-in entstehen Anhänge beim Anlegen und beim Ergänzen einer vorhandenen Aufgabe
+  um eine E-Mail** (A-10.11 bis A-10.17, Auftrag vom 2026-09-15; ersetzt A-10.9, A-19.19,
+  A-19.27, E-100 und E-108 **nur** für die Mail-Zuordnung). Der Weg an eine vorhandene Aufgabe ist
+  **genau ein** strikter Endpunkt (`POST /addin/todos/{todoId}/mails`, Rumpf nur `requestId`,
+  `callNumber`, `mail`, `note`, `attachments`); ein allgemeines Ändern mit dem Add-in-Token gibt
+  es nicht, und die Add-in-Routen werden als feste Menge gemessen. Jeder so entstandene Anhang
+  ist ein von außen geschriebener Öffnen-Befehl: erzeugter Name auf der Platte, fremder Name nur
+  als Anzeigename, Endung stets sichtbar (A-19.23a/b). Details: `docs/outlook-bridge-alignment.md`.
 
 - Der Öffnen-Befehl der Hülle prüft **bei jedem Aufruf** und nach Art getrennt: Verweis nur `http`
   und `https`, kein UNC; Datei nur ein vorhandener absoluter Pfad, kein UNC; ein Bild öffnet gar
@@ -350,7 +381,12 @@ R-22. Bei jeder Freigabe zu prüfen:
 - Nichts öffnet sich von selbst. Weder Frist noch Anhang gelangen in einen
 **Abrechnungsexport**; die vollständige Datensicherung nach A-20 enthält beide.
 
-## Entschieden — der Widerspruch an A-19.19 ist aufgelöst
+## Verlauf — der Widerspruch an A-19.19 (2026-09-10, überholt)
+
+**Überholt am 2026-09-15** durch den Auftrag zur Outlook-Angleichung (Spezifikation Abschnitt 25,
+A-10.11 bis A-10.17): Das Add-in ergänzt vorhandene Aufgaben wieder um E-Mails und deren Anhänge,
+über genau einen strikten Endpunkt. Der Abschnitt bleibt stehen, weil die drei Regeln am Ende
+über den Fall hinaus gelten — die Sachlage darin ist Geschichte, nicht Bestand.
 
 Festgestellt am 2026-09-10 beim Einlesen der Pull Requests #5 bis #16, **entschieden am selben
 Tag durch den Auftraggeber** (F-21, E-100). Von den beiden möglichen Wegen ist der zweite
@@ -381,13 +417,15 @@ Drei Dinge, die aus diesem Fall über ihn hinaus gelten:
 
 Spezifikation Abschnitte 20 bis 24, nachgereicht am 2026-09-08 und 2026-09-09, gebaut in den
 Pull Requests #5 bis #16 **außerhalb des Wellenmodells** und deshalb ohne Qualitätstor. Was
-hier steht, ist am Quelltext gelesen, nicht gemessen — in dieser Umgebung stehen weder Node
-noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
+hier steht, wurde beim Einlesen am Quelltext gelesen, nicht gemessen. Bei jeder Freigabe zu
+prüfen:
 
 - **Datensicherung (A-20).** Ein eigenes Archiv, JSON, mit Formatkennung
   `de.supertakt.data-archive`, ganzzahliger Schemafassung, Zeitpunkt und Erzeuger. **Der Code
-  steht auf Fassung 6** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
-  liest 1 bis 6 und weist alles andere ab. Fassung 6 trägt die **Bytes** der übernommenen
+  steht am 2026-09-23 auf Fassung 10** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
+  liest 1 bis 10 und weist alles andere ab; was jede Fassung ergänzt (7 Mail-Zuordnung, 8 NoExport,
+  9 abgeschlossene Inaktivitätsphasen, 10 Prioritäten), steht in `docs/datenarchiv.md` und bei
+  `parseArchive`. Fassung 6 trägt die **Bytes** der übernommenen
   E-Mail-Dateien (A-19.34); Fassung 5 kannte sie nicht, und ein Archiv der Fassung 5 sagt beim
   Einspielen auf einem fremden Rechner ausdrücklich, wie viele Dateien fehlen — es schweigt
   nicht. A-24.7 beziffert die Fassung seit dem 2026-09-11 **nicht mehr**; die führende Angabe
@@ -431,15 +469,22 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   nachgetragen. **Die Exportregeln ändern sich nicht** — eine Buchung ohne Leistung ist eine
   Frage der Vollständigkeit, nicht des Formats.
 
-- **Outlook-Einrichtung (A-23).** Der schwerste neue Punkt: Die Hülle darf nach **ausdrücklicher**
+- **Outlook-Einrichtung (A-23), seit dem 2026-09-15 auf drei Systemen.** Unter Linux legt die
+  Hülle nur **Peer-Vertrauen** (`P,,`) für das geprüfte localhost-Serverzertifikat in die
+  NSS-Benutzerspeicher, ohne Root-Rechte; unter macOS gilt der Benutzerschlüsselbund mit
+  Systemdialog. Geänderte Fingerabdrücke, CA-Zertifikate, zusätzliche Namen und ungeeignete
+  Gültigkeit werden vor jedem Import abgewiesen; ein Teilerfolg wird als solcher angezeigt, und
+  nichts wird schon beim Anzeigen der Einstellungen importiert (Code in
+  `outlook_certificate_unix.rs`, Bewertung im Nachtrag des Bedrohungsmodells). Für **Windows**
+  gilt weiter der schwerste Punkt: Die Hülle darf nach **ausdrücklicher**
   Bestätigung ein Zertifikat in `Cert:\CurrentUser\Root` legen. Das ist ein Wurzelspeicher.
   Deshalb: **die Hülle bestimmt den Pfad selbst**, der Auftrag enthält nur den bestätigten
   SHA-256-Fingerabdruck, CA-Zertifikate und zusätzliche DNS-Namen sind ausgeschlossen, keine
   Rechteerhöhung, keine Änderung von Richtlinien, und die Windows-Sicherheitsabfrage bleibt
   stehen (drei Minuten Frist, `-NonInteractive` fällt für genau diesen einen Aufruf weg). Ein
   Eintrag im Speicher allein gilt **nicht** als bestandener HTTPS-Test — geprüft wird über
-  Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats. Im Browser und
-  auf anderen Betriebssystemen behauptet nichts eine Windows-Vertrauensprüfung.
+  Loopback mit regulärer TLS-Prüfung und Abgleich des Serverzertifikats. Im Browser behauptet
+  nichts eine Vertrauensprüfung, und auf Linux und macOS keine Windows-Prüfung.
 
 - **Inaktivität (A-24).** Systemweit gemessen und ausschließlich als Dauer: Windows
   `GetLastInputInfo`, macOS CoreGraphics, Linux Wayland `ext-idle-notify`, Mutter oder X11
@@ -453,6 +498,29 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
 - **Offene Phasen überleben Neuladen, Neustart und Datensicherung** (A-24.7). Sie stehen in
   SQLite, nicht im Arbeitsspeicher und nicht im Browserspeicher — dieselbe Regel wie beim
   übersprungenen Fassungswert, und aus demselben Grund.
+
+## Fensterfeste Flächen, Outlook-Angleichung, NoExport und Prioritäten
+
+Spezifikation Abschnitte 25 (zweimal vergeben: „Fensterfeste Flächen“ und
+„Outlook-Angleichung“), 26 und 27, beauftragt vom 2026-09-12 bis 2026-09-16. Bei jeder Freigabe
+zu prüfen:
+
+- **Fensterfeste Flächen (A-25.1–A-25.9, E-112, E-115, E-116).** Jede Ansicht passt sich dem
+  Inhaltsbereich des Fensters an; läuft etwas über, läuft nur der betroffene Bereich — je Fläche
+  und Achse genau einer. Getragen wird mindestens 960 × 640. Bestätigungsflächen hängen am
+  Fenster, nie an dem, was sie bestätigen (E-117: Bauart per Quelltextlauf, Wirkung per Messung
+  am gerenderten Bild). Ausgenommen: Startbilder, Musterseite, Outlook-Aufgabenbereich. Der
+  Abschnitt ist als **bestätigungsbedürftig** markiert.
+- **Outlook-Angleichung (A-10.11–A-10.17).** Siehe „Fachliche Punkte“ und „Frist und Anhänge“:
+  E-Mail ergänzt eine vorhandene Aufgabe über genau einen strikten Endpunkt; Mailverlauf getrennt
+  von persönlichen Vermerken; Wiederholungen ohne Dubletten; ein Menübandbefehl „E-Mail anhängen“.
+- **NoExport (A-26).** Schaltbares Aufgabenflag, Vorgabe aus. Zeiten bleiben an der Aufgabe,
+  fehlen aber in Buchungsübersicht, Exportvorschau und Exportlauf — in SQL vor der
+  Seitenbegrenzung und im finalen Schreibpfad. Ausschalten macht offene Zeiten wieder
+  exportierbar; die Exporthistorie bleibt.
+- **Prioritäten (A-27).** Benannte Prioritäten mit ganzzahliger Gewichtung (auch 0 und negativ),
+  höchstens eine je Todo. Kanban filtert und sortiert danach **vor** der Seitenbegrenzung, stabil
+  bei gleichem Gewicht. Löschen entfernt nur die Zuordnung. Archiv ab Fassung 10.
 
 ## Text streichen und umbenennen
 
@@ -480,13 +548,22 @@ Seit der Versionsprüfung geht außerdem **eine** Verbindung nach außen (R-19).
 fremde Antwort den Prozess, und aus ihr kann Text in die Oberfläche und eine Adresse in den
 Browser des Benutzers wandern. Beide Wege sind im Bedrohungsmodell bewertet, bevor sie gebaut
 werden.
-Seit den Abschnitten 20 bis 24 kamen drei Wege dazu. Einer davon ist mit E-100 wieder entfallen;
-die beiden übrigen sind noch **nicht** im Bedrohungsmodell bewertet (R-23 bis R-25):
+Seit den Abschnitten 20 bis 24 kamen drei Wege dazu, seit dem 2026-09-15 ein vierter. Der
+Deep-Link ist mit E-100 entfallen; Wurzelspeicher und fremde Datei stehen in R-23 und R-24 als
+offen, der vierte ist im Nachtrag des Bedrohungsmodells bewertet:
 
-- **Der Wurzelspeicher.** Die Hülle schreibt auf Bestätigung nach `Cert:\CurrentUser\Root`. Was
-  dort liegt, gilt dem Benutzerkonto für **jede** TLS-Verbindung als vertrauenswürdig, nicht nur
-  für den Aufgabenbereich. Die Enge des Auftrags — nur ein Fingerabdruck, Pfad von der Hülle
-  gewählt, kein CA-Zertifikat — ist die ganze Sicherheit dieser Fläche.
+- **Der Wurzelspeicher.** Die Hülle schreibt unter Windows auf Bestätigung nach
+  `Cert:\CurrentUser\Root`. Was dort liegt, gilt dem Benutzerkonto für **jede** TLS-Verbindung als
+  vertrauenswürdig, nicht nur für den Aufgabenbereich. Die Enge des Auftrags — nur ein
+  Fingerabdruck, Pfad von der Hülle gewählt, kein CA-Zertifikat — ist die ganze Sicherheit dieser
+  Fläche. Unter Linux (NSS-Peer-Vertrauen) und macOS (Benutzerschlüsselbund) gilt dieselbe Enge;
+  bewertet im Nachtrag „Zertifikatseinrichtung unter Linux und macOS“.
+
+- **Die Mail an einer vorhandenen Aufgabe (A-10.11 bis A-10.17).** Das Add-in schreibt E-Mails
+  und deren Dateien an **vorhandene** Aufgaben. Die Sicherheit liegt in der Enge des einen
+  Endpunkts (strikter Rumpf, Call-Abgleich serverseitig, keine Zeit- oder Exportdaten) und darin,
+  dass jede übernommene Datei als fremder Öffnen-Befehl gilt (R-21). Bewertet im Nachtrag
+  „Outlook-Mail-Zuordnung“ des Bedrohungsmodells.
 
 - **Die fremde Datei.** Todoist-CSV und Super-Productivity-JSON sind von außen geschriebener
   Inhalt, und aus ihnen entstehen Anhänge: Verweise und **Dateipfade**. Damit reicht ein

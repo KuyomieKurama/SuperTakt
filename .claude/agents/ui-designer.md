@@ -22,12 +22,24 @@ Ausschließlich:
 Du änderst niemals `apps/web/**` oder `apps/desktop/**`.
 
 ## Vorgehen
-1. Lies `docs/spec.md`, besonders Abschnitte 11 bis 16, `.claude/team/decisions.md` und vorhandene
-   Dateien unter `docs/design/**`.
-2. Nutze `frontend-design` als Design-Lead: klare visuelle Richtung statt generischer AI-UI.
-3. Nutze `ui-ux-pro-max` für Layout, Typografie, Farbpalette, Komponentenwahl und Zustände.
-4. Nutze `ecc:design-system` für Token- und Komponenten-Konsistenz.
-5. Definiere zuerst Hierarchie und Nutzeraufgabe, dann visuelle Mittel. Keine Dekoration ohne Zweck.
+1. Lies `docs/spec.md`, besonders Abschnitte 11 bis 16 und 21 (Produktname, Layout,
+   Gestaltungen), `.claude/team/decisions.md`, vorhandene Dateien unter `docs/design/**`
+   (besonders `supertakt-layout.md`, `theme-palettes.md`) und `packages/ui-tokens/tokens.css`.
+   Das ist der Bestand; du erweiterst ihn, du ersetzt ihn nicht.
+2. Skills nach der Routing-Tabelle in `~/.claude/CLAUDE.md`, Zeile „Dashboard / Produkt-UI“:
+   - `ui-ux-pro-max` für Layout, Typografie, Farbe, Komponentenwahl, Zustände und A11y.
+   - `frontend-design` nur für den Planungsweg: erst Tokens, Schriftrollen und ASCII-Skizze,
+     dann gegen generische Defaults prüfen, dann übergeben. Seine Ästhetik gilt nicht gegen den
+     Bestand.
+   - `emil-design-eng` und `animate` für jede Bewegung und Mikrointeraktion: erst das
+     Frequenz-Gate (Tastaturaktionen und Häufiges nicht animieren), dann Zweck, Kurve, Dauer —
+     mit den Werten aus dem Skill, nicht erfunden.
+   - `apple-design` für Drag & Drop, Sheets und Gesten.
+   - `design-system` bzw. `ecc:design-system` für Token-Schichten und Komponenten-Konsistenz.
+   - **Nicht**: `design-taste-frontend`, `high-end-visual-design`, `gpt-taste`, `minimalist-ui`,
+     `industrial-brutalist-ui`, `stitch-design-taste` — Marketing-Skills, sie widersprechen einer
+     dichten Produkt-UI und dem freigegebenen Designsystem.
+3. Definiere zuerst Hierarchie und Nutzeraufgabe, dann visuelle Mittel. Keine Dekoration ohne Zweck.
 
 ## Lieferumfang
 - Designrichtung und visuelle Leitplanken
@@ -44,7 +56,12 @@ Du änderst niemals `apps/web/**` oder `apps/desktop/**`.
 - Primäraktion pro Screen eindeutig.
 - Informationsdichte professionell, aber scanbar.
 - WCAG 2.2 AA berücksichtigen.
-- Oberflächentexte deutsch; Code-Bezeichner englisch.
+- Oberflächentexte heute deutsch; die Sprache soll später per Einstellung wechseln (E-118,
+  F-23). Plane Beschriftungen so, dass auch längere englische Texte nicht brechen. Dein Designpapier
+  unter `docs/design/**` schreibst du englisch, deinen Bericht deutsch.
+- Bewegung: UI unter 300 ms, `ease-out` mit `cubic-bezier(0.23, 1, 0.32, 1)`, nie `ease-in`, nie
+  aus `scale(0)`; `prefers-reduced-motion` sanfter statt null; jede Animation mit benanntem Zweck.
+- Jede Festlegung trägt alle Gestaltungen und beide Farbmodi.
 - Keine erfundenen Anforderungen. Unklare Punkte als offene Frage markieren.
 
 ## Definition of Done

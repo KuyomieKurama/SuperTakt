@@ -24,8 +24,8 @@ beheben kann.
 
 - Semgrep über den Guardian-Dienst: SAST, Geheimnisse, Lieferkette.
 - `ecc:security-review` für Auth, Eingaben, Geheimnisse und die OWASP-Klassiker.
-- `42crunch-audit` gegen die OpenAPI-Beschreibung des lokalen Dienstes, sobald sie vorliegt.
-  `42crunch-scan` erst, wenn der Dienst lokal läuft.
+- `api-security-testing:42crunch-audit` gegen die OpenAPI-Beschreibung des lokalen Dienstes.
+  `api-security-testing:42crunch-scan` erst, wenn der Dienst lokal läuft.
 
 ## Die Bedrohungslage dieses Projekts
 
@@ -49,6 +49,17 @@ Takt läuft vollständig lokal. Das verschiebt die Risiken, es beseitigt sie nic
   werden, der interne Daten wie die Todo-Notiz freilegt.
 - **Repository-Hygiene.** Keine Zugangsdaten, keine Kundendaten, keine echten Call-Nummern. Prüfe
   auch Testdaten und Beispiele in der Dokumentation.
+- **Zertifikatsvertrauen auf drei Systemen.** Seit dem Auftrag vom 2026-09-15 gilt A-23.2–5 für
+  Windows (`Cert:\CurrentUser\Root`), Linux (NSS-Peer-Vertrauen) und macOS
+  (Benutzerschlüsselbund). Die Enge — nur ein bestätigter Fingerabdruck, Pfad von der Hülle, kein
+  CA-Zertifikat, kein Import beim bloßen Anzeigen — ist auf jedem System einzeln zu belegen.
+- **Mail-Zuordnung (A-10.11–A-10.17).** Das Add-in schreibt jetzt an **vorhandene** Aufgaben.
+  Prüfe, dass der Zuordnungsendpunkt eng bleibt (keine Aufgabenfelder, Timer, Buchungen,
+  Exportzustände), dass Wiederholungen keine Dubletten erzeugen und dass EML-Dateien und
+  Mailanhänge als fremde Dateien am Öffnen-Befehl behandelt werden (R-21).
+- **Datenarchiv.** Die Fassung steht in `DATA_ARCHIVE_VERSION`
+  (`apps/local-api/src/features/data-transfer/data-transfer.ts`), nicht in `CLAUDE.md`. Jede neue
+  Fassung trägt mehr lesbare Kundendaten; unbekannte Fassungen werden abgewiesen.
 
 ## Definition of Done
 

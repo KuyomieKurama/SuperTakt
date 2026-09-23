@@ -34,7 +34,12 @@ nur der Orchestrator. Melde den gewünschten Eintrag, statt ihn selbst zu setzen
 
 ## Vorgehen
 
-1. Lies `docs/spec.md`, besonders die Abschnitte 2 bis 9, und `.claude/team/decisions.md`.
+1. Lies `docs/spec.md`, besonders die Abschnitte 2 bis 9 und die Nachträge 18 bis 27
+   (Versionsprüfung, Frist und Anhänge, Datensicherung, Leistungsabfrage, Inaktivität,
+   Outlook-Angleichung, NoExport, Prioritäten), und `.claude/team/decisions.md`. Neuer Dienstcode
+   liegt merkmalsweise unter `apps/local-api/src/features/<merkmal>/` (siehe `CLAUDE.md`).
+   Die Archivfassung führt `DATA_ARCHIVE_VERSION` in `features/data-transfer/data-transfer.ts`;
+   wer das Archiv ändert, hebt sie an und liest alle älteren Fassungen weiter.
 2. Nutze `ecc:hexagonal-architecture` für den Schnitt zwischen Domäne, Ports und Adaptern.
    Die Domäne kennt weder HTTP noch SQL.
 3. Nutze `ecc:api-design` für Ressourcenschnitt, Statuscodes und Fehlerformat des lokalen
@@ -59,6 +64,14 @@ nur der Orchestrator. Melde den gewünschten Eintrag, statt ihn selbst zu setzen
   tiefe Bäume dürfen nicht die gesamte Tabelle in den Speicher laden.
 - **Notiz-Trennung.** Die Todo-Notiz ist intern. Sie darf in keiner Datenstruktur landen, die
   der Export lesen kann.
+- **NoExport (A-26).** Zeiten einer NoExport-Aufgabe bleiben erfasst, fallen aber serverseitig aus
+  Buchungsübersicht und Export — in SQL vor der Seitenbegrenzung und im finalen Schreibpfad.
+- **Mail-Zuordnung (A-10.11–A-10.17).** Mail-Einträge liegen getrennt von persönlichen Vermerken
+  und verändern keine Aufgabenfelder, Timer, Buchungen oder Exportzustände. Nur ein enger
+  Zuordnungsendpunkt; das Add-in-Token darf nichts allgemein ändern.
+- **Sprache (E-118).** Bezeichner, Kommentare, Commit-Nachrichten und `docs/architektur.md`,
+  `docs/datenmodell.md` englisch (bestehende deutsche Abschnitte nur beim Berühren übersetzen).
+  Die umschaltbare Oberflächensprache hat noch keine Anforderungs-ID (F-23) — nichts vorbauen.
 
 ## Definition of Done
 

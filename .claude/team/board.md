@@ -3192,6 +3192,7 @@ Erzeugnis ohne sie ausgeliefert wird**. Was daraus folgt, gehört in jede Freiga
 | ~~F-20~~ | **Beantwortet 2026-09-05: beides ja** (A-19.20, A-19.21, E-074). Ursprünglich: Zwei Fragen zu Abschnitt 19, für die es keine Anforderungs-ID gibt und die deshalb nicht gebaut werden (E-073 Punkt 4): **(a)** Soll sich die Todo-Liste nach der Frist **sortieren und filtern** lassen? A-19.4 verlangt Sichtbarkeit, nicht Sortierung. **(b)** Soll das **Outlook-Add-in** eine Frist setzen dürfen? Für Anhänge ist das ausgeschlossen (A-19.19), für die Frist steht nichts da. |
 | ~~F-21~~ | **Beantwortet 2026-09-10: gegen das Anhängen (E-100).** Die Route fällt, A-19.19 bleibt unverändert stehen und wird dadurch wieder wahr; A-10.9 ändert sich mit, weil das Angebot am gefundenen Todo ganz entfällt. Umgesetzt in T-247. Ursprünglich: **Der Widerspruch aus T-245-1, und er ist die dringendste der Fragen.** Seit PR #16 hängt der Aufgabenbereich die geöffnete Outlook-Nachricht als Verweis an ein vorhandenes Todo, statt Zeit zu buchen. A-19.19 verbietet genau das — „Über das Outlook-Add-in entstehen **keine** Anhänge" — und steht unverändert in der Spezifikation. Entweder fällt A-19.19 und wird durch eine Anforderung ersetzt, die die enge Form beschreibt (nur `http(s)`, keine Datei, kein Bild, idempotent), oder die Route fällt. Ein Drittes gibt es nicht: Der Bestand behauptet an sechs Stellen die Abwesenheit einer Fläche, die es gibt. |
 | F-22 | Sollen die drei blockierten Punkte T-B05, T-B07 und T-B09 vor der Auslieferung fallen oder mit ihr? Die Antwort vom 2026-09-06 hat die Umgebung geklärt, nicht die Entscheidung. Seit den Abschnitten 20 bis 24 wiegt sie schwerer: Der Zertifikatsweg nach A-23 ist **ausschließlich** Windows-Code, und kein Prüffall davon ist je auf Windows gelaufen — außer im Bauauftrag, den PR #9 gerade erst wieder grün bekommen hat. |
+| F-23 | Die Oberflächensprache soll per Einstellung umschaltbar sein (E-118). Welche Sprachen (Deutsch und Englisch?), wo liegt die Einstellung, und gilt sie auch für das Outlook-Add-in, Fehlermeldungen des lokalen Dienstes und das Datumsformat? Ohne Anforderungs-ID in `docs/spec.md` wird nichts gebaut. |
 
 ## T-377 bis T-381 — Welle 17, läuft (gestartet 2026-09-14)
 
@@ -3476,3 +3477,59 @@ sagt, welche wogegen gemessen wird.
 stehenzulassen wäre wieder S-3". Die vier Kleinigkeiten aus T-376 Abschnitt 5, darunter sein
 **eigener** falscher Verweis „A-25.9 Satz 4" (richtig: Satz 2), sind bewußt **nicht** angefaßt und
 im Papier als nicht angefaßt vermerkt.
+
+## T-385 bis T-387 — Design-Skills versioniert, `proof:codepoints` trägt sie (Auftrag vom 2026-09-23)
+
+Auftrag des Auftraggebers: die am 2026-09-23 installierten Design- und Animations-Skills
+(`.agents/skills/`, 34 Skills, dazu die Verweise in `.claude/skills/` und `.hermes/skills/` und
+`skills-lock.json`) werden **versioniert**, und der Wächter wird so angepaßt, daß das Tor grün ist.
+Seit der Installation ist `pnpm check` lokal rot: `proof:codepoints` liest auch neue, nicht
+ausgeschlossene Dateien und meldet 54 `.ttf`-Schriften (`ui-styling/canvas-fonts/`) als „kein
+gültiges UTF-8" und vier `U+200B` in `.agents/skills/improve-animations/PLAN-TEMPLATE.md` — dort
+**absichtlich**, sie trennen verschachtelte Codezäune in einer Vorlage. Die fünfundfünfzigste
+Fundstelle, eine Python-Abdeckungsdatenbank (`.coverage`), ist vom Orchestrator per `.gitignore`
+ausgeschlossen (Laufergebnis, kein Bestand).
+
+**Bewußt nicht:** `.agents/` als Ganzes ausnehmen. Skills sind Anweisungen an ein Modell; ein
+Richtungs- oder Steuerzeichen darin ist genau die Sorte versteckter Text, gegen die dieser Wächter
+steht. Fremdbestand wird **mitgelesen**, nicht übersprungen.
+
+### Welle 1
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-385 | `proof:codepoints`: `ttf` in `BINAERE_ENDUNGEN` (Abschnitt 3 prüft weiter, daß jede so übersprungene Datei wirklich binär ist und die Endung im Baum vorkommt); eine Ausnahme für `U+200B` × 4 in `PLAN-TEMPLATE.md` mit Pfad, Codepunkt, Anzahl, Grund nach dem bestehenden Muster. Keine weitere Lockerung. Danach `proof:all` vollständig fahren | domain-dev | `apps/local-api/scripts/proof-codepoints.mjs`, eigener Bericht |
+
+### Welle 2 (nach T-385)
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-386 | Sicherheitsfreigabe über T-385 und über den neuen Fremdbestand: Skripte unter `.agents/skills/*/scripts/` (Python, `.cjs`), Netzwerk- und Schlüsselzugriffe, versteckte Zeichen, Anweisungen in Skill-Texten, die Agenten zu unsicherem Verhalten lenken | security-checker | eigener Bericht, `docs/bedrohungsmodell.md` nur bei neuer Bedrohung |
+| T-387 | Review über T-385 | code-reviewer | eigener Bericht |
+
+**Nebenbefund des Orchestrators (2026-09-23), nicht Teil von T-385:** `POST /api/v1/addin/todos/:todoId/time-entries`
+steht weiter in `apps/local-api/src/routes/addin/index.ts`, und `apps/outlook-addin/src/api/client.ts:293`
+führt einen Aufrufer dafür. A-10.16 sagt: „Es bietet keine Zeiterfassung oder Zeitschätzung."
+Offen, ob die Route ein Rest aus der Zeit vor E-100 ist oder bewußt für einen anderen Weg steht.
+Gehört integration-dev (Route und Add-in) mit spec-ux-reviewer als Gegenprobe; nicht gestartet,
+weil unbeauftragt.
+
+### Ergebnis T-385 bis T-387 (2026-09-23)
+
+- **T-385 (domain-dev):** umgesetzt und freigegeben, danach nach E-119 **zurückgenommen**.
+- **T-386 (security-checker):** technisch freigegeben; **Nacharbeit nur zu Lizenzen** → vom
+  Auftraggeber mit E-119 entschieden (nur `skills-lock.json` versioniert). Neuer Nachtrag in
+  `docs/bedrohungsmodell.md` („Versionierte Fremd-Skills als Anweisungsquelle"). E-001-Satz zu
+  externen Skill-Vorgaben in `CLAUDE.md` gesetzt.
+- **T-387 (code-reviewer):** freigegeben, drei nicht blockierende Befunde.
+
+**Offen, nicht beauftragt:**
+- Folgeaufgabe domain-dev, niedrig: `UNSICHTBARE_NACHBARN` in `proof:codepoints` um Tag-Zeichen
+  U+E0000–E007F, U+2060–2064, Variationsselektoren U+E0100–E01EF und U+00AD erweitern, mit
+  Selbstprüfung — für den eigenen Bestand (T-386).
+- Gestrichen nach E-119: die Symlink-Behandlung in `proof:codepoints` (keine Links mehr im Baum;
+  wird wieder aktuell, sobald ein Link versioniert wird).
+- Review-Regel (T-386 Nachtrag): Eine Änderung an `skills-lock.json` (Quelle, Hash) wird wie eine
+  neue Abhängigkeit geprüft — die Skill-Dateien selbst liest kein Wächter.
+- Fremdcode (lokal, nicht im Projektablauf): `design/scripts/logo/generate.py:423-428` sendet
+  `MUAPI_API_KEY` an eine Adresse aus der Anbieterantwort — beim Einsatz dieses Skills beachten.
