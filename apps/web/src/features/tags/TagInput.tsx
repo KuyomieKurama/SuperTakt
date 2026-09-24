@@ -11,6 +11,9 @@ import { Button, InlineMessage, Spinner, type ControlSize } from "../../shared/u
 import { TagChip } from "../../shared/ui/Tag";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { tagTexts } from "./texts";
 
 /**
  * Takt — **die** Tag-Eingabe (A-4.1, A-4.4, I-06, E-052, T-059).
@@ -136,7 +139,7 @@ export function TagCombobox(props: TagComboboxProps) {
     onChange,
     hideLabel = false,
     hint,
-    placeholder = "Tag suchen oder eingeben …",
+    placeholder = tagTexts().tagInputPlaceholder,
     disabled = false,
     size = "md",
     className,
@@ -232,10 +235,6 @@ export function TagCombobox(props: TagComboboxProps) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    // Escape gehört der offenen Liste; ohne diese Bremse schlösse es
-    // zusätzlich den Dialog dahinter.
-    if (event.key === "Escape") event.stopPropagation();
-
     // Rücktaste im leeren Feld nimmt das zuletzt gewählte Tag zurück. Der
     // gewohnte Griff bei einer Chip-Eingabe — und er ersetzt keinen der
     // Entfernen-Knöpfe, er kommt dazu.
@@ -260,7 +259,7 @@ export function TagCombobox(props: TagComboboxProps) {
         return (
           <li key={id}>
             <TagChip
-              label={info?.tag.name ?? "Unbekanntes Tag"}
+              label={info?.tag.name ?? tagTexts().unknownTag}
               {...(info === undefined ? {} : { path: info.path })}
               size="sm"
               isDefault={defaultTagIds.has(id)}
@@ -323,7 +322,7 @@ export function TagCombobox(props: TagComboboxProps) {
       </Ark.Label>
 
       {hasChips ? (
-        <ul className="taginput__chips" aria-label={`Gewählt: ${label}`}>
+        <ul className="taginput__chips" aria-label={tagTexts().chosen(label)}>
           {chips}
         </ul>
       ) : null}
@@ -334,16 +333,16 @@ export function TagCombobox(props: TagComboboxProps) {
         </span>
         <Ark.Input
           className="taginput__input"
-          placeholder={ready ? placeholder : "Tags werden geladen …"}
+          placeholder={ready ? placeholder : tagTexts().tagsLoadingDots}
           autoComplete="off"
           onKeyDown={onKeyDown}
         />
         {ready ? (
-          <Ark.Trigger className="taginput__toggle" aria-label="Alle Tags zeigen">
+          <Ark.Trigger className="taginput__toggle" aria-label={tagTexts().showAllTags}>
             <Icon name="chevron-down" size={14} />
           </Ark.Trigger>
         ) : (
-          <Spinner size={14} label="Tags werden geladen" />
+          <Spinner size={14} label={tagTexts().tagsLoading} />
         )}
       </Ark.Control>
 
@@ -354,7 +353,7 @@ export function TagCombobox(props: TagComboboxProps) {
               {suggestions.length > 0 ? (
                 <Ark.ItemGroup>
                   <Ark.ItemGroupLabel className="combobox__group-label">
-                    Vorhandene Tags
+                    {tagTexts().existingTags}
                   </Ark.ItemGroupLabel>
                   {suggestions.map((item) => (
                     <Ark.Item key={item.value} item={item} className="combobox__option">
@@ -371,7 +370,7 @@ export function TagCombobox(props: TagComboboxProps) {
                         </Ark.ItemText>
                         {item.isDefault ? (
                           <span className="combobox__option-hint">
-                            Standard-Tag — hängt ohnehin an jedem neuen Todo.
+                            {tagTexts().defaultTagHint}
                           </span>
                         ) : null}
                       </span>
@@ -385,14 +384,14 @@ export function TagCombobox(props: TagComboboxProps) {
 
               {hiddenCount > 0 ? (
                 <p className="combobox__more">
-                  Weitere {hiddenCount} Tags passen ebenfalls. Tippen Sie genauer.
+                  {tagTexts().moreTagsMatch(hiddenCount)}
                 </p>
               ) : null}
 
               {canCreate ? (
                 <Ark.ItemGroup className="combobox__group--new">
                   <Ark.ItemGroupLabel className="combobox__group-label">
-                    Neu anlegen
+                    {tagTexts().createNew}
                   </Ark.ItemGroupLabel>
                   <Ark.Item item={createItem} className="combobox__option combobox__option--new">
                     <span className="combobox__option-plus" aria-hidden>
@@ -400,11 +399,10 @@ export function TagCombobox(props: TagComboboxProps) {
                     </span>
                     <span className="combobox__option-text">
                       <Ark.ItemText className="combobox__option-label">
-                        {quotedName(pendingName)} als neues Tag anlegen
+                        {tagTexts().createAsTag(quotedName(pendingName))}
                       </Ark.ItemText>
                       <span className="combobox__option-hint">
-                        Dieses Tag gibt es noch nicht. Es entsteht auf der Wurzelebene, sobald
-                        Sie speichern; verschieben lässt es sich danach unter Tags.
+                        {tagTexts().createHint}
                       </span>
                     </span>
                   </Ark.Item>
@@ -414,13 +412,15 @@ export function TagCombobox(props: TagComboboxProps) {
               {suggestions.length === 0 && !canCreate ? (
                 <p className="combobox__empty">
                   {allTags.length === 0
-                    ? "Noch kein Tag angelegt."
-                    : `Kein Tag passt zu ${quotedName(pendingName)}.`}{" "}
+                    ? tagTexts().noTagYet
+                    : tagTexts().noTagMatches(quotedName(pendingName))}{" "}
                   {allowCreate ? (
-                    "Tippen Sie einen Namen — SuperTakt bietet Ihnen dann an, ihn anzulegen."
+                    tagTexts().typeToCreate
                   ) : (
                     <>
-                      Neue Tags legen Sie unter <a href={href("settings", undefined, { bereich: "tags" })}>Tags</a> an.
+                      {tagTexts().createUnderBefore}
+                      <a href={href("settings", undefined, { bereich: "tags" })}>{tagTexts().createUnderLink}</a>
+                      {tagTexts().createUnderAfter}
                     </>
                   )}
                 </p>
@@ -469,14 +469,15 @@ export function TagInput(props: TagInputProps) {
         </span>
         <InlineMessage
           tone="danger"
-          title="Die Tags ließen sich nicht laden"
+          title={tagTexts().tagsFailed}
           action={
             <Button size="sm" iconStart="rotate-ccw" onClick={structure.reload}>
-              Erneut versuchen
+              {labels().retry}
             </Button>
           }
         >
-          {structure.state.message} Ohne die Liste lässt sich hier kein Tag wählen.
+          <ServiceText text={structure.state.message} fromService={structure.state.fromService} />{" "}
+          {tagTexts().noTagWithoutList}
         </InlineMessage>
       </div>
     );

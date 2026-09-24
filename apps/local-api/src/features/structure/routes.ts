@@ -34,6 +34,7 @@ import {
   loadTagTree,
   moveTagFolder,
   removePool,
+  reorderPools,
   removeStatus,
   removeTag,
   removeTagFolder,
@@ -158,11 +159,16 @@ const poolCreateSchema = z.object({
   includeSubfolders: z.boolean().default(true),
   placement: placementSchema.default('pool'),
   position: z.number().int().min(0).default(0),
-  rule: poolTagListSchema.default([]),
+  requiredTags: poolTagListSchema.optional(),
+  /** Deprecated alias of `requiredTags` (O-D) until the web sends the new name (T-400). */
+  rule: poolTagListSchema.optional(),
   excludedTags: poolTagListSchema.default([]),
   statusIds: poolStatusListSchema.default([]),
   completion: completionSchema.default('any'),
   exportState: exportStateSchema.default('any'),
+}).refine((body) => body.requiredTags === undefined || body.rule === undefined, {
+  message: 'Nennen Sie die erforderlichen Tags entweder als „requiredTags“ oder als „rule“, nicht beides.',
+  path: ['requiredTags'],
 });
 
 const poolUpdateSchema = z.object({
@@ -171,11 +177,16 @@ const poolUpdateSchema = z.object({
   includeSubfolders: z.boolean().optional(),
   placement: placementSchema.optional(),
   position: z.number().int().min(0).optional(),
+  requiredTags: poolTagListSchema.optional(),
+  /** Deprecated alias of `requiredTags` (O-D) until the web sends the new name (T-400). */
   rule: poolTagListSchema.optional(),
   excludedTags: poolTagListSchema.optional(),
   statusIds: poolStatusListSchema.optional(),
   completion: completionSchema.optional(),
   exportState: exportStateSchema.optional(),
+}).refine((body) => body.requiredTags === undefined || body.rule === undefined, {
+  message: 'Nennen Sie die erforderlichen Tags entweder als „requiredTags“ oder als „rule“, nicht beides.',
+  path: ['requiredTags'],
 });
 
 /**
@@ -202,6 +213,11 @@ const statusUpdateSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 const statusOrderSchema = z.object({ order: z.array(idSchema).min(1).max(100) });
+/**
+ * A-28.3 — every rule exactly once. No item cap of its own (O-Z, E-132 point 3): storage checks
+ * the list against the existing rules, and the 1 MB body limit bounds the array.
+ */
+const poolOrderSchema = z.object({ order: z.array(idSchema).min(1) });
 
 /** Rumpfschemata nach `operationId`; gelesen von `proof:openapi`, siehe `todos.ts`. */
 export const REQUEST_SCHEMAS = Object.freeze({
@@ -215,6 +231,7 @@ export const REQUEST_SCHEMAS = Object.freeze({
   createTodoStatus: statusCreateSchema,
   updateTodoStatus: statusUpdateSchema,
   reorderTodoStatuses: statusOrderSchema,
+  reorderPools: poolOrderSchema,
 });
 
 export function createStructureRoutes(context: AppContext): {
@@ -360,9 +377,10 @@ export function createStructureRoutes(context: AppContext): {
      * auf. `poolTerms` und `as readonly StatusId[]` tun genau das eine, was
      * nötig ist, und nichts sonst.
      */
+    const { requiredTags, rule, ...fields } = parsed.data;
     const result = await createPool(context, {
-      ...parsed.data,
-      rule: poolTerms(parsed.data.rule),
+      ...fields,
+      rule: poolTerms(requiredTags ?? rule ?? []),
       excludedTags: poolTerms(parsed.data.excludedTags),
       statusIds: poolStatusIds(parsed.data.statusIds),
     });
@@ -373,6 +391,15 @@ export function createStructureRoutes(context: AppContext): {
     if (!result.ok) return fail(c, result.error);
     c.header('Location', `/api/v1/pools/${result.value.id}`);
     return data(c, result.value, 201);
+  });
+
+  /** A-28.3 — complete, never in pieces (see the file head). */
+  pools.put('/order', async (c) => {
+    const parsed = poolOrderSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
+
+    const result = await reorderPools(context, parsed.data.order as PoolId[]);
+    return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
   pools.patch('/:poolId', async (c) => {
@@ -390,7 +417,8 @@ export function createStructureRoutes(context: AppContext): {
      * stand; ein `poolTerms(undefined)` machte aus „nicht genannt" eine leere
      * Liste und löschte damit die Regel, die der Aufrufer behalten wollte.
      */
-    const { rule, excludedTags, statusIds, ...rest } = parsed.data;
+    const { requiredTags, rule: legacyRule, excludedTags, statusIds, ...rest } = parsed.data;
+    const rule = requiredTags ?? legacyRule;
     const result = await updatePool(
       context,
       c.req.param('poolId') as PoolId,

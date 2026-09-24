@@ -2,6 +2,7 @@ import { useId } from "react";
 import { cx } from "../../lib/cx";
 import { useFieldMessageLive } from "../../lib/fieldMessages";
 import { Icon } from "./Icon";
+import { labels } from "../../lib/labels";
 
 /**
  * Die zwei Textfelder am Todo und an der Buchung — A-7.1 bis A-7.4, R-08.
@@ -40,40 +41,10 @@ import { Icon } from "./Icon";
  */
 export type NoteScope = "billing" | "internal";
 
-interface ScopeDefinition {
-  readonly bannerLabel: string;
-  readonly bannerIcon: "arrow-up-right" | "lock";
-  readonly defaultLabel: string;
-  /** Vorgelesener Zusatz an der Marke vor der Beschriftung. */
-  readonly markLabel: string;
-  readonly help: string;
-  readonly defaultPlaceholder: string;
-}
-
-const SCOPE: Readonly<Record<NoteScope, ScopeDefinition>> = {
-  billing: {
-    bannerLabel: "Verlässt SuperTakt · steht in der Abrechnung",
-    bannerIcon: "arrow-up-right",
-    defaultLabel: "Leistung",
-    markLabel: "Wird exportiert",
-    help: "Wird beim Export an das Abrechnungstool übertragen und steht dort auf der Rechnung des Kunden. Standardvorlage: Feld „Notiz“.",
-    defaultPlaceholder: "Was wurde in diesem Zeitraum für den Kunden geleistet?",
-  },
-  internal: {
-    bannerLabel: "Bleibt in SuperTakt",
-    bannerIcon: "lock",
-    defaultLabel: "Vermerk",
-    markLabel: "Wird nicht exportiert",
-    help: "Bleibt in SuperTakt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage.",
-    /*
-      Ohne Anrede (T-181, ST-09). „Nur fuer Sie" war eine Verdopplung des
-      Banners „Bleibt in Takt" unmittelbar darueber; ein Platzhalter traegt
-      ein Beispiel oder eine Form, nie eine Anrede (Regel S-06). Der Satz
-      der Grenze steht unveraendert im Banner, in der Marke und im `help` —
-      alle drei sind gesperrt (SP-09).
-    */
-    defaultPlaceholder: "Gedanken, Zwischenstände, Ansprechpartner …",
-  },
+/** The words of each note kind live in `labels().noteField` (locked sentences SP-09). */
+const SCOPE_ICON: Readonly<Record<NoteScope, "arrow-up-right" | "lock">> = {
+  billing: "arrow-up-right",
+  internal: "lock",
 };
 
 export interface NoteFieldProps {
@@ -113,7 +84,8 @@ export function NoteField({
   required = false,
   className,
 }: NoteFieldProps) {
-  const definition = SCOPE[scope];
+  const text = labels().noteField;
+  const definition = { ...text[scope], bannerIcon: SCOPE_ICON[scope] };
   const fieldId = useId();
   const helpId = `${fieldId}-help`;
   const errorId = `${fieldId}-error`;
@@ -143,7 +115,7 @@ export function NoteField({
       <p className="note__banner" id={showHelp ? undefined : helpId}>
         <Icon name={definition.bannerIcon} size={13} />
         <span>{definition.bannerLabel}</span>
-        {readOnly ? <span className="note__banner-tail">gesperrt</span> : null}
+        {readOnly ? <span className="note__banner-tail">{text.locked}</span> : null}
       </p>
 
       <div className="note__frame">
@@ -156,7 +128,7 @@ export function NoteField({
           {required ? (
             <>
               <span aria-hidden> *</span>
-              <span className="visually-hidden"> (Pflichtfeld)</span>
+              <span className="visually-hidden">{labels().requiredField}</span>
             </>
           ) : null}
         </label>
@@ -185,7 +157,7 @@ export function NoteField({
           ) : null}
           {maxLength !== undefined ? (
             <p className="note__count" id={countId}>
-              <span className="visually-hidden">Zeichen: </span>
+              <span className="visually-hidden">{text.characters}</span>
               {value.length} / {maxLength}
             </p>
           ) : null}

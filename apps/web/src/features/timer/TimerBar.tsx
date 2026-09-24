@@ -5,6 +5,7 @@ import { formatStopwatch, formatTime } from "../../lib/format";
 import { href, navigate } from "../../app/router";
 import { useTimer } from "./TimerContext";
 import { Foreign } from "../../shared/ui/Foreign";
+import { timerTexts } from "./texts";
 
 /**
  * Takt — der Timer in der Kopfleiste (A-13.4).
@@ -20,11 +21,12 @@ import { Foreign } from "../../shared/ui/Foreign";
  */
 export function TimerBar() {
   const timer = useTimer();
+  const text = timerTexts();
 
   if (timer.loading) {
     return (
       <div className="timerbar timerbar--idle">
-        <span className="timerbar__placeholder">Timer wird geladen …</span>
+        <span className="timerbar__placeholder">{text.timerLoading}</span>
       </div>
     );
   }
@@ -35,14 +37,14 @@ export function TimerBar() {
         <span className="timerbar__icon">
           <Icon name="clock" size={16} />
         </span>
-        <span className="timerbar__idle-text">Kein Timer läuft.</span>
+        <span className="timerbar__idle-text">{text.noTimerRunning}</span>
         <Button
           size="sm"
           variant="ghost"
           iconStart="play"
           onClick={() => navigate("time")}
         >
-          Zeit erfassen
+          {text.recordTime}
         </Button>
       </div>
     );
@@ -63,11 +65,11 @@ export function TimerBar() {
         size="sm"
         actionStyle="labelled"
         display={formatStopwatch(timer.elapsedSeconds)}
-        detail={`seit ${formatTime(running.entry.startedAt)} Uhr`}
+        detail={text.since(formatTime(running.entry.startedAt))}
         actionTitle={running.todoTitle}
         trailing={
           <a className="timerbar__todo truncate" href={href("todo", running.entry.todoId)}>
-            <span className="visually-hidden">Timer läuft auf: </span>
+            <span className="visually-hidden">{text.timerRunsOn}</span>
             <Foreign value={running.todoTitle} />
           </a>
         }

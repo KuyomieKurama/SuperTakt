@@ -189,6 +189,8 @@ const SOURCE_LABELS: Readonly<Record<ExportSourcePath, SourceLabel>> = Object.fr
   'group.bookingNotes': {
     group: 'group',
     label: 'Leistung der Tagesgruppe',
+    // A-A-50 sentence 3 (O-JN): "Die Quelle für das Feld „Notiz“ der Standardvorlage." carries a
+    // boundary on its own and is asserted by a unit test (T-401); rewording must keep the statement.
     description:
       'Die Leistungstexte aller enthaltenen Buchungen, vom Dienst zu einem Text zusammengeführt. Die Quelle für das Feld „Notiz“ der Standardvorlage.',
   },

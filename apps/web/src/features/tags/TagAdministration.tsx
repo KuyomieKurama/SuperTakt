@@ -26,6 +26,9 @@ import { quotedName } from "../../lib/foreign";
 import { TagPath } from "../../shared/ui/Tag";
 import { TagTree } from "./TagTree";
 import { findSelection, folderName, pathOf, toTreeNodes, type Selection } from "./treeData";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { tagTexts } from "./texts";
 
 /**
  * Tags und Ordner — S-08.
@@ -97,7 +100,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
     Grundform aus T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). Drei
     Dialoge, dieselbe Beschriftung, derselbe Fall — also dreimal derselbe Satz.
   */
-  const nameError = nameTouched && name.trim().length === 0 ? "Name fehlt." : undefined;
+  const nameError = nameTouched && name.trim().length === 0 ? labels().nameMissing : undefined;
 
 
   const nodes = useMemo(() => toTreeNodes(tree), [tree]);
@@ -110,12 +113,13 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
 
   const currentFolderId =
     selected === null ? null : selected.kind === "folder" ? selected.id : selected.folderId;
+  const text = tagTexts();
 
   return (
     <>
       <Card
-        title="Tags und Ordner"
-        description="Beliebig tief verschachtelbar. Ein Tag liegt in genau einem Ordner oder auf der Wurzelebene."
+        title={text.tagsAndFolders}
+        description={text.tagsLead}
         actions={
           <>
             <Button
@@ -127,7 +131,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                 setFolderDialog(true);
               }}
             >
-              Ordner
+              {text.folder}
             </Button>
             <Button
               size="sm"
@@ -138,7 +142,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                 setTagDialog(true);
               }}
             >
-              Tag
+              {text.tag}
             </Button>
           </>
         }
@@ -146,8 +150,8 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         {nodes.length === 0 ? (
           <EmptyState
             icon="tag"
-            title="Noch kein Tag"
-            description="Tags ordnen Todos, und die meisten Regeln fragen nach ihnen. Ohne ein einziges Tag bleibt von einer Regel nur, was sie über Status, „Erledigt“ und den Exportstatus sagt."
+            title={text.noTagTitle}
+            description={text.noTagBody}
             action={
               <Button
                 variant="primary"
@@ -157,7 +161,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   setTagDialog(true);
                 }}
               >
-                Ersten Tag anlegen
+                {text.firstTag}
               </Button>
             }
           />
@@ -174,15 +178,15 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               <InlineMessage
                 className="tags-split__error"
                 tone="danger"
-                title="Das Verschieben hat nicht geklappt"
+                title={text.moveFailed}
                 onDismiss={dragMove.clearError}
               >
-                {dragMove.error}
+                <ServiceText text={dragMove.error} fromService={dragMove.errorFromService} />
               </InlineMessage>
             )}
             <TagTree
               nodes={nodes}
-              label="Tags und Ordner"
+              label={text.tagsAndFolders}
               selectedId={selected?.id ?? null}
               moveBusy={dragMove.busy}
               onSelect={(node) => {
@@ -202,11 +206,12 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   if (node.kind === "tag") await updateTag(node.id, { folderId: targetFolderId });
                   else await moveTagFolder(node.id, targetFolderId);
                   after();
+                  const words = tagTexts();
                   const place =
                     targetFolderId === null
-                      ? "auf der Wurzelebene"
-                      : `in ${quotedName(folderName(tree, targetFolderId))}`;
-                  toasts.success(`${quotedName(node.label)} liegt jetzt ${place}.`);
+                      ? words.atRoot
+                      : words.inFolder(quotedName(folderName(tree, targetFolderId)));
+                  toasts.success(words.nowLies(quotedName(node.label), place));
                 });
               }}
             />
@@ -214,12 +219,12 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
             <div className="tags-detail">
               {selected === null ? (
                 <p className="muted">
-                  Wählen Sie links einen Eintrag. Dann erscheinen hier seine Aktionen.
+                  {text.pickEntry}
                 </p>
               ) : (
                 <>
                   <p className="tags-detail__kind overline">
-                    {selected.kind === "folder" ? "Ordner" : "Tag"}
+                    {selected.kind === "folder" ? text.folder : text.tag}
                   </p>
                   <h4 className="tags-detail__name">
                     <Foreign value={selected.name} />
@@ -238,7 +243,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                         setRenameDialog(true);
                       }}
                     >
-                      Umbenennen
+                      {text.rename}
                     </Button>
                     <Button
                       size="sm"
@@ -251,7 +256,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                         setMoveDialog(true);
                       }}
                     >
-                      Verschieben
+                      {text.move}
                     </Button>
                     {selected.kind === "tag" ? (
                       <Button
@@ -260,7 +265,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                         iconStart="filter"
                         onClick={() => navigate("todos", undefined, { tag: selected.id })}
                       >
-                        Todos mit diesem Tag
+                        {text.todosWithTag}
                       </Button>
                     ) : null}
                     <Button
@@ -272,7 +277,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                         setPendingDelete(selected);
                       }}
                     >
-                      Löschen
+                      {text.delete}
                     </Button>
                   </div>
                 </>
@@ -285,28 +290,25 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
       {/* Neuer Tag */}
       <FormDialog
         open={tagDialog}
-        title="Neuen Tag anlegen"
-        description={
-          currentFolderId === null
-            ? "Er landet auf der Wurzelebene. Über die Ordnerwahl geht es auch tiefer."
-            : "Er landet im gerade gewählten Ordner."
-        }
-        submitLabel="Anlegen"
+        title={text.newTagTitle}
+        description={currentFolderId === null ? text.newTagAtRoot : text.newTagInFolder}
+        submitLabel={text.create}
         submitDisabled={name.trim().length === 0}
         busy={mutation.busy}
         error={mutation.error}
+        errorFromService={mutation.errorFromService}
         onSubmit={() => {
           void mutation.run(async () => {
             await createTag({ name: name.trim(), folderId: currentFolderId, color: null });
             setTagDialog(false);
             after();
-            toasts.success("Tag angelegt.");
+            toasts.success(tagTexts().tagCreated);
           });
         }}
         onCancel={() => setTagDialog(false)}
       >
         <TextField
-          label="Name"
+          label={text.name}
           value={name}
           onChange={setName}
           onTouched={() => setNameTouched(true)}
@@ -319,24 +321,25 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
       {/* Neuer Ordner */}
       <FormDialog
         open={folderDialog}
-        title="Neuen Ordner anlegen"
-        description="Ordner können beliebig tief ineinander liegen."
-        submitLabel="Anlegen"
+        title={text.newFolderTitle}
+        description={text.newFolderLead}
+        submitLabel={text.create}
         submitDisabled={name.trim().length === 0}
         busy={mutation.busy}
         error={mutation.error}
+        errorFromService={mutation.errorFromService}
         onSubmit={() => {
           void mutation.run(async () => {
             await createTagFolder({ name: name.trim(), parentId: currentFolderId });
             setFolderDialog(false);
             after();
-            toasts.success("Ordner angelegt.");
+            toasts.success(tagTexts().folderCreated);
           });
         }}
         onCancel={() => setFolderDialog(false)}
       >
         <TextField
-          label="Name"
+          label={text.name}
           value={name}
           onChange={setName}
           onTouched={() => setNameTouched(true)}
@@ -349,11 +352,12 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
       {/* Umbenennen */}
       <FormDialog
         open={renameDialog}
-        title="Umbenennen"
-        submitLabel="Speichern"
+        title={text.rename}
+        submitLabel={text.save}
         submitDisabled={name.trim().length === 0}
         busy={mutation.busy}
         error={mutation.error}
+        errorFromService={mutation.errorFromService}
         onSubmit={() => {
           const target = selected;
           if (target === null) return;
@@ -363,13 +367,13 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
             setRenameDialog(false);
             setSelected({ ...target, name: name.trim() });
             after();
-            toasts.success("Umbenannt.");
+            toasts.success(tagTexts().renamed);
           });
         }}
         onCancel={() => setRenameDialog(false)}
       >
         <TextField
-          label="Name"
+          label={text.name}
           value={name}
           onChange={setName}
           onTouched={() => setNameTouched(true)}
@@ -382,15 +386,12 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
       {/* Verschieben — I-07 und I-08 */}
       <FormDialog
         open={moveDialog}
-        title={selected?.kind === "tag" ? "Tag verschieben" : "Ordner verschachteln"}
-        description={
-          selected?.kind === "tag"
-            ? "Ein Tag liegt in genau einem Ordner. Die Todos, die ihn tragen, bleiben unberührt."
-            : "Ein Ordner kann nicht unter einen seiner eigenen Unterordner. SuperTakt lehnt das ab, statt einen Zyklus anzulegen."
-        }
-        submitLabel="Verschieben"
+        title={selected?.kind === "tag" ? text.moveTagTitle : text.nestFolderTitle}
+        description={selected?.kind === "tag" ? text.moveTagLead : text.nestFolderLead}
+        submitLabel={text.move}
         busy={mutation.busy}
         error={mutation.error}
+        errorFromService={mutation.errorFromService}
         onSubmit={() => {
           const target = selected;
           if (target === null) return;
@@ -400,7 +401,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
             else await moveTagFolder(target.id, parentId);
             setMoveDialog(false);
             after();
-            toasts.success("Verschoben.");
+            toasts.success(tagTexts().moved);
           });
         }}
         onCancel={() => setMoveDialog(false)}
@@ -412,11 +413,11 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
           die Verwechslung, die man in einer Ordnerauswahl nicht brauchen kann.
         */}
         <Select
-          label={selected?.kind === "tag" ? "Ordner für dieses Tag" : "Neuer übergeordneter Ordner"}
+          label={selected?.kind === "tag" ? text.folderForTag : text.newParentFolder}
           value={targetFolder}
           onChange={setTargetFolder}
           options={[
-            { value: "", label: "Wurzelebene" },
+            { value: "", label: text.rootLevel },
             ...folders
               .filter((folder) => selected === null || folder.id !== selected.id)
               .map((folder) => ({ value: folder.id, label: folder.path.join(" / ") })),
@@ -446,18 +447,18 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         title={
           deleteError !== null
             ? pendingDelete?.kind === "folder"
-              ? "Der Ordner wurde nicht gelöscht"
-              : "Das Tag wurde nicht gelöscht"
+              ? text.folderNotDeleted
+              : text.tagNotDeleted
             : pendingDelete?.kind === "folder"
-              ? "Ordner löschen?"
-              : "Tag löschen?"
+              ? text.deleteFolderTitle
+              : text.deleteTagTitle
         }
         description={
           pendingDelete === null
             ? ""
             : deleteError === null
-              ? `${quotedName(pendingDelete.name)} wird entfernt.`
-              : `${quotedName(pendingDelete.name)} gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+              ? text.willBeRemoved(quotedName(pendingDelete.name))
+              : text.stillExists(quotedName(pendingDelete.name))
         }
         /*
           Vorwarnung und Absage sind seit T-118 zwei Eigenschaften (B-5 aus
@@ -475,12 +476,12 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         */
         consequence={
           pendingDelete?.kind === "folder"
-            ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht — und ein Ordner, den eine Regel nennt, ebenso wenig. Räumen Sie ihn vorher aus oder nehmen Sie ihn aus der Regel heraus."
-            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung."
+            ? text.deleteFolderConsequence
+            : text.deleteTagConsequence
         }
         {...(deleteError === null ? {} : { refusal: deleteError })}
-        confirmLabel={deleteError === null ? "Löschen" : "Erneut versuchen"}
-        cancelLabel={deleteError === null ? "Abbrechen" : "Schließen"}
+        confirmLabel={deleteError === null ? text.delete : labels().retry}
+        cancelLabel={deleteError === null ? labels().cancel : labels().close}
         onConfirm={() => {
           const target = pendingDelete;
           if (target === null) return;
@@ -495,7 +496,7 @@ export function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               setPendingDelete(null);
               setSelected(null);
               after();
-              toasts.success("Gelöscht.");
+              toasts.success(tagTexts().deleted);
             })
             .catch((cause: unknown) => {
               /*

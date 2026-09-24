@@ -13,14 +13,14 @@ import { createAddinRoutes } from '../../../src/routes/addin/index.ts';
 import { createEmailAttachmentIntake } from '../../../src/features/todos/email-attachments.ts';
 
 const NOW = '2026-09-15T12:00:00Z' as Timestamp;
-function input(identity = 'message-one', mode: 'auto' | 'new' = 'auto'): MailAssignment {
+function input(identity = 'message-one'): MailAssignment {
   const fields = {
     title: 'CALL24470 Rückfrage', callNumber: '24470', statusId: null, tagIds: [], tagNames: [' Neu '],
     note: 'Persönlicher Text', dueDate: null, dueTime: null, estimateMinutes: 35,
     attachments: { sender: 'sender@example.test', items: [{ kind: 'file' as const, displayName: 'bericht.pdf', contentBase64: Buffer.from('fake pdf').toString('base64') }] },
   };
   return { ...fields, requestId: randomUUID(), mail: { identity, subject: 'AW: CALL24470 Rückfrage', sender: 'sender@example.test', receivedAt: NOW,
-    internetMessageId: `<${identity}@example.test>`, outlookLink: null, excerpt: 'Optionaler Mailtext' }, target: { kind: mode, input: fields } };
+    internetMessageId: `<${identity}@example.test>`, outlookLink: null, excerpt: 'Optionaler Mailtext' }, target: { kind: 'new', input: fields } };
 }
 function success(result: Awaited<ReturnType<ReturnType<typeof createMailAssignment>>>): MailAssignmentResult {
   if (!result.ok) throw new Error(result.error.message);
@@ -63,7 +63,7 @@ describe('Outlook mail assignment with real SQLite and files', () => {
     const tables = ['todo', 'todo_note', 'todo_tag', 'time_entry', 'timer_heartbeat', 'export_run', 'export_audit'];
     const snapshot = () => tables.map(table => db.connection.prepare(`SELECT * FROM ${table}`).all());
     const before = snapshot();
-    const second = success(await assign(input('message-two')));
+    const second = success(await assign({ ...input('message-two'), target: { kind: 'existing', todoId: first.todo.id } }));
     expect(second.outcome).toBe('appended');
     expect(second.todo.id).toBe(first.todo.id);
     expect(snapshot()).toEqual(before);
@@ -79,7 +79,7 @@ describe('Outlook mail assignment with real SQLite and files', () => {
     const early = input('early');
     const late = input('late');
     const first = success(await assign({ ...early, mail: { ...early.mail, receivedAt: '2026-09-15T13:00:00+02:00' } }));
-    success(await assign({ ...late, mail: { ...late.mail, receivedAt: '2026-09-15T12:00:00Z' } }));
+    success(await assign({ ...late, mail: { ...late.mail, receivedAt: '2026-09-15T12:00:00Z' }, target: { kind: 'existing', todoId: first.todo.id } }));
     await db.transactions.inTransaction(async unit => {
       expect((await unit.mails.list(first.todo.id)).map(mail => mail.internetMessageId)).toEqual(['<late@example.test>', '<early@example.test>']);
     });
@@ -88,20 +88,20 @@ describe('Outlook mail assignment with real SQLite and files', () => {
     const assign = createMailAssignment(context);
     const same = input();
     const results = await Promise.all([assign(same), assign(same), assign(input('other'))]);
-    expect(results.map(result => success(result).outcome)).toEqual(['created', 'already_present', 'appended']);
-    expect(db.connection.prepare('SELECT * FROM todo').all()).toHaveLength(1);
+    expect(results.map(result => success(result).outcome)).toEqual(['created', 'already_present', 'created']);
+    expect(db.connection.prepare('SELECT * FROM todo').all()).toHaveLength(2);
     expect(db.connection.prepare('SELECT * FROM todo_mail').all()).toHaveLength(2);
     expect(db.connection.prepare('SELECT * FROM todo_attachment').all()).toHaveLength(2);
     expect(await context.attachmentBlobs.listEmailFiles()).toHaveLength(2);
   });
-  it('allows conscious new tasks, but rejects ambiguous automatic assignment', async () => {
+  it('allows conscious new tasks and makes their retries idempotent', async () => {
     const assign = createMailAssignment(context);
     success(await assign(input()));
-    const explicit = input('message-one', 'new');
+    const explicit = input('message-one');
     expect(success(await assign(explicit)).outcome).toBe('created');
     expect(success(await assign(explicit)).outcome).toBe('already_present');
-    expect((await assign(input('message-three'))).ok).toBe(false);
-    expect(db.connection.prepare('SELECT * FROM todo').all()).toHaveLength(2);
+    expect(success(await assign(input('message-three'))).outcome).toBe('created');
+    expect(db.connection.prepare('SELECT * FROM todo').all()).toHaveLength(3);
   });
   it('never merges tasks without a valid call number', async () => {
     const assign = createMailAssignment(context);

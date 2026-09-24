@@ -36,6 +36,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import ts from 'typescript';
 
 /*
  * --- Die Ankerpunkte im Quellbaum (T-249-6) --------------------------------
@@ -53,6 +54,7 @@ import path from 'node:path';
 import {
   MissingSourceError,
   displayPath,
+  locateSingleSource,
   locateWorkspacePackage,
   readTreeSync,
   requireAtLeast,
@@ -71,12 +73,6 @@ import { detectCallNumber } from '../src/callnumber/detect.ts';
 import { runPattern } from '../src/callnumber/run.ts';
 import { decideLookup, describeOffers } from '../src/duplicate/rule.ts';
 import { duplicateNotice } from '../src/duplicate/notice.ts';
-import {
-  REOPEN_HINT,
-  bookingOutcome,
-  reopenOutcome,
-  reopenPreview,
-} from '../src/duplicate/reopen.ts';
 import { createSettingsStore, describeToken, looksLikeToken } from '../src/settings/store.ts';
 import { createApiClient } from '../src/api/client.ts';
 import { flattenTagTree, filterTags } from '../src/tags/tree.ts';
@@ -86,11 +82,11 @@ import {
   removePendingTagName,
 } from '../src/tags/new-name.ts';
 import {
-  MAX_TAKEOVER_CHARACTERS,
   MAX_TITLE_CHARACTERS,
   prepareNote,
   suggestTitle,
 } from '../src/office/mail.ts';
+import { mailMetadata } from '../src/office/save-mail.ts';
 import { HIDDEN_MARKER, dropHidden, hasHidden, visibleText } from '../src/text/hidden.ts';
 import { cutToCharacterBoundary } from '../src/text/cut.ts';
 import { dueDateForRequest, readDueDate } from '../src/duedate/entry.ts';
@@ -101,6 +97,7 @@ import {
   withDescription,
 } from '../src/ui/field.ts';
 import { createTodoGate } from '../src/ui/create-gate.ts';
+import { TEXTS } from '../src/ui/texts.ts';
 import {
   base64ByteLength,
   normalizeBase64,
@@ -197,15 +194,9 @@ import { parseYaml } from '../../local-api/scripts/openapi-reader.mjs';
  */
 import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/features/todos/routes.ts';
 import {
-  ADDIN_NOTE_MAX_LENGTH,
-  ADDIN_TAG_IDS_MAX,
-  ADDIN_BOOKING_NOTE_MAX_LENGTH,
-  ADDIN_TAG_NAMES_MAX,
   REQUEST_SCHEMAS as ADDIN_REQUEST_SCHEMAS,
-  bookSchema as addinBookSchema,
   createTodoSchema as addinCreateTodoSchema,
 } from '../../local-api/src/routes/addin/schema.ts';
-import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/features/timer/routes.ts';
 
 /*
  * --- Prüflinge: die **echte** Speicherung und der **andere** Weg (T-061) ----
@@ -269,19 +260,25 @@ import {
   DUE_DATE_SHAPE,
   FORBIDDEN_NAME_CHARACTERS,
   HIDDEN_MARKER as DOMAENE_MARKE,
+  MAIL_EXCERPT_MAX_LENGTH,
+  MAIL_IDENTITY_MAX_LENGTH,
+  MAIL_MESSAGE_ID_MAX_LENGTH,
+  MAIL_NOTE_MAX_LENGTH,
+  MAIL_SENDER_MAX_LENGTH,
+  MAIL_SUBJECT_MAX_LENGTH,
   MAX_DUE_YEAR,
   MAX_TAG_NAME_LENGTH,
   MAX_TITLE_CHARACTERS as DOMAENE_MAX_TITEL,
   MIN_DUE_YEAR,
   POOL_RULE_AXIS_IDS,
   POOL_RULE_AXIS_OF_FIELD,
+  TODO_TAG_IDS_MAX,
+  TODO_TAG_NAMES_MAX,
   checkCallNumber,
   dropHiddenCharacters,
   hasHiddenCharacter,
   isCalendarDay,
-  matchesPool,
   mayLookUpDuplicates,
-  poolMovementSentence,
   tagNameKey,
   visibleText as domaeneVisibleText,
 } from '@takt/domain';
@@ -296,15 +293,9 @@ import {
 import { renderExportGroup } from '../../../packages/export/src/render.ts';
 
 import {
-  AXIS_POOL,
-  AXIS_POOLS,
-  AXIS_TODO,
-  E057_POOLS,
   ID,
   MAIL_MIT_NUMMER,
   MAIL_OHNE_NUMMER,
-  PLACEMENT_POOLS,
-  buildAxisTodos,
   buildTagTree,
   createFakeStore,
   createMemoryStorage,
@@ -629,6 +620,20 @@ const FREMDE_ORTE = Object.freeze({
     marke: 'EmailAttachmentIntake',
     zweck: 'die Naht der Anhangsübernahme — A-A-82 im Typ (T-299, T-304)',
   }),
+  /** Read: section 16, O-LE — the add-in door names its caps from the domain. */
+  addinTuer: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['src', 'routes', 'addin', 'schema.ts'],
+    marke: 'mailMetadataSchema',
+    zweck: 'the origin of the add-in door caps (O-LE, T-398b)',
+  }),
+  /** Read: section 16, O-LE — the main door names the same tag caps. */
+  hauptTuer: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['src', 'features', 'todos', 'routes.ts'],
+    marke: 'REQUEST_SCHEMAS',
+    zweck: 'the origin of the main door tag caps (O-LE, T-398b)',
+  }),
   /** Gelesen: Abschnitt 16, 18b und 18c. */
   schnittstelle: Object.freeze({
     paket: '@takt/local-api',
@@ -780,6 +785,9 @@ const sourceWithoutComments = (file) => {
   return /\.tsx?$/.test(file) ? text.replace(/\/\/.*$/gm, '') : text;
 };
 
+/** The task pane without comments — read by sections 18 and 19. */
+const paneQuelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
+
 check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => {
   /*
    * Der Befund, der zu E-058 geführt hat, in einer statischen Zeile.
@@ -816,13 +824,12 @@ check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => 
   // Und die Gegenprobe zur Gegenprobe: Der Aufgabenbereich **ruft** die
   // Funktion. Ohne sie wäre die Zeile darüber auch dann grün, wenn der Satz
   // gar nicht mehr vorkäme.
+  // Since E-120 the add-in books nothing, so it announces no pool movement either (A-10.16).
   const rufer = files.filter((file) => /poolMovementSentence\s*\(/.test(sourceWithoutComments(file)));
-  // PR #15: the booking API and its legacy presentation helper remain;
-  // the follow-up UI no longer announces a booking or a pool movement.
   assert.deepEqual(
     rufer.map((file) => path.relative(srcRoot, file)).sort(),
-    [path.join('duplicate', 'reopen.ts')],
-    'der verbleibende Buchungshelfer muss den Satz aus der Domäne beziehen',
+    [],
+    'der Aufgabenbereich kündigt wieder eine Poolbewegung an — es gibt keine Buchung im Add-in (E-120)',
   );
 });
 
@@ -865,10 +872,12 @@ check('E-058 Absatz 1: der Add-in-Dienst wertet keine Poolregel mehr selbst aus'
     false,
     'der Add-in-Dienst wertet wieder selbst eine Poolregel aus (E-058 Absatz 1)',
   );
-  assert.match(
-    service,
-    /poolMovementNamer/,
-    'der Add-in-Dienst fragt den Anwendungsfall nicht mehr — woher kommt die Bewegung?',
+  // Since E-125 point 1 the service computes no movement at all: the match
+  // carries none, so there is nothing to ask the use case for either.
+  assert.equal(
+    /\bpoolMovementNamer\s*\(|\bbookingMovementStates\s*\(/.test(service),
+    false,
+    'der Add-in-Dienst rechnet wieder eine Poolbewegung — der Treffer trägt keine (E-125 Punkt 1)',
   );
 });
 
@@ -1417,14 +1426,13 @@ check('R-15: das Angebot trägt Titel und Call-Nummer, nicht nur eine Kennung', 
       completedAt: null,
       openSeconds: 2700,
       exportedSeconds: 3600,
-      poolMovement: { appears: ['Wartung Nord'], enters: [], leaves: [] },
     },
   ]);
   assert.equal(offers.length, 1);
   assert.equal(offers[0].title, 'Lüftung Notbetrieb');
   assert.equal(offers[0].callNumber, 'TCK-000042');
-  assert.match(offers[0].summary, /0:45 h offen/);
-  assert.match(offers[0].summary, /1:00 h bereits exportiert/, 'die abgerechnete Zeit fehlt im Angebot');
+  // A-10.16: the add-in offers no time tracking, so the offer carries no booked or exported time.
+  assert.deepEqual(Object.keys(offers[0]).sort(), ['callNumber', 'isDone', 'title', 'todoId']);
 });
 
 check('Ein Treffer ohne plausible Call-Nummer wird gar nicht erst angeboten', () => {
@@ -1438,7 +1446,6 @@ check('Ein Treffer ohne plausible Call-Nummer wird gar nicht erst angeboten', ()
       completedAt: null,
       openSeconds: 0,
       exportedSeconds: 0,
-      poolMovement: { appears: [], enters: [], leaves: [] },
     },
   ]);
   assert.deepEqual(offers, []);
@@ -1455,240 +1462,33 @@ check('Ein erledigtes Todo wird im Angebot als solches ausgewiesen (A-2.4)', () 
       completedAt: '2026-02-01T10:00:00Z',
       openSeconds: 0,
       exportedSeconds: 0,
-      poolMovement: { appears: ['Wartung Nord'], enters: [], leaves: [] },
     },
   ]);
   assert.equal(offers[0].isDone, true);
-  assert.match(offers[0].summary, /Erledigt/);
-  assert.deepEqual(
-    offers[0].poolMovement.appears,
-    ['Wartung Nord'],
-    'ohne die Bewegung kann das Angebot nicht sagen, wo das Todo nach dem Buchen steht',
-  );
-});
-
-// C-03 (T-025) — die Aufhebung ist automatisch und wird angesagt
-
-check('C-03: die Trefferliste kündigt die Aufhebung an, statt sie zur Wahl zu stellen', () => {
-  assert.match(REOPEN_HINT, /automatisch/, 'der Hinweis sagt nicht, dass es von selbst geschieht');
-  // Seit E-080 siezt Takt. „wenn du" allein finge die bedingte Formulierung
-  // nicht mehr, in die sie beim nächsten Umschreiben rutschen könnte.
   assert.equal(
-    /sofern|wenn (?:du|Sie)|ausdrücklich|Kästchen/.test(REOPEN_HINT),
+    Object.hasOwn(offers[0], 'poolMovement'),
     false,
-    `bedingt formuliert: ${REOPEN_HINT}`,
+    'das Angebot kündigt wieder eine Buchungsbewegung an — das Add-in bucht nicht (E-120)',
   );
 });
 
-/*
- * ---------------------------------------------------------------------------
- * Wie hier seit T-092 gegen den Satz geprüft wird (E-058)
- * ---------------------------------------------------------------------------
- *
- * Nicht mehr gegen eine **Abschrift** des Wortlauts, sondern gegen die
- * **Funktion**: `poolMovementSentence` aus `@takt/domain` ist die eine Quelle,
- * und die Erwartung entsteht aus demselben Aufruf mit denselben Argumenten.
- *
- * Das klingt nach einer Prüfung, die sich selbst bestätigt, und ist das
- * Gegenteil. Gemessen wird nicht, welchen Satz die Domäne formuliert — das
- * messen die Einheitentests dort, zeichengenau gegen den Wortlaut aus E-058
- * Punkt 4. Gemessen wird, ob der Aufgabenbereich **denselben** Satz zeigt: mit
- * demselben Anlass (`'reopen'` gegen `'booking'` — sie zählen verschiedene
- * Listen auf), derselben Zeitform und derselben Bewegung. Eine Abschrift im
- * Add-in, ein vertauschter Anlass, eine verlorene Liste unterwegs — jeder
- * dieser drei Fehler macht die Zeile rot, und keiner von ihnen wird grün, nur
- * weil die Domäne ihren Wortlaut ändert.
- *
- * Der Wortlaut selbst wird hier deshalb **nicht** buchstabiert. Er hat sich mit
- * T-093 geändert (kein Gattungswort mehr vor dem Namen), und eine Abschrift
- * hätte genau das zu einer roten Zeile im Add-in gemacht — für eine Änderung,
- * die in einer Entscheidung steht und in keiner Datei dieses Teilbaums.
- *
- * Was hier trotzdem buchstabiert wird, sind die Eigenschaften, die **unabhängig
- * vom Wortlaut** gelten müssen: dass Namen einzeln genannt und nicht gezählt
- * werden, dass der Buchungssatz keine Rückkehr behauptet, dass es ein Satz
- * bleibt und nicht zwei, und dass ohne Bewegung gar keiner entsteht.
- */
-
-check('I-05: die Ankündigung vor dem Buchen nennt alle drei Wirkungen und die Pools einzeln', () => {
-  const bewegung = { appears: ['Wartung Nord', 'Offene Störungen'], enters: [], leaves: [] };
-  const notice = reopenPreview(15, bewegung);
-
-  assert.equal(notice.effects.length, 3, 'es sind nicht drei Wirkungen');
-  assert.match(notice.effects[0], /15 Minuten/, 'die Buchung selbst fehlt');
-  assert.match(notice.effects[1], /automatisch aufgehoben/, 'die Aufhebung fehlt');
-
-  // Die dritte Wirkung ist **die Funktion** und keine Abschrift daneben.
-  assert.equal(
-    notice.effects[2],
-    poolMovementSentence(bewegung, 'future', 'reopen'),
-    'der Aufgabenbereich formuliert den Satz selbst, statt die Domäne zu fragen (E-058)',
-  );
-
-  assert.match(notice.effects[2], /Wartung Nord/, 'der erste Pool fehlt');
-  assert.match(notice.effects[2], /Offene Störungen/, 'der zweite Pool fehlt');
-  assert.equal(/\b2 Pools\b/.test(notice.effects[2]), false, 'die Pools sind gezählt statt genannt');
-
-  /*
-   * E-058 Absatz 2: `CARD_STAYS` ist **ersatzlos** gestrichen. Kein viertes
-   * Feld, keine vierte Zeile — und vor allem kein neuer Satz an derselben
-   * Stelle, der dasselbe behauptet. Der Nachweis ist statisch, weil er auch die
-   * Wiedereinführung treffen soll und nicht nur diesen einen Aufruf.
-   */
-  assert.equal(
-    Object.hasOwn(notice, 'aside'),
-    false,
-    'die abgesetzte Zeile ist zurück — E-058 Absatz 2 streicht sie ersatzlos',
-  );
-  for (const effect of notice.effects) {
-    assert.equal(
-      /Karte bleibt|ändert sich dadurch nicht/.test(effect),
-      false,
-      `der gestrichene Satz steht wieder da: ${effect}`,
-    );
-  }
-});
-
-check('I-05: die Rückmeldung danach sagt dasselbe wie die Ankündigung davor', () => {
-  const bewegung = { appears: ['Wartung Nord'], enters: [], leaves: [] };
-  const before = reopenPreview(30, bewegung);
-  const after = reopenOutcome('Turnuswartung Frühjahr', 30, bewegung);
-
-  assert.equal(after.effects.length, before.effects.length);
-  assert.match(after.title, /wieder offen/);
-  assert.match(after.title, /Turnuswartung Frühjahr/);
-  assert.match(after.effects[1], /aufgehoben/);
-  assert.match(after.effects[2], /Wartung Nord/);
-
-  // Dieselbe Bewegung, derselbe Anlass, die andere Zeitform — beide Male aus
-  // der Funktion. Ein vertauschter Anlass fiele hier auf: `'booking'` zählt
-  // `enters` auf und gäbe für diese Bewegung `null`.
-  assert.equal(before.effects[2], poolMovementSentence(bewegung, 'future', 'reopen'));
-  assert.equal(after.effects[2], poolMovementSentence(bewegung, 'past', 'reopen'));
-
-  /*
-   * Die Aufzählung: ein Name allein, zwei mit „und" dazwischen. Das ist die
-   * Eigenschaft, die den Wortlautwechsel aus T-093 überlebt — dort ist der
-   * Einschub „dem Pool"/„den Pools" weggefallen, die Aufzählung nicht.
-   */
-  assert.match(before.effects[2], /„Wartung Nord“/);
-  assert.match(
-    reopenPreview(30, { appears: ['Ost', 'West'], enters: [], leaves: [] }).effects[2],
-    /„Ost“ und „West“/,
-  );
-});
-
-check('Ein Todo ohne passende Regel bekommt die unangenehme Wahrheit, nicht Schweigen', () => {
-  const nichts = { appears: [], enters: [], leaves: [] };
-
-  // Der Wiederöffnen-Satz hat **immer** etwas zu sagen, auch wenn beide Listen
-  // leer sind. Das ist die Zusage der Überladung, und der Aufgabenbereich zeigt
-  // sie als dritte Wirkung.
-  for (const tense of ['future', 'past']) {
-    const satz = poolMovementSentence(nichts, tense, 'reopen');
-    assert.equal(typeof satz, 'string');
-    assert.ok(satz.length > 0, 'ein Satz mit null Zeichen ist kein Satz');
-    assert.match(satz, /keine Regel/, 'der Grund fehlt');
-  }
-
-  assert.equal(reopenPreview(15, nichts).effects[2], poolMovementSentence(nichts, 'future', 'reopen'));
-  assert.equal(
-    reopenOutcome('Ohne Regel', 15, nichts).effects[2],
-    poolMovementSentence(nichts, 'past', 'reopen'),
-  );
-});
-
-// T-084 — derselbe Anlass, ein anderer Satz: die Buchung ohne Aufhebung
-
-/*
- * E-056 verlangt einen Satz, wenn eine Buchung Pools betrifft. Bis T-084 gab
- * es ihn nur dort, wo „Erledigt" aufgehoben wird — mit der Begründung, nur
- * dort könne etwas **verschwinden**. Für das Verschwinden stimmt das; für das
- * **Erscheinen** nicht. Die erste Buchung auf einem Todo ohne Buchung setzt
- * „hat offene Buchungen" von falsch auf wahr, und jede Spalte mit
- * `exportState: 'open'` nimmt es damit auf.
- *
- * Zwei Prüfungen, und die zweite ist die wichtigere: Der Satz darf nicht immer
- * dastehen. Er entsteht aus der **Bewegung**, nicht aus dem Zustand.
- */
-
-check('T-084: die erste Buchung auf einem offenen Todo bekommt einen eigenen Satz — ohne „wieder"', () => {
-  const bewegung = {
-    appears: ['Wartung Nord', 'Offen abzurechnen'],
-    enters: ['Offen abzurechnen'],
-    leaves: [],
-  };
-
-  const vorher = poolMovementSentence(bewegung, 'future', 'booking');
-  const nachher = poolMovementSentence(bewegung, 'past', 'booking');
-
-  // Kein „wieder" und kein „zurück": Aufgehoben wird hier nichts, und ein Wort,
-  // das eine Vorgeschichte behauptet, ist an dieser Stelle eine Unwahrheit.
-  for (const satz of [vorher, nachher]) {
-    assert.equal(typeof satz, 'string', 'die Bewegung ist da, der Satz fehlt');
-    assert.equal(/wieder|zurück/.test(satz), false, `der Satz behauptet eine Rückkehr: ${satz}`);
-    assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
-    assert.match(satz, /„Offen abzurechnen“/, 'die eine Änderung wird nicht beim Namen genannt');
-  }
-
-  /*
-   * Der Kern: Der Anlass entscheidet, **welche** Liste aufgezählt wird.
-   * `'booking'` nennt `enters`, `'reopen'` nennt `appears`. „Wartung Nord" ist
-   * der Pool, in dem das Todo ohnehin schon stand — er gehört in den einen Satz
-   * und nicht in den anderen. Ein vertauschter Anlass fiele genau hier auf.
-   */
-  assert.equal(/Wartung Nord/.test(vorher), false, 'der Satz zählt auf, was sich nicht geändert hat');
-  assert.match(poolMovementSentence(bewegung, 'future', 'reopen'), /Wartung Nord/);
-
-  // Die Aufzählung: zwei Namen mit „und" dazwischen, einzeln genannt und nicht
-  // gezählt. Dieselbe Aufzählung wie im Wiederöffnen-Satz, weil sie aus
-  // derselben Stelle kommt.
-  assert.match(
-    poolMovementSentence({ appears: [], enters: ['Ost', 'West'], leaves: [] }, 'future', 'booking'),
-    /„Ost“ und „West“/,
-  );
-});
-
-check('T-084: ohne Bewegung kein Satz — und die Bestätigung ist Zeichen für Zeichen die von vorher', () => {
-  // Das Todo steht in einem Pool und bleibt dort. `appears` ist besetzt, die
-  // Bewegung ist leer — genau der Fall, in dem ein Satz eine Ankündigung ohne
-  // Ereignis wäre.
-  const ohneBewegung = { appears: ['Wartung Nord'], enters: [], leaves: [] };
-
-  assert.equal(poolMovementSentence(ohneBewegung, 'future', 'booking'), null);
-  assert.equal(poolMovementSentence(ohneBewegung, 'past', 'booking'), null);
-
-  const notice = bookingOutcome(15, ohneBewegung);
-  assert.equal(notice.pools, null, 'ein Satz ohne Ereignis');
-  assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
-
-  // `null` und kein leerer String: Ein Satz mit null Zeichen bekommt in der
-  // Oberfläche trotzdem eine Zeile. Die Aufrufstelle muss den Fall behandeln.
-  assert.equal(notice.pools === '', false, 'aus `null` ist ein leerer Satz geworden');
-
-  // Kein Halbsatz, kein Komma zu viel, keine leere Aufzählung — die Auflage aus
-  // E-056, eine Stufe früher angewandt.
-  assert.equal(/Pool/.test(notice.booked), false, `ein Halbsatz ist übrig geblieben: ${notice.booked}`);
-});
-
-heading('5b  Die Duplikatfläche sagt, was sie gefunden hat (A-10.9, R-15, Y-02 bis Y-04)');
+heading('5b  Die Duplikatfläche sagt, was sie gefunden hat (A-10.11, A-10.16, R-15, Y-02 bis Y-04)');
 
 /*
  * Drei Befunde aus dem Spezifikations- und UX-Review zu T-247, in einem
  * Abschnitt, weil sie eine Fläche sind:
  *
- *  - **Y-02.** Die beiden gesperrten Sätze SP-A-27 und SP-A-28 standen nach
- *    dem Rückbau zeichengleich da, ihr Bezugswort aber nicht mehr: „Dabei"
- *    verwies auf das Anhängen, und davor steht seit T-247 „Bearbeiten Sie das
- *    vorhandene Todo in SuperTakt". Auf **diesem** Weg waren beide Sätze
- *    falsch — in SuperTakt lässt sich Zeit auf dem vorhandenen Todo erfassen,
- *    und ein Timerstart hebt „Erledigt" auf (A-2.5, I-05). Der Wortlaut ist
- *    vom Auftraggeber neu entschieden; der Änderung der beiden gesperrten
- *    Sätze hat der spec-ux-reviewer ausdrücklich zugestimmt (E-078 Punkt 3).
- *  - **Y-03.** Die Warnung nennt die Treffer wieder. A-10.9 verbietet eine
- *    **Handlung** am gefundenen Todo, keine **Angabe** darüber; eine anonyme
- *    Warnung überliest jeder, und dann entsteht das Duplikat unbemerkt — der
- *    Schaden aus R-15.
+ *  - **Y-02.** SP-A-27 and SP-A-28 are bound to the branch where they hold:
+ *    they show only while the mail extends an existing todo
+ *    (`target !== 'new'`) and state what A-10.12 guarantees there: appending
+ *    records no time and leaves done, timer and bookings untouched. Next to
+ *    „new todo" or a pointer to the main app they would be false, because a
+ *    timer start there clears „done" (A-2.5). Reworded in T-398c, approved by
+ *    the spec-ux-reviewer (T-414 S-7, E-078 point 3).
+ *  - **Y-03.** The surface names each match: title, call number and, if done,
+ *    the done mark. Under A-10.11 and A-10.16 the user picks the target there;
+ *    an anonymous warning gets skipped and the duplicate appears unnoticed
+ *    (the harm from R-15).
  *  - **Y-04.** Die Live-Region steht **immer** im Baum. Bis T-247-3 gab
  *    `DuplicateOffer` `null` zurück, solange kein Treffer vorlag — dieselbe
  *    Bauart, die `Primitives.tsx` bei `Field` seit T-158 ausdrücklich als
@@ -1709,10 +1509,6 @@ const trefferBauen = (nummer, titel, erledigt) => ({
   title: titel,
   callNumber: `TCK-${nummer}`,
   isDone: erledigt,
-  openSeconds: 0,
-  exportedSeconds: 0,
-  poolMovement: null,
-  summary: 'Bereits gebucht: 0:00 h offen.',
 });
 
 check('Y-04: „gesucht und nichts gefunden" ist ein eigener Fall — nicht derselbe wie „nicht gesucht"', () => {
@@ -1777,17 +1573,16 @@ check('A-10.16: die Trefferfläche wählt nur das Ziel und schreibt selbst keine
 });
 
 /**
- * Der Rumpf der Warnung, aus seinen Teilen zusammengesetzt.
+ * The body of the note above the matching todos, from its parts.
  *
- * Die beiden hinteren Teile sind SP-A-27 und SP-A-28 in ihrer neuen Fassung;
- * Abschnitt 20 hält sie einzeln. Sie stehen **hier** und werden dort gelesen,
- * damit es den Satz im Lauf nur einmal gibt — zwei Abschriften desselben
- * Textes sind zwei Gelegenheiten, Verschiedenes zu behaupten (E-078).
+ * The two rear parts are SP-A-27 and SP-A-28; section 20 holds them one by one.
+ * Since T-398c (E-133 point 2, E-029) they say „Todo" instead of „Aufgabe" and
+ * live in the text bundle (E-118), not in the JSX.
  */
 const SP_A_27 = 'Das Ergänzen erfasst keine Zeit';
-const SP_A_28 = 'und lässt erledigte Aufgaben erledigt.';
+const SP_A_28 = 'und lässt erledigte Todos erledigt.';
 const WARNUNG_RUMPF =
-  'Die E-Mail wird als Anhang an der ausgewählten Aufgabe gespeichert. ' +
+  'Die E-Mail wird als Anhang am ausgewählten Todo gespeichert. ' +
   `${SP_A_27} ${SP_A_28}`;
 
 /**
@@ -1802,62 +1597,54 @@ const flaeche = (...teile) =>
   sourceWithoutComments(path.join(srcRoot, ...teile)).replace(/\s+/g, ' ');
 
 check('Y-02: der Rumpf der Warnung steht im Wortlaut des Auftraggebers', () => {
+  assert.equal(TEXTS.offerAppendNote, WARNUNG_RUMPF, `der Rumpf lautet nicht mehr: „${WARNUNG_RUMPF}"`);
+
   const quelle = flaeche('ui', 'DuplicateOffer.tsx');
   assert.ok(quelle.length > 500, 'die Quelle ist leer — dann misst diese Zeile nichts');
-  assert.ok(quelle.includes(WARNUNG_RUMPF), `der Rumpf lautet nicht mehr: „${WARNUNG_RUMPF}"`);
+  // A-10.16/T-409c: the note speaks about appending, so it disappears once „new todo" is chosen.
+  assert.ok(
+    quelle.includes("{target !== 'new' ? <p>{TEXTS.offerAppendNote}</p> : null}"),
+    'der Anhangssatz steht auch dann, wenn ein neues Todo gewählt ist',
+  );
 
-  /*
-   * Und die alte Fassung ist weg — nicht bloß die neue da. „Dabei wird auf dem
-   * vorhandenen Todo keine Zeit erfasst." war unter dem neuen ersten Satz
-   * falsch; stünde sie daneben, stünden beide da.
-   */
-  assert.equal(
-    quelle.includes('Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.'),
-    false,
-    'die alte Fassung von SP-A-27 steht noch da — dann sagt die Fläche beides',
-  );
-  assert.equal(
-    quelle.includes('Ein erledigtes Todo bleibt erledigt.'),
-    false,
-    'die alte Fassung von SP-A-28 steht noch da',
-  );
+  // The old wordings are gone, not merely the new one present.
+  const texte = [quelle, flaeche('ui', 'texts.ts')].join(' ');
+  for (const alt of [
+    'Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.',
+    'Ein erledigtes Todo bleibt erledigt.',
+    'an der ausgewählten Aufgabe',
+    'erledigte Aufgaben erledigt',
+  ]) {
+    assert.equal(texte.includes(alt), false, `eine alte Fassung steht noch da: „${alt}"`);
+  }
 });
 
 /**
- * Steht die Live-Region außerhalb jeder Bedingung?
+ * Is the live region always in the tree, and does it hold only the status sentence?
  *
- * Drei Teile, und alle drei sind nötig: Die Fläche gibt **kein** `null`
- * zurück, sie trägt die Region mit ihrer Rolle, und die Region steht **vor**
- * der ersten Fallunterscheidung. Der letzte Teil allein wäre erfüllt, wenn
- * darüber ein `return null` stünde; der erste allein, wenn die Rolle am
- * Hinweis säße, der kommt und geht.
+ * Three parts: the component returns no `null`; the status paragraph with its
+ * role comes before the first case distinction; and the role sits on that
+ * paragraph only — the radio group and its button are not inside the live
+ * region (T-409c: a region around controls announces every selection change).
  */
+const STATUS_REGION = '<p className="offer__status" role="status">';
 const regionStehtImmer = (quelle) => {
-  const region = quelle.indexOf('<div className="offer" role="status">');
+  const region = quelle.indexOf(STATUS_REGION);
+  const regionEnde = quelle.indexOf('</p>', region);
   const rueckgabeNull = /return null/.test(quelle);
   const ersteBedingung = quelle.indexOf('notice.kind ===');
-  return region >= 0 && !rueckgabeNull && ersteBedingung > region;
+  const innen = region >= 0 && regionEnde > region ? quelle.slice(region, regionEnde) : '';
+  const nurStatus = !/<fieldset|<input|<Button|<button/.test(innen);
+  return region >= 0 && !rueckgabeNull && ersteBedingung > region && nurStatus;
 };
 
 check('Y-04: die Duplikatfläche steht immer im Baum, auch ohne Treffer (SC 4.1.3)', () => {
-  /*
-   * Dieselbe Bauart und derselbe Grund wie bei `Field` (T-158) und im
-   * Bestätigungsdialog der Hauptanwendung (T-118): Eine Live-Region, die erst
-   * zusammen mit ihrem Inhalt entsteht, wird von vielen Vorlesehilfen nicht
-   * angesagt — sie melden Änderungen an einer Region, die sie kennen.
-   */
   const quelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'DuplicateOffer.tsx'));
   assert.equal(
     regionStehtImmer(quelle),
     true,
-    'die Warnung kommt zusammen mit ihrer Region in den Baum',
+    'die Statusmeldung kommt erst mit ihrem Inhalt in den Baum, oder die Region umschließt Bedienelemente',
   );
-
-  /*
-   * Und die Rolle sitzt **nicht** ein zweites Mal am Hinweis darin: Zwei
-   * ineinandergeschachtelte Live-Regionen sind keine doppelte Sicherheit.
-   * `Callout` nimmt dafür seit T-247-3 ein `role="none"` entgegen.
-   */
   assert.equal((quelle.match(/role="status"/g) ?? []).length, 1, 'Die Auswahl hat genau eine Live-Region');
   assert.match(
     sourceWithoutComments(path.join(srcRoot, 'ui', 'Primitives.tsx')),
@@ -1866,33 +1653,31 @@ check('Y-04: die Duplikatfläche steht immer im Baum, auch ohne Treffer (SC 4.1.
   );
 });
 
-check('Y-04, Gegenprobe: der frühere Bau würde rot — und zwar an beiden Beinen', () => {
+check('Y-04, Gegenprobe: die früheren Bauten würden rot — an allen drei Beinen', () => {
   const quelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'DuplicateOffer.tsx'));
 
-  // 1. Der Bau vor T-247-3: erst aussteigen, dann rendern.
+  // 1. The build before T-247-3: leave first, then render.
   const mitRueckgabe = quelle.replace(
     'const notice =',
     'if (offers.length === 0) return null;\n  const notice =',
   );
-  assert.notEqual(
-    mitRueckgabe,
-    quelle,
-    'die Verletzung ließ sich nicht einsetzen — der Sucher greift daneben',
-  );
+  assert.notEqual(mitRueckgabe, quelle, 'die Verletzung ließ sich nicht einsetzen — der Sucher greift daneben');
   assert.equal(regionStehtImmer(mitRueckgabe), false, 'ein `return null` bliebe unbemerkt');
 
-  // 2. Die Rolle am Inhalt statt an der Hülle.
-  const ohneRegion = quelle.replace(
-    '<div className="offer" role="status">',
-    '<div className="offer">',
-  );
+  // 2. No role on the status paragraph.
+  const ohneRegion = quelle.replace(STATUS_REGION, '<p className="offer__status">');
   assert.notEqual(ohneRegion, quelle, 'die zweite Verletzung ließ sich nicht einsetzen');
   assert.equal(regionStehtImmer(ohneRegion), false, 'eine Region ohne Rolle bliebe unbemerkt');
+
+  // 3. The build of PR #19: the region wraps the radio group and its button.
+  const umBedienelemente = quelle.replace(STATUS_REGION, `${STATUS_REGION}<fieldset><Button>x</Button></fieldset>`);
+  assert.notEqual(umBedienelemente, quelle, 'die dritte Verletzung ließ sich nicht einsetzen');
+  assert.equal(regionStehtImmer(umBedienelemente), false, 'eine Region um Bedienelemente bliebe unbemerkt');
 });
 
 check('Y-04: die leere Region wird nicht ausgeblendet — sonst kennt die Vorlesehilfe sie nicht', () => {
   const css = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8');
-  const regel = /\.offer:empty\s*\{([^}]*)\}/.exec(css);
+  const regel = /\.offer__status:empty\s*\{([^}]*)\}/.exec(css);
   assert.ok(
     regel !== null,
     'die leere Region trägt den Abstand der Bereichsspalte und schiebt den Bereich auseinander',
@@ -2211,41 +1996,16 @@ await checkAsync('B-12.3: der übernommene E-Mail-Text landet im internen Vermer
   );
 });
 
-await checkAsync('TP-ADDIN-02: nach dem Buchen entsteht kein zweites Todo mit derselben Nummer', async () => {
-  const before = [...state.todos.values()].filter((todo) => todo.callNumber === 'TCK-000042').length;
-
-  const result = await client.book({
-    todoId: ID.todoStoerung,
-    startedAt: '2026-03-02T08:30:00Z',
-    endedAt: '2026-03-02T09:00:00Z',
-    note: 'Rückruf und Ferndiagnose',
-  });
-
-  assert.equal(result.ok, true, result.ok ? '' : result.message);
-  assert.equal(result.value.timeEntry.durationSeconds, 1800);
-  assert.equal(result.value.todoWasDone, false);
-  assert.equal(result.value.doneCleared, false, 'an einem offenen Todo gibt es nichts aufzuheben');
-
-  const after = [...state.todos.values()].filter((todo) => todo.callNumber === 'TCK-000042').length;
-  assert.equal(after, before, 'es ist ein Duplikat entstanden');
-});
-
-await checkAsync('A-2.5/C-03: die Duplikatsuche zeigt „erledigt" und die Pools VOR der Buchung', async () => {
-  // Der Kern der Nacharbeit: Was nach der Buchung geschieht, steht schon in
-  // der Antwort, aus der der Benutzer sein Todo auswählt.
+await checkAsync('A-2.4: die Duplikatsuche zeigt ein erledigtes Todo als erledigt', async () => {
   const found = await client.findMatches('TCK-000815');
   const match = found.value.matches[0];
 
   assert.notEqual(match.completedAt, null, 'das erledigte Todo ist nicht als solches erkennbar');
 
   /*
-   * E-061 Punkt 3: **eine** Form, und die drei Namenslisten sind weg.
-   *
-   * Der Schlüsselvergleich und nicht bloß „`poolMovement` ist da": Ein Treffer,
-   * der beides trüge, sähe an jeder Prüfung grün aus und ließe zwei Formen
-   * nebeneinander weiterleben — genau der Zustand, den E-061 aufhebt. Und
-   * `undefined` ist die ehrliche Antwort für einen Aufrufer, der noch
-   * `poolNames` liest: Er bekommt nichts, nicht die halbe Wahrheit.
+   * The key comparison and not merely "`poolMovement` is absent": a match that
+   * grew a second shape would pass every field check. Since E-125 point 1 the
+   * match carries no pool movement — the add-in books nothing (E-120).
    */
   assert.deepEqual(
     Object.keys(match).sort(),
@@ -2255,7 +2015,6 @@ await checkAsync('A-2.5/C-03: die Duplikatsuche zeigt „erledigt" und die Pools
       'exportedSeconds',
       'id',
       'openSeconds',
-      'poolMovement',
       'statusId',
       'tagIds',
       'title',
@@ -2263,96 +2022,8 @@ await checkAsync('A-2.5/C-03: die Duplikatsuche zeigt „erledigt" und die Pools
     'die Gestalt des Treffers weicht von der Beschreibung ab (AddinTodoMatch)',
   );
 
-  // Für ein erledigtes Todo steht immer eine Bewegung da: Die Buchung hebt das
-  // Kennzeichen auf, also sind die beiden Zustände verschieden (E-061 Punkt 3).
-  assert.notEqual(match.poolMovement, null, 'die Bewegung fehlt im Angebot');
-  assert.deepEqual(match.poolMovement.appears, ['Wartung Nord'], 'die Pools fehlen im Angebot');
-
   const offer = describeOffers(found.value.matches)[0];
   assert.equal(offer.isDone, true);
-  assert.deepEqual(reopenPreview(15, offer.poolMovement).effects.length, 3);
-});
-
-await checkAsync('A-2.5: eine Buchung auf ein erledigtes Todo hebt „Erledigt" automatisch auf', async () => {
-  assert.notEqual(state.todos.get(ID.todoTurnus).completedAt, null, 'die Ausgangslage stimmt nicht');
-
-  const booked = await client.book({
-    todoId: ID.todoTurnus,
-    startedAt: '2026-03-02T10:00:00Z',
-    endedAt: '2026-03-02T10:15:00Z',
-    note: 'Nacharbeit',
-  });
-
-  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
-  assert.equal(booked.value.todoWasDone, true);
-  assert.equal(booked.value.doneCleared, true, 'das Kennzeichen ist stehen geblieben');
-
-  // Dieselbe Wache wie am Treffer: eine Form, keine Reste (E-061 Punkt 3).
-  assert.deepEqual(
-    Object.keys(booked.value).sort(),
-    ['doneCleared', 'poolMovement', 'timeEntry', 'todoWasDone'],
-    'die Gestalt der Buchungsantwort weicht von der Beschreibung ab',
-  );
-  assert.equal(state.todos.get(ID.todoTurnus).completedAt, null);
-
-  // E-023: Die Spalte ist die andere Achse. Sie bleibt.
-  assert.equal(state.todos.get(ID.todoTurnus).statusId, ID.statusBacklog, 'die Spalte wurde verschoben (E-023)');
-
-  // I-05: Der Dienst nennt die Pools, in denen das Todo jetzt wieder steht.
-  assert.notEqual(booked.value.poolMovement, null, 'die Bewegung fehlt in der Bestätigung');
-  assert.deepEqual(booked.value.poolMovement.appears, ['Wartung Nord']);
-  assert.match(
-    reopenOutcome('Turnuswartung Frühjahr', 15, booked.value.poolMovement).effects[2],
-    /Wartung Nord/,
-  );
-});
-
-await checkAsync('C-03: es gibt keinen Weg mehr, die Aufhebung zu unterdrücken', async () => {
-  // Ein Aufrufer aus der Zeit vor T-038 schickt das alte Feld weiter mit. Es
-  // darf ihm nicht gelingen, damit die Aufhebung abzuwählen — und die Buchung
-  // darf daran auch nicht scheitern.
-  seedTodo({
-    id: '01931f4e-0000-7000-8000-0000000050e3',
-    title: 'Nochmals erledigt',
-    callNumber: 'TCK-000816',
-    statusId: ID.statusInArbeit,
-    boardRank: 'o',
-    completedAt: '2026-02-27T16:00:00Z',
-    tagIds: [ID.tagStoerung],
-    createdAt: '2026-02-27T08:00:00Z',
-    updatedAt: '2026-02-27T16:00:00Z',
-  });
-
-  const response = await routerApp.request(
-    'http://127.0.0.1:17843/api/v1/addin/todos/01931f4e-0000-7000-8000-0000000050e3/time-entries',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        startedAt: '2026-03-02T13:00:00Z',
-        endedAt: '2026-03-02T13:15:00Z',
-        note: 'Nachtrag',
-        reopenIfDone: false,
-      }),
-    },
-  );
-
-  assert.equal(response.status, 201, 'das alte Feld lässt die Buchung scheitern');
-  const body = await response.json();
-  assert.equal(body.data.doneCleared, true, '`reopenIfDone: false` hat die Aufhebung verhindert');
-  assert.equal(body.data.todoWasDone, body.data.doneCleared, 'die beiden Werte fallen wieder auseinander');
-  assert.equal(state.todos.get('01931f4e-0000-7000-8000-0000000050e3').completedAt, null);
-});
-
-await checkAsync('Ein unbekanntes Todo liefert 404 und keine Buchung', async () => {
-  const result = await client.book({
-    todoId: '01931f4e-0000-7000-8000-0000000059ff',
-    startedAt: '2026-03-02T12:00:00Z',
-    endedAt: '2026-03-02T12:15:00Z',
-    note: '',
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.kind, 'not_found');
 });
 
 await checkAsync('Ein leerer Titel wird mit 422 und Feldangabe abgewiesen', async () => {
@@ -3122,130 +2793,16 @@ await checkAsync('T-047: scheitert die Anfrage, bleibt kein Tag zurück — an d
   });
 });
 
-heading('12  Die Pools eines Todos: fünf Regelachsen und beide Richtungen (T-076, T-078, E-056)');
+heading('12  Die Achsen der Poolregel (T-090)');
 
 /*
- * Der Befund, den dieser Abschnitt misst
- * --------------------------------------
- *
- * Seit T-076 ist eine Regel eine Struktur mit fünf benannten Feldern. Die
- * Rechnung des Add-in-Dienstes — bis T-092 `poolNamer` in
- * `routes/addin/service.ts`, seitdem `poolMovementNamer` in
- * `apps/local-api/src/pool-movement.ts` — gab `matchesPool` bis T-078 nur die
- * **erforderlichen Tags** mit, und `matchesPool` überspringt jede Achse, die
- * es nicht genannt bekommt. Eine Regel „Wartung, außer Störungen" wurde damit
- * zu „Wartung", und das Add-in nannte einen Pool, in dem das Todo nicht steht.
- * Der Fehler ging nie in die andere Richtung: zu viele Pools, nie zu wenige.
- *
- * Warum das schlimmer ist, als es klingt: Das Add-in nennt die Pools **vor**
- * dem Buchen (T-038, I-05), damit der Benutzer sieht, wo sein erledigtes Todo
- * danach auftaucht. Eine falsche Auskunft an dieser Stelle kostet nicht Zeit,
- * sondern Vertrauen — wer einmal vergeblich in „Wartung ohne Störungen" gesucht
- * hat, liest die Anzeige beim nächsten Mal nicht mehr.
- *
- * Gemessen wird gegen die **echten** Routen, mit acht Regeln, die alle
- * dieselben erforderlichen Tags tragen (siehe `AXIS_POOLS`). Ein Ergebnis, das
- * nur die Tags auswertet, müsste deshalb für jedes Todo alle sieben
- * eingerichteten Regeln nennen. Jeder Unterschied unten stammt nachweisbar aus
- * einer der neuen Achsen.
- *
- * Der zweite Teil des Abschnitts misst E-056: dass der Aufgabenbereich auch
- * ausspricht, **woraus** das Todo durch die Buchung verschwindet — in
- * demselben Satz, und nur dann, wenn eine Regel es betrifft.
+ * Sections 12 to 14 measured the `poolMovement` of each match (T-076, T-078,
+ * E-056, E-057, T-084, T-090). Since E-125 point 1 the match carries no
+ * movement: the add-in books nothing (E-120). The rule evaluation itself is
+ * measured where it runs, in `apps/local-api/test/usecases/pool-movement.test.ts`
+ * and `packages/domain/test/matches-pool-guard.test.ts`. The one pure domain
+ * guard below has no other home yet (T-398, open question to unit-tester).
  */
-
-const axisStore = createFakeStore({ pools: AXIS_POOLS });
-const axisApp = mountAddinRoutes(axisStore.deps);
-const axisClient = createApiClient({
-  baseUrl: 'http://127.0.0.1:17843',
-  token: () => 'takt_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
-  fetch: (url, init) => axisApp.request(String(url), init),
-});
-
-for (const todo of buildAxisTodos()) axisStore.seedTodo(todo);
-
-/*
- * Eine bereits **exportierte** Buchung am Turnus-Todo. Sie entsteht nicht über
- * `timeEntries.create` — eine neue Buchung ist immer offen (E-032) —, sondern
- * wird gesetzt, weil sie den Zustand herstellt, den die Achse `exported`
- * abfragt: ein Vorgang, an dem schon einmal abgerechnet wurde.
- */
-axisStore.state.timeEntries.push({
-  id: 'te-axis-exportiert',
-  todoId: AXIS_TODO.turnus,
-  startedAt: '2026-02-24T09:00:00Z',
-  endedAt: '2026-02-24T10:00:00Z',
-  durationSeconds: 3600,
-  note: 'Turnus, erster Teil',
-  exportStatus: 'exported',
-  exportCount: 1,
-  source: 'manual',
-  createdAt: '2026-02-24T10:00:00Z',
-  updatedAt: '2026-02-26T08:00:00Z',
-});
-
-/*
- * Und eine **offene** dazu. Erst damit ist das Turnus-Todo der Fall, für den
- * E-056 entschieden wurde: erledigt und noch nicht abgerechnet — es steht in
- * der Abrechnungsliste, und die Buchung nimmt es dort heraus.
- */
-axisStore.state.timeEntries.push({
-  id: 'te-axis-offen',
-  todoId: AXIS_TODO.turnus,
-  startedAt: '2026-02-25T14:00:00Z',
-  endedAt: '2026-02-25T15:00:00Z',
-  durationSeconds: 3600,
-  note: 'Turnus, zweiter Teil',
-  exportStatus: 'open',
-  exportCount: 0,
-  source: 'manual',
-  createdAt: '2026-02-25T15:00:00Z',
-  updatedAt: '2026-02-25T15:00:00Z',
-});
-
-/** Die Tags des Ordners „Wartung", aus demselben Baum, den der Dienst auflöst. */
-const WARTUNG_TAGS = flattenTagTree(buildTagTree())
-  .filter((tag) => tag.folderPath.includes('Wartung'))
-  .map((tag) => tag.id);
-
-/**
- * Die Bewegung eines Todos, über die Route und nicht über den Dienst.
- *
- * Alle drei Listen in einem Wert, genau so, wie sie seit T-104 auch in der
- * Antwort stehen (E-061 Punkt 3). Getrennt abzufragen hieße, den
- * Aufgabenbereich nachzubilden, statt ihn zu messen — und seit der Dienst den
- * Wert zusammengesetzt liefert, gäbe es hier auch nichts mehr
- * zusammenzusetzen.
- *
- * `null` ist eine gültige Antwort und keine Panne: Ein offenes Todo mit einer
- * offenen Buchung bewegt sich durch eine weitere nicht mehr. Die Prüfungen
- * unten unterscheiden die beiden Fälle ausdrücklich.
- */
-const movementOf = async (callNumber) => {
-  const result = await axisClient.findMatches(callNumber);
-  assert.equal(result.ok, true, result.ok ? '' : result.message);
-  assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  return result.value.matches[0].poolMovement;
-};
-
-/**
- * Dieselbe Frage mit der Zusage, dass es etwas zu berichten gibt.
- *
- * Ohne sie liefe eine Prüfung, die `null` bekommt, in „lesen von null" statt in
- * einen Satz, der sagt, welcher Fall gemessen werden sollte.
- */
-const requireMovement = async (callNumber) => {
-  const movement = await movementOf(callNumber);
-  assert.notEqual(
-    movement,
-    null,
-    `${callNumber} bewegt sich durch eine Buchung nicht — dann misst diese Prüfung den falschen Fall`,
-  );
-  return movement;
-};
-
-/** Nur die genannten Pools — für die Prüfungen, die von T-078 stammen. */
-const poolsOf = async (callNumber) => (await requireMovement(callNumber)).appears;
 
 /*
  * Die Wache gegen die **sechste** Achse, zweite Hälfte (R-1, T-090, T-092)
@@ -3278,928 +2835,6 @@ check('T-090: jede Achse der Domäne hat ein Feld auf der aufgelösten Regelseit
   // Die Gegenprobe zur Gegenprobe: Es gibt überhaupt Achsen. Eine leere
   // Aufzählung liefe fehlerfrei durch und prüfte nichts.
   assert.ok(POOL_RULE_AXIS_IDS.length >= 5, 'die Achsenliste der Domäne ist geschrumpft');
-});
-
-check('Die Ausgangslage: alle sieben eingerichteten Regeln fordern dieselben Tags', () => {
-  // Ohne diese Prüfung wäre jede Aussage unten mehrdeutig: Ein fehlender Pool
-  // könnte auch daran liegen, dass seine Tagliste nicht passt.
-  const eingerichtet = AXIS_POOLS.filter((pool) => pool.rule.length > 0);
-  assert.equal(eingerichtet.length, 7);
-  for (const pool of eingerichtet) {
-    assert.deepEqual(pool.rule, [{ kind: 'folder', folderId: ID.folderWartung }], pool.name);
-    assert.equal(pool.matchMode, 'any', pool.name);
-    assert.equal(pool.includeSubfolders, true, pool.name);
-  }
-
-  // Und beide Todos erfüllen diese eine Tagliste — sonst prüfte der Abschnitt
-  // nur, dass eine unpassende Regel nicht trifft.
-  assert.deepEqual(WARTUNG_TAGS, [ID.tagTurnuswartung, ID.tagStoerung]);
-  for (const todo of buildAxisTodos()) {
-    assert.ok(
-      todo.tagIds.some((tagId) => WARTUNG_TAGS.includes(tagId)),
-      `${todo.title} hängt an keinem Tag des Ordners „Wartung"`,
-    );
-  }
-});
-
-await checkAsync('Ausgeschlossenes Tag: genannt für das Todo ohne, nicht für das mit (T-076)', async () => {
-  const mitStoerung = await poolsOf('TCK-000517');
-  const ohneStoerung = await poolsOf('TCK-000518');
-
-  assert.equal(
-    mitStoerung.includes('Wartung ohne Störungen'),
-    false,
-    'der Pool wird genannt, obwohl das Todo das ausgeschlossene Tag trägt',
-  );
-
-  // Die Gegenprobe. Ohne sie wäre „wird nicht genannt" auch dann grün, wenn
-  // die Regel überhaupt niemanden träfe.
-  assert.ok(
-    ohneStoerung.includes('Wartung ohne Störungen'),
-    'der Pool wird für kein Todo genannt — die Regel trifft nichts statt weniger',
-  );
-});
-
-await checkAsync('Status: genannt nur für das Todo im Backlog (T-076)', async () => {
-  const inArbeit = await poolsOf('TCK-000517');
-  const backlog = await poolsOf('TCK-000518');
-
-  assert.equal(inArbeit.includes('Wartung im Backlog'), false, 'der Status wird nicht ausgewertet');
-  assert.ok(backlog.includes('Wartung im Backlog'), 'die Gegenprobe fehlt — die Regel trifft nichts');
-});
-
-await checkAsync('Exportstatus: „bereits abgerechnet" nur, wo es eine exportierte Buchung gibt', async () => {
-  const ohneExport = await poolsOf('TCK-000517');
-  const mitExport = await poolsOf('TCK-000518');
-
-  assert.equal(ohneExport.includes('Wartung, bereits abgerechnet'), false);
-  assert.ok(mitExport.includes('Wartung, bereits abgerechnet'));
-
-  // Die andere Hälfte derselben Achse: Wer bucht, hat danach etwas Offenes.
-  // Das gilt für beide Todos und ist keine Vermutung — eine neue Buchung ist
-  // abgeschlossen und offen (E-032).
-  assert.ok(ohneExport.includes('Wartung, noch nicht abgerechnet'));
-  assert.ok(mitExport.includes('Wartung, noch nicht abgerechnet'));
-});
-
-await checkAsync('Erledigt: der Pool „Erledigte Wartung" wird nicht genannt — er wäre die Vergangenheit', async () => {
-  const erledigtesTodo = await poolsOf('TCK-000518');
-
-  assert.equal(
-    erledigtesTodo.includes('Erledigte Wartung'),
-    false,
-    'genannt wird ein Pool, aus dem das Todo durch genau diese Buchung verschwindet',
-  );
-
-  /*
-   * Die Gegenprobe, und zugleich die Stelle, an der Zugehörigkeit und
-   * Sichtbarkeit auseinandergehen (T-076, Befund 2):
-   *
-   * **Jetzt** gehört das Todo in diesen Pool — dieselbe Funktion der Domäne
-   * sagt es, mit demselben Bestand. Genannt wird es trotzdem nicht, und das
-   * ist richtig: Der Satz, den der Aufgabenbereich daraus baut, steht im
-   * Futur („Es erscheint dann wieder in …"), und die Buchung, über die er
-   * redet, hebt „Erledigt" auf (A-2.5). Wer hier den Zustand von **jetzt**
-   * einsetzt, nennt einen Pool, in dem das Todo eine Sekunde später nicht
-   * mehr steht — derselbe Fehler wie bei den Tags, nur um einen Augenblick
-   * verschoben.
-   */
-  assert.equal(
-    matchesPool({
-      todoTagIds: [ID.tagTurnuswartung],
-      ruleTagIds: WARTUNG_TAGS,
-      matchMode: 'any',
-      excludedTagIds: [],
-      todoStatusId: ID.statusBacklog,
-      ruleStatusIds: [],
-      completedAt: '2026-02-25T16:00:00Z',
-      completion: 'done',
-      exportState: 'any',
-      // Pflichtfeld seit T-082 (E-057). `false` ist hier keine Bequemlichkeit,
-      // sondern der Bestand: Der Ordner „Wartung" trägt zwei Tags, es gibt
-      // keinen genannten Ordner ohne Treffer. Der Übersetzer kennt diese
-      // Datei nicht — sie ist `.mjs` —, deshalb steht das Feld hier von Hand.
-      unresolvedRequired: false,
-    }),
-    true,
-    'die Regel „Erledigte Wartung" trifft das Todo nicht einmal jetzt — die Gegenprobe misst nichts',
-  );
-});
-
-await checkAsync('A-3.4: eine Regel ohne Bedingungen wird für niemanden genannt', async () => {
-  for (const callNumber of ['TCK-000517', 'TCK-000518']) {
-    assert.equal(
-      (await poolsOf(callNumber)).includes('Noch nicht eingerichtet'),
-      false,
-      'ein frisch angelegter Pool nimmt alles auf, was ihm begegnet',
-    );
-  }
-});
-
-await checkAsync('Die vollständige Auskunft, in der Reihenfolge der Pools', async () => {
-  // Der eigentliche Nachweis: nicht „ein Pool fehlt", sondern **welche** sechs
-  // von sieben Regeln zutreffen und welche nicht. Vor T-078 hätten hier beide
-  // Zeilen alle sechs eingerichteten Namen getragen.
-  assert.deepEqual(await poolsOf('TCK-000517'), [
-    'Wartung Nord',
-    'Wartung, noch nicht abgerechnet',
-  ]);
-
-  assert.deepEqual(await poolsOf('TCK-000518'), [
-    'Wartung Nord',
-    'Wartung ohne Störungen',
-    'Wartung im Backlog',
-    'Wartung, noch nicht abgerechnet',
-    'Wartung, bereits abgerechnet',
-  ]);
-});
-
-/*
- * ---------------------------------------------------------------------------
- * E-056 — der Aufgabenbereich nennt auch, woraus das Todo verschwindet
- * ---------------------------------------------------------------------------
- *
- * Der entschiedene Fall: eine Spalte `completion: 'done'` **mit**
- * `exportState: 'open'` ist eine **Abrechnungsliste** — erledigt, noch nicht
- * abgerechnet. Wer per Add-in auf eine Karte darin bucht, sieht sie aus genau
- * der Liste verschwinden, in der er sie sucht. Ohne einen Satz darüber wird die
- * Bewegung als Datenverlust gelesen.
- *
- * Die Auflagen aus E-056 sind messbar und werden einzeln gemessen: **ein**
- * Satz, in derselben Aussage wie das Erscheinen, und **kein Halbsatz**, wenn
- * keine Regel betroffen ist.
- */
-
-await checkAsync('E-056: die Abrechnungsliste steht in `poolMovement.leaves`, nicht in `appears`', async () => {
-  const turnus = await requireMovement('TCK-000518');
-
-  assert.deepEqual(
-    turnus.leaves,
-    ['Erledigte Wartung', 'Erledigt, noch nicht abgerechnet'],
-    'das Verschwinden aus den Erledigt-Regeln wird verschwiegen',
-  );
-
-  // Kein Pool in beiden Hälften. Ein Name, der zugleich erscheint und
-  // verschwindet, wäre kein Satz, den jemand lesen möchte.
-  for (const name of turnus.leaves) {
-    assert.equal(turnus.appears.includes(name), false, `„${name}" steht in beiden Listen`);
-  }
-
-  // Die Gegenprobe zur Gegenprobe: Das Todo steht dort **jetzt** wirklich
-  // drin. Ohne offene Buchung wäre die Abrechnungsliste nur zufällig leer.
-  assert.equal(
-    matchesPool({
-      todoTagIds: [ID.tagTurnuswartung],
-      ruleTagIds: WARTUNG_TAGS,
-      matchMode: 'any',
-      excludedTagIds: [],
-      todoStatusId: ID.statusBacklog,
-      ruleStatusIds: [],
-      completedAt: '2026-02-25T16:00:00Z',
-      completion: 'done',
-      hasOpenEntries: true,
-      exportState: 'open',
-      // Wie oben: Pflichtfeld seit T-082, und `false` ist der Bestand — die
-      // Regel nennt keinen Ordner ohne Tags (E-057).
-      unresolvedRequired: false,
-    }),
-    true,
-    'die Abrechnungsliste trifft das Todo nicht einmal jetzt',
-  );
-});
-
-await checkAsync('E-056: wen keine solche Regel betrifft, dem bleibt kein Halbsatz', async () => {
-  const stoerung = await requireMovement('TCK-000517');
-
-  // Das Todo ist nicht erledigt — durch eine Buchung verliert es keinen Pool.
-  assert.deepEqual(stoerung.leaves, []);
-
-  const satz = reopenPreview(15, stoerung).effects[2];
-  assert.equal(/verschwind/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
-  assert.equal(/und aus/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
-
-  // Aus der Funktion und nicht aus einer Abschrift (E-058). Gemessen wird, dass
-  // der Aufgabenbereich denselben Satz zeigt — der Wortlaut selbst wird in der
-  // Domäne gemessen.
-  assert.equal(satz, poolMovementSentence(stoerung, 'future', 'reopen'));
-
-  // Beide Namen, einzeln aufgezählt und nicht gezählt.
-  assert.match(satz, /„Wartung Nord“ und „Wartung, noch nicht abgerechnet“/);
-  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
-});
-
-await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und keine zweite Liste', async () => {
-  const turnus = await requireMovement('TCK-000518');
-  const notice = reopenPreview(15, turnus);
-
-  // Die Zahl der Wirkungen ist unverändert drei. Eine vierte Zeile wäre die
-  // zweite Aussage, die E-056 ausschließt.
-  assert.equal(notice.effects.length, 3, 'aus dem Verschwinden ist eine eigene Wirkung geworden');
-  assert.equal(
-    Object.hasOwn(notice, 'aside'),
-    false,
-    'die abgesetzte Zeile ist zurück — E-058 Absatz 2 streicht sie ersatzlos',
-  );
-
-  const satz = notice.effects[2];
-  assert.equal(satz, poolMovementSentence(turnus, 'future', 'reopen'));
-  assert.match(satz, /^Es erscheint dann wieder in /, 'die erste Hälfte fehlt');
-  assert.match(satz, / und verschwindet aus /, 'die zweite Hälfte steht nicht im selben Satz');
-  assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste wird nicht beim Namen genannt');
-
-  // Ein Satz: Der Punkt steht am Ende und sonst nirgends.
-  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
-
-  // Und derselbe Satz im Perfekt, mit denselben beiden Hälften.
-  const danach = reopenOutcome('Turnus abschließen', 15, turnus).effects[2];
-  assert.equal(danach, poolMovementSentence(turnus, 'past', 'reopen'));
-  assert.match(danach, /^Es ist zurück in /);
-  assert.match(danach, / und aus .* verschwunden/);
-  assert.equal(danach.indexOf('.'), danach.length - 1, `mehr als ein Satz: ${danach}`);
-});
-
-await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor — in beiden Hälften', async () => {
-  const davor = await requireMovement('TCK-000518');
-
-  const booked = await axisClient.book({
-    todoId: AXIS_TODO.turnus,
-    startedAt: '2026-03-02T11:00:00Z',
-    endedAt: '2026-03-02T11:15:00Z',
-    note: 'Turnus abgeschlossen',
-  });
-
-  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
-  assert.equal(booked.value.doneCleared, true, 'die Ausgangslage stimmt nicht — das Todo war erledigt');
-  assert.equal(axisStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
-
-  // Die Zusage aus T-038, jetzt über fünf Achsen statt über eine — und seit
-  // E-056 über beide Hälften der Aussage: Der Satz vorher und der Satz nachher
-  // reden über dieselbe Bewegung.
-  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
-  assert.deepEqual(
-    booked.value.poolMovement.appears,
-    davor.appears,
-    'vorher und nachher nennen verschiedene Pools',
-  );
-  assert.deepEqual(
-    booked.value.poolMovement.leaves,
-    davor.leaves,
-    'die Ankündigung und die Bestätigung nennen Verschiedenes als verschwunden',
-  );
-  /*
-   * Die dritte Liste steht seit T-092 mit hier, und zwar aus einem neuen Grund.
-   *
-   * Bis dahin bildete **eine** Funktion (`bookingStates`) das Zustandspaar für
-   * beide Aufrufer. Seit E-058 rechnet ein Anwendungsfall die Bewegung, und
-   * seit E-061 bildet er auch das Zustandspaar: `bookingMovementStates` aus
-   * `apps/local-api/src/pool-movement.ts`, gerufen aus **einer** Stelle im
-   * Add-in-Dienst für beide Wege. Das ist eine Zusage im Quelltext; hier wird
-   * sie gemessen. Nähme eine der beiden Stellen etwas anderes an, sagten
-   * Ankündigung und Bestätigung Verschiedenes über dieselbe Handlung — der
-   * Befund C-03 aus T-025, eine Ebene tiefer.
-   */
-  assert.deepEqual(
-    booked.value.poolMovement.enters,
-    davor.enters,
-    'die Ankündigung und die Bestätigung nennen Verschiedenes als hinzugekommen',
-  );
-
-  /*
-   * Und dieselbe Suche noch einmal, nachdem das Kennzeichen gefallen ist.
-   *
-   * Die Antwort ist jetzt `null`, und das ist keine Abweichung, sondern
-   * dieselbe Rechnung auf einem anderen Bestand: Das Todo ist nicht mehr
-   * erledigt und hat eine offene Buchung — eine **weitere** Buchung ändert
-   * keine der fünf Achsen, nimmt es also aus keiner Erledigt-Regel mehr heraus
-   * und hebt es in keine Exportregel mehr hinein. Stünde hier noch eine
-   * Bewegung, hätte der Aufgabenbereich eine angekündigt, die schon geschehen
-   * ist.
-   *
-   * Bis T-104 kam an dieser Stelle `appears` unverändert und `leaves` leer
-   * zurück; seit E-061 Punkt 3 sagt `null` dasselbe kürzer — und ohne dass dafür
-   * eine einzige Regel über ihre Ordnerbäume aufgelöst würde.
-   */
-  const danach = await movementOf('TCK-000518');
-  assert.equal(danach, null, 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
-  assert.equal(
-    bookingOutcome(15, danach).pools,
-    null,
-    'die Bestätigung trägt einen Satz über eine Bewegung, die nicht stattfand',
-  );
-});
-
-await checkAsync('Der Satz, den der Benutzer liest, nennt die richtigen Pools und den falschen nicht', async () => {
-  const found = await axisClient.findMatches('TCK-000517');
-  const offer = describeOffers(found.value.matches)[0];
-  const satz = reopenPreview(15, offer.poolMovement).effects[2];
-
-  assert.match(satz, /Wartung Nord/);
-  assert.match(satz, /noch nicht abgerechnet/);
-  assert.equal(/ohne Störungen/.test(satz), false, 'der Satz nennt einen Pool mit ausgeschlossenem Tag');
-  assert.equal(/im Backlog/.test(satz), false, 'der Satz nennt einen Pool mit fremdem Status');
-  assert.equal(/Noch nicht eingerichtet/.test(satz), false, 'der Satz nennt eine leere Regel');
-});
-
-/*
- * ---------------------------------------------------------------------------
- * T-084 — die Bewegung eines Todos, das gar nicht erledigt ist
- * ---------------------------------------------------------------------------
- *
- * Der Befund, der zu T-084 geführt hat: Der Dienst bildet seit E-056 ein
- * Zustandspaar, und `after.hasOpenEntries` steht fest auf wahr (seit T-092 in
- * `BOOKING_EFFECT`, `routes/addin/service.ts`). Für ein Todo
- * **ohne** Buchung ist das eine Änderung — eine Spalte `exportState: 'open'`
- * nimmt es damit auf. Der Dienst wusste das bereits; gefehlt hat die Anzeige.
- *
- * Gemessen wird am Todo „Notbetrieb prüfen" (`TCK-000517`): offen, ohne jede
- * Buchung, und Mitglied einer Regel über den Exportstatus. Drei Prüfungen —
- * vorher, die Buchung, und dieselbe Frage noch einmal danach. Die dritte ist
- * die Gegenprobe: Ist die Bewegung geschehen, gibt es nichts mehr zu sagen.
- */
-
-await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte „noch nicht abgerechnet"', async () => {
-  // Die Ausgangslage. Ohne sie misst diese Prüfung nichts: Ein Todo, das schon
-  // eine offene Buchung hat, bewegt sich nicht mehr.
-  assert.equal(
-    axisStore.state.timeEntries.some((entry) => entry.todoId === AXIS_TODO.stoerung),
-    false,
-    'das Todo hat schon eine Buchung — die erste ist längst geschehen',
-  );
-  assert.equal(
-    axisStore.state.todos.get(AXIS_TODO.stoerung).completedAt,
-    null,
-    'das Todo ist erledigt — dann greift der andere Satz und diese Prüfung misst den falschen Fall',
-  );
-
-  const stoerung = await requireMovement('TCK-000517');
-
-  // Der Zustand danach ist unverändert der aus T-078 — und er allein hätte den
-  // Fall nie sichtbar gemacht: „Wartung Nord" trifft vorher wie nachher zu.
-  assert.deepEqual(stoerung.appears, ['Wartung Nord', 'Wartung, noch nicht abgerechnet']);
-
-  // Die **Bewegung** ist die neue Auskunft: genau eine Spalte, und es ist die
-  // über den Exportstatus.
-  assert.deepEqual(stoerung.enters, ['Wartung, noch nicht abgerechnet']);
-  assert.deepEqual(stoerung.leaves, [], 'ein offenes Todo verliert durch eine Buchung keinen Pool');
-
-  const satz = poolMovementSentence(stoerung, 'future', 'booking');
-  assert.match(satz, /„Wartung, noch nicht abgerechnet“/, 'die eine Änderung fehlt im Satz');
-  assert.equal(/„Wartung Nord“/.test(satz), false, 'der Satz zählt auf, was sich nicht geändert hat');
-  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
-
-  // Derselbe Satz über den Weg, den der Aufgabenbereich geht: Treffer →
-  // Angebot → Bewegung. Eine Zusammensetzung, die unterwegs ein Feld verliert,
-  // fällt hier auf und nicht erst in Outlook.
-  const found = await axisClient.findMatches('TCK-000517');
-  const offer = describeOffers(found.value.matches)[0];
-  assert.equal(
-    poolMovementSentence(offer.poolMovement, 'future', 'booking'),
-    satz,
-    'über das Angebot kommt ein anderer Satz heraus als über den Treffer',
-  );
-
-  /*
-   * Die Gegenprobe gegen die Domäne, mit derselben Regel und beiden Zuständen.
-   * Ohne sie wäre „genau eine Spalte kommt dazu" auch dann grün, wenn der
-   * Dienst schlicht jede Spalte mit `exportState: 'open'` aufzählte.
-   */
-  const regel = {
-    todoTagIds: [ID.tagMusterbetrieb, ID.tagStoerung],
-    ruleTagIds: WARTUNG_TAGS,
-    matchMode: 'any',
-    excludedTagIds: [],
-    todoStatusId: ID.statusInArbeit,
-    ruleStatusIds: [],
-    completedAt: null,
-    completion: 'any',
-    hasExportedEntries: false,
-    exportState: 'open',
-    // Pflichtfeld seit T-082 (E-057), und `false` ist der Bestand: Beide
-    // Ordnerterme dieses Poolsatzes lösen auf Tags auf.
-    unresolvedRequired: false,
-  };
-  assert.equal(
-    matchesPool({ ...regel, hasOpenEntries: false }),
-    false,
-    'die Regel trifft schon vor der Buchung — dann ist das Erscheinen keines',
-  );
-  assert.equal(matchesPool({ ...regel, hasOpenEntries: true }), true);
-});
-
-await checkAsync('T-084: die Bestätigung nach der Buchung nennt dieselbe Spalte, im Perfekt', async () => {
-  const davor = await requireMovement('TCK-000517');
-
-  const booked = await axisClient.book({
-    todoId: AXIS_TODO.stoerung,
-    startedAt: '2026-03-02T13:00:00Z',
-    endedAt: '2026-03-02T13:15:00Z',
-    note: 'Notbetrieb geprüft',
-  });
-
-  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
-
-  // Hier war nichts aufzuheben. Der Aufgabenbereich zeigt deshalb **nicht**
-  // die drei Wirkungen, sondern die Bestätigung mit dem einen Satz darunter.
-  assert.equal(booked.value.doneCleared, false, 'die Ausgangslage stimmt nicht — das Todo war offen');
-  assert.equal(booked.value.todoWasDone, false);
-
-  // Ankündigung und Bestätigung reden über dieselbe Bewegung — die Zusage aus
-  // I-05, jetzt auch für die dritte Liste.
-  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
-  assert.deepEqual(
-    booked.value.poolMovement.enters,
-    davor.enters,
-    'vorher und nachher nennen verschiedene Pools',
-  );
-
-  const bewegung = booked.value.poolMovement;
-  const notice = bookingOutcome(15, bewegung);
-  assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
-
-  // Der Satz kommt aus der Funktion, mit Anlass `'booking'` und im Perfekt —
-  // dieselbe Bewegung wie in der Ankündigung, nur die Zeitform ist anders.
-  assert.equal(notice.pools, poolMovementSentence(bewegung, 'past', 'booking'));
-  assert.match(notice.pools, /„Wartung, noch nicht abgerechnet“/);
-  assert.equal(/wieder|zurück/.test(notice.pools), false, `der Satz behauptet eine Rückkehr: ${notice.pools}`);
-});
-
-await checkAsync('T-084: dasselbe Todo mit bestehender Buchung — kein Satz, kein Halbsatz', async () => {
-  // Die Gegenprobe. Dasselbe Todo, dieselbe Frage, ein Zustand später: Es hat
-  // jetzt eine offene Buchung, und die zweite Buchung bewegt es nirgendwohin.
-  assert.equal(
-    axisStore.state.timeEntries.some((entry) => entry.todoId === AXIS_TODO.stoerung),
-    true,
-    'die Buchung aus der Prüfung davor fehlt — die Gegenprobe misst denselben Fall wie zuvor',
-  );
-
-  const danach = await movementOf('TCK-000517');
-
-  /*
-   * Die Bewegung ist weg — und genau daran hängt der Satz.
-   *
-   * Seit T-104 sagt der Dienst das als `null` und nicht als drei leere Listen
-   * (E-061 Punkt 3). Beide Auskünfte führen zur selben Anzeige, aber nur diese
-   * kostet keine Ordnerauflösung — und sie ist die schärfere: „hier war keine
-   * Bewegung möglich" statt „nachgesehen und nichts gefunden". Der Zustand
-   * danach (`appears`) fehlt damit an dieser Stelle, und das ist Absicht: Der
-   * Aufgabenbereich zählt ihn für eine Buchung ohne Wirkung ohnehin nicht auf
-   * (Anlass `'booking'`), und was er nicht zeigt, muss er nicht bekommen.
-   */
-  assert.equal(danach, null, 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
-
-  /*
-   * Beide Wege zu „keine Zeile", einzeln gemessen: der `null` des Dienstes und
-   * der `null` der Domäne. Der zweite ist der Fall, in dem gerechnet **wurde**
-   * — er tritt an dieser Route seit T-104 nicht mehr auf, bleibt aber die
-   * Zusage, gegen die der Aufgabenbereich gebaut ist.
-   */
-  assert.equal(
-    poolMovementSentence({ appears: ['Wartung Nord'], enters: [], leaves: [] }, 'future', 'booking'),
-    null,
-    'über der Schaltfläche steht eine Ankündigung ohne Ereignis',
-  );
-
-  const notice = bookingOutcome(15, danach);
-  assert.equal(notice.pools, null, 'die Bestätigung trägt einen Satz über eine Bewegung, die nicht stattfand');
-
-  // Zeichen für Zeichen der Text von vor T-084.
-  assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
-});
-
-heading('13  Der leere Ordner: eine Einschränkung ohne Treffer (E-057, T-086)');
-
-/*
- * Der Befund, den dieser Abschnitt misst
- * --------------------------------------
- *
- * Dieselbe Falle wie in Abschnitt 12, eine Achse weiter. `matchesPool`
- * überspringt jede Achse, die es nicht genannt bekommt — und eine Tagmenge,
- * die leer aus dem Auflösen kommt, sieht aus wie „über Tags sagt die Regel
- * nichts". Ein Ordner **ohne Tags** verschwand damit spurlos aus der Regel:
- * „Tags aus Archiv **und** Status In Arbeit" wurde zu „Status In Arbeit", und
- * der Aufgabenbereich nannte einen Pool, in dem die Hauptanwendung dasselbe
- * Todo nicht führt. Wieder die schlechtere Richtung: zu viele Pools, nie zu
- * wenige.
- *
- * E-057 entscheidet: Der Benutzer hat die Einschränkung ausgesprochen, also
- * bleibt sie — als eine, die niemand erfüllt. Seit T-082 ist
- * `unresolvedRequired` deshalb ein **Pflichtfeld** von `matchesPool`, und seit
- * T-086 holt die Rechnung die Auskunft dort, wo sie steht: bei
- * `PoolPort.resolveAxes`, das zu jeder Achse auch die Ordner nennt, aus denen
- * kein Tag geworden ist. Seit T-092 steht sie in
- * `apps/local-api/src/pool-movement.ts` — dieselbe Frage, ein Aufrufer weniger.
- *
- * Gemessen wird gegen die **echten** Routen, mit einem eigenen Poolsatz
- * (`E057_POOLS`) und demselben erfundenen Bestand wie oben. Jede betroffene
- * Regel hat ihre Gegenprobe: eine zweite Regel, die sich nur im leeren Ordner
- * unterscheidet.
- */
-
-const leerStore = createFakeStore({ pools: E057_POOLS });
-const leerApp = mountAddinRoutes(leerStore.deps);
-const leerClient = createApiClient({
-  baseUrl: 'http://127.0.0.1:17843',
-  token: () => 'takt_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',
-  fetch: (url, init) => leerApp.request(String(url), init),
-});
-
-for (const todo of buildAxisTodos()) leerStore.seedTodo(todo);
-
-const leerPoolsOf = async (callNumber) => {
-  const result = await leerClient.findMatches(callNumber);
-  assert.equal(result.ok, true, result.ok ? '' : result.message);
-  assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  const movement = result.value.matches[0].poolMovement;
-  assert.notEqual(movement, null, `${callNumber} bewegt sich nicht — dann misst diese Prüfung nichts`);
-  return movement.appears;
-};
-
-await checkAsync('Die Ausgangslage: „Archiv" gibt es, und es liegt kein Tag darin', async () => {
-  // Ohne diese Prüfung wäre jede Aussage unten mehrdeutig: Ein Pool könnte
-  // auch deshalb fehlen, weil der genannte Ordner gar nicht existiert — das
-  // wäre ein anderer Fall (eine Regel über einen gelöschten Ordner) und nicht
-  // der, für den E-057 entschieden wurde.
-  const context = await leerClient.loadContext();
-  assert.equal(context.ok, true, context.ok ? '' : context.message);
-
-  const archiv = context.value.tagTree.rootFolders.find((node) => node.folder.name === 'Archiv');
-  assert.ok(archiv, 'der Ordner „Archiv" fehlt im Baum, den das Add-in bekommt');
-  assert.equal(archiv.tags.length, 0, 'in „Archiv" liegt ein Tag — dann misst der Abschnitt nichts');
-  assert.equal(archiv.subfolders.length, 0, '„Archiv" hat einen Unterordner, der Tags tragen könnte');
-
-  // Und der Ordner, gegen den verglichen wird, trägt welche.
-  assert.deepEqual(WARTUNG_TAGS, [ID.tagTurnuswartung, ID.tagStoerung]);
-});
-
-await checkAsync('E-057: „Archiv und In Arbeit" wird nicht genannt — die Gegenprobe ohne Ordner schon', async () => {
-  const inArbeit = await leerPoolsOf('TCK-000517');
-
-  assert.equal(
-    inArbeit.includes('Archiv, in Arbeit'),
-    false,
-    'der leere Ordner verschwindet aus der Regel — genannt wird ein Pool, den das Board nicht führt',
-  );
-
-  // Die Gegenprobe: **dieselbe** Statusachse, nur ohne den Ordner. Sie nennt
-  // das Todo. Damit steht fest, dass oben der leere Ordner die Regel leerlaufen
-  // lässt und nicht der Status.
-  assert.ok(
-    inArbeit.includes('In Arbeit'),
-    'auch die Regel ohne Ordner nennt niemanden — dann misst die Prüfung darüber nichts',
-  );
-});
-
-await checkAsync('E-057 termweise: der leere Ordner **neben** einem gefüllten zählt mit', async () => {
-  // Der Fall, den eine achsenweise Zählung nicht sieht: „Wartung **oder**
-  // Archiv" löst auf zwei Tags auf — die Summe sieht gesund aus, und der leere
-  // Ordner daneben wäre unsichtbar, bis jemand ein Tag hineinlegt und sich die
-  // Spalte ohne ersichtlichen Grund ändert.
-  for (const callNumber of ['TCK-000517', 'TCK-000518']) {
-    assert.equal(
-      (await leerPoolsOf(callNumber)).includes('Wartung oder Archiv'),
-      false,
-      `${callNumber}: der leere Ordner geht in der Summe der Achse unter`,
-    );
-  }
-
-  // Die Gegenprobe: derselbe Ordner „Wartung" allein nennt beide Todos.
-  assert.ok((await leerPoolsOf('TCK-000517')).includes('Wartung Nord'));
-  assert.ok((await leerPoolsOf('TCK-000518')).includes('Wartung Nord'));
-});
-
-await checkAsync('E-057: derselbe leere Ordner im **Ausschluss** schließt nichts aus', async () => {
-  // Die Grenze der Entscheidung, und die Stelle, an der eine zu grobe Behebung
-  // auffällt: „Keiner davon" über nichts engt nicht ein, sondern lässt in Ruhe.
-  // Die Regel muss deshalb genau dieselben Todos nennen wie „Wartung Nord".
-  for (const callNumber of ['TCK-000517', 'TCK-000518']) {
-    const genannt = await leerPoolsOf(callNumber);
-    assert.equal(
-      genannt.includes('Wartung, außer Archiv'),
-      genannt.includes('Wartung Nord'),
-      `${callNumber}: der leere Ordner im Ausschluss verändert die Treffermenge`,
-    );
-    assert.ok(genannt.includes('Wartung, außer Archiv'), `${callNumber}: der Ausschluss schließt aus`);
-  }
-});
-
-await checkAsync('Die vollständige Auskunft, in der Reihenfolge der Pools', async () => {
-  // Nicht „ein Pool fehlt", sondern **welche** drei von fünf Regeln zutreffen.
-  // Ohne E-057 stünden in beiden Zeilen zwei Namen mehr.
-  assert.deepEqual(await leerPoolsOf('TCK-000517'), [
-    'Wartung Nord',
-    'In Arbeit',
-    'Wartung, außer Archiv',
-  ]);
-
-  assert.deepEqual(await leerPoolsOf('TCK-000518'), ['Wartung Nord', 'Wartung, außer Archiv']);
-});
-
-check('T-082: das Pflichtfeld ist der Unterschied, und zwar in beide Richtungen', () => {
-  /*
-   * Die Gegenprobe gegen die Domäne, mit der Regel „Archiv und In Arbeit" in
-   * ihrer aufgelösten Gestalt: `ruleTagIds` ist leer, weil im Ordner kein Tag
-   * liegt. Genau daran hängt alles — mit `false` kommt Wort für Wort die
-   * Antwort von vor E-057 heraus.
-   *
-   * Sie steht hier, weil der Übersetzer diese Datei nicht liest: Sie ist
-   * `.mjs`. Für den Dienst ist `unresolvedRequired` seit T-082 Pflicht, hier
-   * ist es Sorgfalt — und diese Prüfung ist die Wache dafür.
-   */
-  const aufgeloest = {
-    todoTagIds: [ID.tagMusterbetrieb, ID.tagStoerung],
-    ruleTagIds: [],
-    matchMode: 'any',
-    excludedTagIds: [],
-    todoStatusId: ID.statusInArbeit,
-    ruleStatusIds: [ID.statusInArbeit],
-    completedAt: null,
-    completion: 'any',
-    hasOpenEntries: false,
-    hasExportedEntries: false,
-    exportState: 'any',
-  };
-
-  assert.equal(
-    matchesPool({ ...aufgeloest, unresolvedRequired: false }),
-    true,
-    'die Antwort von vor E-057 ist nicht mehr herstellbar — dann misst die Zeile darunter nichts',
-  );
-  assert.equal(
-    matchesPool({ ...aufgeloest, unresolvedRequired: true }),
-    false,
-    'das Pflichtfeld wirkt nicht: eine erforderliche Bedingung ohne Treffer lässt die Regel trotzdem treffen',
-  );
-});
-
-heading('14  Der Anzeigeort ist keine Antwort: reine Board-Spalten (E-054, E-056, T-090)');
-
-/*
- * Der Befund, den dieser Abschnitt misst
- * --------------------------------------
- *
- * `PoolPort.list` fragt seit E-054 nach einer **Fläche** und setzt ohne
- * Argument `'pool'` ein — geliefert werden dann nur Regeln mit `placement`
- * `pool` oder `both`. Die Vorgabe ist für ihre Aufrufer richtig; die Rechnung
- * über die Bewegung war bis T-090 eine von ihnen und ist es seit E-056 nicht
- * mehr. Sie beantwortet nicht „in welchen Pools steht das Todo", sondern was
- * diese Buchung ändert, und diese Frage kennt keine Fläche. Seit T-092 steht
- * sie als `poolMovementNamer` in `apps/local-api/src/pool-movement.ts` und
- * fragt dort `list('all')`.
- *
- * Was daraus wurde: Eine Spalte „erledigt und noch nicht abgerechnet" mit
- * Anzeigeort **„Nur auf dem Board"** — die naheliegende Wahl, denn sie ist eine
- * Board-Spalte, und `board` ist die Vorgabe beim Anlegen über das Board —
- * wurde im Aufgabenbereich nie genannt. Weder beim Erscheinen noch beim
- * Verschwinden. Wer dieselbe Regel versehentlich als „Pool und Board"
- * einrichtete, bekam die Auskunft. Dieselbe Regel, dieselbe Wirkung, zwei
- * Verhalten — unterschieden durch eine Einstellung, die mit der Frage nichts
- * zu tun hat. E-056 begründet sich wörtlich mit genau diesem Fall und war für
- * ihn nicht umgesetzt (R-1 Befund 3, R-2 B-4).
- *
- * Gemessen wird gegen die **echten** Routen, mit `PLACEMENT_POOLS`: dreimal
- * dieselbe Regel, einmal je Anzeigeort. Die erste Prüfung gilt der Attrappe
- * selbst — sie hat das Flächenargument bis T-090 verschluckt und damit den
- * Befund unsichtbar gemacht.
- */
-
-const flaechenStore = createFakeStore({ pools: PLACEMENT_POOLS });
-const flaechenApp = mountAddinRoutes(flaechenStore.deps);
-const flaechenClient = createApiClient({
-  baseUrl: 'http://127.0.0.1:17843',
-  token: () => 'takt_GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
-  fetch: (url, init) => flaechenApp.request(String(url), init),
-});
-
-for (const todo of buildAxisTodos()) flaechenStore.seedTodo(todo);
-
-/*
- * Eine **offene** Buchung am Turnus-Todo. Erst damit ist es der Fall aus E-056:
- * erledigt und noch nicht abgerechnet — es steht in der Abrechnungsliste, und
- * die nächste Buchung nimmt es dort heraus.
- */
-flaechenStore.state.timeEntries.push({
-  id: 'te-flaeche-offen',
-  todoId: AXIS_TODO.turnus,
-  startedAt: '2026-02-25T14:00:00Z',
-  endedAt: '2026-02-25T15:00:00Z',
-  durationSeconds: 3600,
-  note: 'Turnus, erster Teil',
-  exportStatus: 'open',
-  exportCount: 0,
-  source: 'manual',
-  createdAt: '2026-02-25T15:00:00Z',
-  updatedAt: '2026-02-25T15:00:00Z',
-});
-
-const flaechenBewegung = async (callNumber) => {
-  const result = await flaechenClient.findMatches(callNumber);
-  assert.equal(result.ok, true, result.ok ? '' : result.message);
-  assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  const movement = result.value.matches[0].poolMovement;
-  assert.notEqual(movement, null, `${callNumber} bewegt sich nicht — dann misst dieser Abschnitt nichts`);
-  return movement;
-};
-
-await checkAsync('Die Ausgangslage: die Attrappe unterscheidet die Flächen', async () => {
-  /*
-   * Ohne diese Prüfung misst der ganze Abschnitt nichts. Die Attrappe schrieb
-   * bis T-090 `list: async () => pools` und gab jede Regel heraus, gleich
-   * wonach gefragt wurde — eine Attrappe, die großzügiger ist als der Betrieb,
-   * macht den Fehler unsichtbar, den sie zeigen soll.
-   *
-   * `GET /addin/context` ist der Aufrufer, der weiterhin **ohne** Argument
-   * fragt (`loadContext`), weil er die Pool-Liste als Fläche meint. Er darf die
-   * reine Board-Spalte deshalb nicht sehen — und sieht die Regel mit `both`
-   * sehr wohl.
-   */
-  const context = await flaechenClient.loadContext();
-  assert.equal(context.ok, true, context.ok ? '' : context.message);
-
-  assert.deepEqual(
-    context.value.pools.map((pool) => pool.name),
-    ['Wartung Nord', 'Erledigte Wartung (Pool und Board)'],
-    'die Attrappe wertet das Flächenargument nicht aus — dann misst dieser Abschnitt nichts',
-  );
-});
-
-await checkAsync('B-4: die reine Board-Spalte steht in `leaves` (E-056)', async () => {
-  const turnus = await flaechenBewegung('TCK-000518');
-
-  /*
-   * Die Zeile, die vor T-090 rot gewesen wäre: Mit `unit.pools.list()` fehlt
-   * „Erledigt, noch nicht abgerechnet" — die Spalte, für die E-056 geschrieben
-   * wurde. Übrig bliebe allein die Regel mit `both`, und genau daran ist der
-   * Befund zu erkennen: Es lag nie an der Regel.
-   */
-  assert.deepEqual(turnus.leaves, [
-    'Erledigt, noch nicht abgerechnet',
-    'Erledigte Wartung (Pool und Board)',
-  ]);
-
-  // Die Gegenprobe daneben: Die Regel ohne Erledigt-Achse bleibt, und sie
-  // bleibt auch die einzige. Ein Pool steht nie in beiden Listen.
-  assert.deepEqual(turnus.appears, ['Wartung Nord']);
-  for (const name of turnus.leaves) {
-    assert.equal(turnus.appears.includes(name), false, `„${name}" steht in beiden Listen`);
-  }
-});
-
-await checkAsync('Der Satz nennt die Board-Spalte beim Namen — und nennt sie nicht „Pool"', async () => {
-  const turnus = await flaechenBewegung('TCK-000518');
-  const satz = reopenPreview(15, turnus).effects[2];
-
-  assert.equal(satz, poolMovementSentence(turnus, 'future', 'reopen'));
-  assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste fehlt im Satz');
-  assert.match(satz, / und verschwindet aus /, 'das Verschwinden steht nicht im selben Satz');
-
-  // Ein Satz, wie E-056 es verlangt — auch mit einer Spalte darin.
-  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
-
-  /*
-   * E-058 Punkt 4, an genau dem Fall gemessen, für den er entschieden wurde.
-   *
-   * „Erledigt, noch nicht abgerechnet" ist eine **reine Board-Spalte**
-   * (`placement: 'board'`). Bis T-092 setzte der Satz unbedingt „dem Pool" /
-   * „den Pools" davor: der Name stimmte, das Gattungswort nicht — und wer ihn
-   * las, suchte in der Pool-Liste, in der die Spalte nicht steht. Seit T-093
-   * nennt der Satz nur noch den Namen in Anführungszeichen.
-   *
-   * Geprüft wird deshalb die **Abwesenheit** des Gattungswortes vor dem Namen
-   * und nicht ein bestimmter Wortlaut. „in keinem Pool und in keiner Spalte" —
-   * der Satz ohne jeden Treffer — bleibt davon unberührt: Dort steht kein Name
-   * dahinter, und dieser Satz hat einen.
-   */
-  assert.equal(
-    /(dem Pool|den Pools|der Spalte|den Spalten)\s+„/.test(satz),
-    false,
-    `der Satz stellt ein Gattungswort vor den Namen (E-058 Punkt 4): ${satz}`,
-  );
-});
-
-await checkAsync('I-05 über die Flächen: die Bestätigung sagt dasselbe wie die Ankündigung', async () => {
-  const davor = await flaechenBewegung('TCK-000518');
-
-  const booked = await flaechenClient.book({
-    todoId: AXIS_TODO.turnus,
-    startedAt: '2026-03-02T11:00:00Z',
-    endedAt: '2026-03-02T11:15:00Z',
-    note: 'Turnus abgeschlossen',
-  });
-
-  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
-  assert.equal(booked.value.doneCleared, true, 'die Ausgangslage stimmt nicht — das Todo war erledigt');
-
-  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
-  assert.deepEqual(booked.value.poolMovement.leaves, davor.leaves);
-  assert.deepEqual(booked.value.poolMovement.appears, davor.appears);
-});
-
-heading('15  Scheitert das Wiederöffnen, fällt die Buchung mit (R-1 Befund 2)');
-
-/*
- * Der Befund, den dieser Abschnitt misst
- * --------------------------------------
- *
- * `bookOnTodo` schreibt erst die Buchung und hebt danach „Erledigt" auf.
- * Scheitert das Aufheben, gab die Funktion bis T-090 `{ kind: 'rejected' }`
- * **zurück** — und die Transaktionsklammer nimmt nur bei einem **Wurf**
- * zurück. Eine gewöhnliche Rückgabe führt zu `COMMIT`.
- *
- * Das Ergebnis war der teuerste Zustand dieses Bestands: Die Zeit steht
- * festgeschrieben in der Datenbank, das Todo gilt weiter als erledigt, und der
- * Aufgabenbereich meldet „abgewiesen". Wer das liest, bucht noch einmal — und
- * derselbe Zeitraum geht zweimal in die Abrechnung.
- *
- * Gemessen wird an der Attrappe, weil nur sie den Fehlschlag herstellen kann
- * (`clearDoneFailure`). Sie nimmt bei einem Wurf denselben Abzug zurück wie
- * SQLite mit `ROLLBACK` — dieselbe Bauart, aus der schon „kein Tag ohne sein
- * Todo" (T-047) gemessen wird. Drei Prüfungen: der Fehlschlag, der Bestand
- * danach, und die Gegenprobe ohne den Fehlschlag.
- */
-
-const FEHLSCHLAG = Object.freeze({
-  code: 'storage_error',
-  message: 'Die Datenbank hat den Schreibvorgang abgelehnt.',
-});
-
-const abbruchStore = createFakeStore({ clearDoneFailure: FEHLSCHLAG });
-const abbruchApp = mountAddinRoutes(abbruchStore.deps);
-const abbruchClient = createApiClient({
-  baseUrl: 'http://127.0.0.1:17843',
-  token: () => 'takt_HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH',
-  fetch: (url, init) => abbruchApp.request(String(url), init),
-});
-
-for (const todo of buildAxisTodos()) abbruchStore.seedTodo(todo);
-
-const BUCHUNG = Object.freeze({
-  todoId: AXIS_TODO.turnus,
-  startedAt: '2026-03-02T11:00:00Z',
-  endedAt: '2026-03-02T11:15:00Z',
-  note: 'Turnus abgeschlossen',
-});
-
-check('Die Ausgangslage: das Todo ist erledigt, und es gibt keine Buchung darauf', () => {
-  // Ohne sie wäre unten jede Aussage mehrdeutig: Ein Bestand ohne neue Buchung
-  // beweist nichts, wenn schon vorher keine da war und das Todo offen ist.
-  assert.notEqual(abbruchStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
-  assert.equal(
-    abbruchStore.state.timeEntries.some((entry) => entry.todoId === AXIS_TODO.turnus),
-    false,
-  );
-});
-
-await checkAsync('Scheitert `clearDone`, entsteht keine Buchung — und das Todo bleibt erledigt', async () => {
-  const booked = await abbruchClient.book(BUCHUNG);
-
-  assert.equal(booked.ok, false, 'der Fehlschlag ist gar nicht eingetreten');
-  assert.equal(booked.code, FEHLSCHLAG.code, 'der Grund kommt nicht durch');
-
-  /*
-   * Der Kern des Befundes. Vor T-090 stand hier **eine** Buchung: Die Klammer
-   * hatte festgeschrieben, weil eine Rückgabe kein Wurf ist.
-   */
-  assert.deepEqual(
-    abbruchStore.state.timeEntries.filter((entry) => entry.todoId === AXIS_TODO.turnus),
-    [],
-    'die Zeit ist gebucht, obwohl die Antwort „abgewiesen" lautet — dieselbe Zeit geht zweimal in die Abrechnung',
-  );
-
-  // Und der zweite Teil desselben Zustands: Das Kennzeichen steht noch. Ein
-  // halber Vorgang ist auch dann falsch, wenn er in die andere Richtung
-  // stehenbleibt.
-  assert.notEqual(
-    abbruchStore.state.todos.get(AXIS_TODO.turnus).completedAt,
-    null,
-    'das Kennzeichen ist gefallen, obwohl das Aufheben gescheitert ist',
-  );
-});
-
-await checkAsync('Die Gegenprobe: ohne den Fehlschlag bucht derselbe Aufruf', async () => {
-  /*
-   * Ohne sie stünde nur fest, dass irgendetwas den Aufruf abweist — nicht,
-   * dass es der Fehlschlag beim Wiederöffnen war. Derselbe Bestand, derselbe
-   * Aufruf, ein Schalter Unterschied.
-   */
-  const heilStore = createFakeStore();
-  const heilApp = mountAddinRoutes(heilStore.deps);
-  const heilClient = createApiClient({
-    baseUrl: 'http://127.0.0.1:17843',
-    token: () => 'takt_HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH',
-    fetch: (url, init) => heilApp.request(String(url), init),
-  });
-
-  for (const todo of buildAxisTodos()) heilStore.seedTodo(todo);
-
-  const booked = await heilClient.book(BUCHUNG);
-
-  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
-  assert.equal(booked.value.doneCleared, true);
-  assert.equal(
-    heilStore.state.timeEntries.filter((entry) => entry.todoId === AXIS_TODO.turnus).length,
-    1,
-  );
-  assert.equal(heilStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
 });
 
 heading('16  Beide Türen lesen die Zeichenklasse der Domäne (T-114, T-122, T-123)');
@@ -4729,6 +3364,186 @@ check('O-AY, Gegenprobe: der Wächter beißt weiter — und nicht mehr in den St
   assert.deepEqual(traegerStellen(`const fremd = ${String(n + 1)};`, n), []);
 });
 
+// O-LE (T-398b): the mail and tag caps have one origin, `@takt/domain`, and it is measured by name.
+// Searching for the number would repeat O-AY: 4000, 2048 and 200 all carry other meanings elsewhere.
+
+/** Everything a comment-free source imports from `@takt/domain`, as written (`A as B` stays whole). */
+const domainImportsOf = (quelle) =>
+  [...quelle.matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'@takt\/domain'/g)].flatMap((treffer) =>
+    treffer[1].split(',').map((teil) => teil.trim()).filter((teil) => teil.length > 0),
+  );
+
+/** Why `name` in `quelle` is not the domain's own value; empty when it is. */
+const domainBindingProblems = (quelle, name) => {
+  const probleme = [];
+  if (!domainImportsOf(quelle).includes(name)) {
+    probleme.push(`${name} kommt nicht unter seinem Namen aus @takt/domain`);
+  }
+  if (new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`).test(quelle)) {
+    probleme.push(`${name} wird hier selbst erklärt`);
+  }
+  return probleme;
+};
+
+/** The body of `export const <schema> = z.object({ … })` in a comment-free source, or null. */
+const schemaBlock = (quelle, schema) => {
+  const anfang = quelle.indexOf(`export const ${schema} = z.object({`);
+  if (anfang === -1) return null;
+  const ende = quelle.indexOf('\n})', anfang);
+  return ende === -1 ? null : quelle.slice(anfang, ende);
+};
+
+/** The argument of every `.max(…)` on a `field:` line inside `block`. */
+const maxArguments = (block, feld) =>
+  [...block.matchAll(new RegExp(`^\\s*${feld}:.*\\.max\\(([^)]*)\\)`, 'gm'))].map((treffer) => treffer[1].trim());
+
+/**
+ * Why the fields of `schema` in `quelle` do not cap with their domain names; empty when they do.
+ * `erwartet` maps a field to the one name its `.max(…)` must read.
+ */
+const fieldCapProblems = (quelle, schema, erwartet) => {
+  const block = schemaBlock(quelle, schema);
+  if (block === null) return [`${schema} nicht gefunden — die Messung greift ins Leere`];
+  const probleme = [];
+  for (const [feld, name] of Object.entries(erwartet)) {
+    const argumente = maxArguments(block, feld);
+    if (argumente.length === 0) probleme.push(`${schema}.${feld}: kein .max(…) gefunden`);
+    for (const argument of argumente) {
+      if (argument !== name) probleme.push(`${schema}.${feld}: .max(${argument}) statt .max(${name})`);
+    }
+    probleme.push(...domainBindingProblems(quelle, name));
+  }
+  return probleme;
+};
+
+/** The O-LE table: which field of which schema caps with which domain name. */
+const ADDIN_TUER_GRENZEN = Object.freeze({
+  mailMetadataSchema: {
+    identity: 'MAIL_IDENTITY_MAX_LENGTH',
+    subject: 'MAIL_SUBJECT_MAX_LENGTH',
+    sender: 'MAIL_SENDER_MAX_LENGTH',
+    internetMessageId: 'MAIL_MESSAGE_ID_MAX_LENGTH',
+    excerpt: 'MAIL_EXCERPT_MAX_LENGTH',
+  },
+  appendMailSchema: { note: 'MAIL_NOTE_MAX_LENGTH' },
+  createTodoSchema: {
+    note: 'MAIL_NOTE_MAX_LENGTH',
+    tagIds: 'TODO_TAG_IDS_MAX',
+    tagNames: 'TODO_TAG_NAMES_MAX',
+  },
+});
+
+check('O-LE: die Grenzen der Add-in-Tür tragen den Namen der Domäne, nicht eine Zahl', () => {
+  const quelle = sourceWithoutComments(fremdeQuelle(FREMDE_ORTE.addinTuer).datei);
+  const probleme = Object.entries(ADDIN_TUER_GRENZEN).flatMap(([schema, erwartet]) =>
+    fieldCapProblems(quelle, schema, erwartet),
+  );
+  assert.deepEqual([...new Set(probleme)], [], [...new Set(probleme)].join('; '));
+});
+
+check('O-LE: die Haupttür liest dieselben Tag-Grenzen aus der Domäne', () => {
+  const quelle = sourceWithoutComments(fremdeQuelle(FREMDE_ORTE.hauptTuer).datei);
+  const probleme = [];
+  for (const [feld, name] of [['tagIds', 'TODO_TAG_IDS_MAX'], ['tagNames', 'TODO_TAG_NAMES_MAX']]) {
+    const argumente = maxArguments(quelle, feld);
+    if (argumente.length === 0) probleme.push(`${feld}: kein .max(…) gefunden`);
+    for (const argument of argumente) {
+      if (argument !== name) probleme.push(`${feld}: .max(${argument}) statt .max(${name})`);
+    }
+    probleme.push(...domainBindingProblems(quelle, name));
+  }
+  assert.deepEqual(probleme, [], probleme.join('; '));
+});
+
+check('O-LE: der Aufgabenbereich kürzt mit den Namen der Domäne', () => {
+  const erwartet = [
+    [['office', 'mail.ts'], ['MAIL_NOTE_MAX_LENGTH']],
+    [
+      ['office', 'save-mail.ts'],
+      ['MAIL_SUBJECT_MAX_LENGTH', 'MAIL_SENDER_MAX_LENGTH', 'MAIL_MESSAGE_ID_MAX_LENGTH', 'MAIL_EXCERPT_MAX_LENGTH'],
+    ],
+  ];
+  const probleme = [];
+  for (const [teile, namen] of erwartet) {
+    const quelle = sourceWithoutComments(path.join(srcRoot, ...teile));
+    for (const name of namen) {
+      probleme.push(...domainBindingProblems(quelle, name).map((problem) => `${teile.join('/')}: ${problem}`));
+      if (!new RegExp(`\\b${name}\\b`).test(quelle.replace(/import\s*\{[^}]*\}\s*from\s*'@takt\/domain';?/g, ''))) {
+        probleme.push(`${teile.join('/')}: ${name} wird importiert, aber nicht benutzt`);
+      }
+    }
+  }
+  // No task-pane file may declare one of these names for itself — a second copy beside the import.
+  const alleNamen = Object.values(ADDIN_TUER_GRENZEN).flatMap((erwartetJeFeld) => Object.values(erwartetJeFeld));
+  for (const datei of files.filter((kandidat) => /\.tsx?$/.test(kandidat))) {
+    const quelle = sourceWithoutComments(datei);
+    for (const name of new Set(alleNamen)) {
+      if (new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`).test(quelle)) {
+        probleme.push(`${path.relative(srcRoot, datei)}: ${name} wird selbst erklärt`);
+      }
+    }
+  }
+  assert.deepEqual(probleme, [], probleme.join('; '));
+});
+
+await checkAsync('O-LE: was der Aufgabenbereich schickt, liegt in den Grenzen der Domäne und passiert die Tür', async () => {
+  const lang = (anzahl) => `${'ä'.repeat(anzahl)}${String.fromCodePoint(0x1f6e0)}`;
+  const metadaten = await mailMetadata(
+    {
+      subject: lang(MAIL_SUBJECT_MAX_LENGTH + 10),
+      body: String.fromCodePoint(0x1f6e0).repeat(MAIL_EXCERPT_MAX_LENGTH),
+      senderName: lang(MAIL_SENDER_MAX_LENGTH),
+      senderAddress: 'a.beispiel@example.invalid',
+      receivedAt: null,
+      internetMessageId: `<${'x'.repeat(MAIL_MESSAGE_ID_MAX_LENGTH + 10)}@example.invalid>`,
+    },
+    true,
+  );
+  assert.ok(metadaten.subject.length <= MAIL_SUBJECT_MAX_LENGTH, `Betreff ${String(metadaten.subject.length)}`);
+  assert.ok(metadaten.sender.length <= MAIL_SENDER_MAX_LENGTH, `Absender ${String(metadaten.sender.length)}`);
+  assert.ok(
+    (metadaten.internetMessageId ?? '').length <= MAIL_MESSAGE_ID_MAX_LENGTH,
+    `Message-ID ${String(metadaten.internetMessageId?.length)}`,
+  );
+  assert.ok((metadaten.excerpt ?? '').length <= MAIL_EXCERPT_MAX_LENGTH, `Auszug ${String(metadaten.excerpt?.length)}`);
+  assert.ok(metadaten.identity.length <= MAIL_IDENTITY_MAX_LENGTH);
+  // An all-emoji body is the worst case for the code-point cut: every kept code point is two units.
+  assert.equal(metadaten.excerpt?.length, MAIL_EXCERPT_MAX_LENGTH, 'der Auszug nutzt den Deckel nicht aus');
+
+  const mailSchema = ADDIN_REQUEST_SCHEMAS.appendAddinMail.shape.mail;
+  const ergebnis = mailSchema.safeParse(metadaten);
+  assert.equal(ergebnis.success, true, `die Tür weist die Metadaten ab: ${JSON.stringify(ergebnis.error?.issues)}`);
+  assert.equal(
+    mailSchema.safeParse({ ...metadaten, excerpt: 'a'.repeat(MAIL_EXCERPT_MAX_LENGTH + 1) }).success,
+    false,
+    'die Tür nimmt einen Auszug über dem Deckel der Domäne an',
+  );
+});
+
+check('O-LE, Gegenprobe: der Herkunftswächter beißt bei Zahl, eigener Erklärung und Umbenennung', () => {
+  const erwartet = { excerpt: 'MAIL_EXCERPT_MAX_LENGTH' };
+  const baue = (kopf, feld) => `${kopf}\nexport const mailMetadataSchema = z.object({\n  excerpt: ${feld},\n}).strict();\n`;
+  const richtig = "import { MAIL_EXCERPT_MAX_LENGTH } from '@takt/domain';";
+
+  assert.deepEqual(
+    fieldCapProblems(baue(richtig, 'z.string().max(MAIL_EXCERPT_MAX_LENGTH).nullable()'), 'mailMetadataSchema', erwartet),
+    [],
+    'die richtige Bauart wird abgewiesen',
+  );
+  for (const [was, quelle] of [
+    ['eine Zahl statt des Namens', baue(richtig, 'z.string().max(4000).nullable()')],
+    ['eine eigene Erklärung', baue('const MAIL_EXCERPT_MAX_LENGTH = 4000;', 'z.string().max(MAIL_EXCERPT_MAX_LENGTH).nullable()')],
+    [
+      'ein umbenannter fremder Wert',
+      baue("import { MAIL_SENDER_MAX_LENGTH as MAIL_EXCERPT_MAX_LENGTH } from '@takt/domain';", 'z.string().max(MAIL_EXCERPT_MAX_LENGTH).nullable()'),
+    ],
+    ['ein fehlender Deckel', baue(richtig, 'z.string().nullable()')],
+    ['ein fehlendes Schema', `${richtig}\nexport const other = z.object({\n});\n`],
+  ]) {
+    assert.notDeepEqual(fieldCapProblems(quelle, 'mailMetadataSchema', erwartet), [], `übersehen: ${was}`);
+  }
+});
+
 check('beide Türen wenden den Deckel wirklich an — die Bindung, nicht die Zahl', () => {
   /*
    * Was vom alten Zahlenvergleich bleibt und **nicht** tautologisch ist: Dass
@@ -4782,36 +3597,13 @@ const kennungen = (anzahl) =>
 /** Erfundene Tagnamen, jeder für sich zulässig und von den anderen verschieden. */
 const namen = (anzahl) => Array.from({ length: anzahl }, (_, index) => `Ost ${String(index)}`);
 
-check('die Listengrenzen sagen an beiden Türen dasselbe (O-AR)', () => {
-  /*
-   * O-AR, der Add-in-Anteil — und die ehrliche Auskunft dazu, was diese Zeilen
-   * können und was nicht.
-   *
-   * `tagIds` und `tagNames` tragen ihre Obergrenze an **zwei** Türen:
-   * `routes/addin/schema.ts` (hier gemessen, T-134 hat ihr einen Namen
-   * gegeben) und `features/todos/routes.ts`, gleich zweimal. Es ist dieselbe
-   * Wahrheit — „wie viele Tags darf ein Todo in einer Anfrage bekommen" — und
-   * sie steht heute an drei Stellen unabhängig geschrieben. Der Kommentar an
-   * `ADDIN_TAG_NAMES_MAX` sagte das bis T-134 zu, ohne dass es jemand
-   * erzwang: E-063 Punkt 5 in seiner mildesten Form.
-   *
-   * **Das hier ist ein Zahlenvergleich, und ein Zahlenvergleich ist die
-   * schwächere Prüfung** — genau die, die zwei Zeilen weiter oben für den
-   * Titeldeckel abgelöst wurde. Er bleibt hier trotzdem stehen, weil die
-   * stärkere Frage noch nicht gestellt werden **kann**: Solange es keine
-   * gemeinsame Quelle gibt, gibt es keine Herkunft zu prüfen. Die zweite Tür
-   * liegt außerhalb der Hoheit dieser Aufgabe (E-053); T-134 meldet sie, statt
-   * die Zahl halb umzustellen — eine halb umgestellte Zahl sieht aus wie
-   * erledigt.
-   *
-   * Bis dahin gilt: Laufen die Türen auseinander, wird dieser Lauf rot. Vorher
-   * wäre gar nichts geschehen.
-   */
+check('die Listengrenzen der Domäne gelten an beiden Türen (O-AR)', () => {
+  // Both doors name `TODO_TAG_IDS_MAX`/`TODO_TAG_NAMES_MAX` (origin: section 16, O-LE); this is the binding.
   const titel = { title: 'Wartung Nord' };
 
   for (const [was, grenze, bauen] of [
-    ['tagIds', ADDIN_TAG_IDS_MAX, (anzahl) => ({ ...titel, tagIds: kennungen(anzahl) })],
-    ['tagNames', ADDIN_TAG_NAMES_MAX, (anzahl) => ({ ...titel, tagNames: namen(anzahl) })],
+    ['tagIds', TODO_TAG_IDS_MAX, (anzahl) => ({ ...titel, tagIds: kennungen(anzahl) })],
+    ['tagNames', TODO_TAG_NAMES_MAX, (anzahl) => ({ ...titel, tagNames: namen(anzahl) })],
   ]) {
     for (const [wo, tuer] of [['Add-in-Tür', addinTuer], ['Haupttür', hauptTuer]]) {
       assert.equal(
@@ -4832,9 +3624,9 @@ check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-1
   /*
    * **Der Fund dieser Aufgabe, und er war keine Aufräumarbeit.**
    *
-   * `prepareNote` schnitt bis T-134 auf `MAX_TAKEOVER_CHARACTERS` und hängte den
+   * `prepareNote` schnitt bis T-134 auf den Deckel und hängte den
    * Hinweis „(gekürzt)" **danach** an. Der Vermerk war damit elf Zeichen länger
-   * als der Deckel, den `ADDIN_NOTE_MAX_LENGTH` an derselben Tür durchsetzt —
+   * als der Deckel, den `MAIL_NOTE_MAX_LENGTH` an derselben Tür durchsetzt —
    * und zwar in jedem Fall, in dem die zweite Hälfte des Textes keinen
    * Zeilenumbruch trägt: eine lange Mail ohne Absätze, ein Zitatverlauf aus
    * einer Zeile, ein Textkörper aus Emoji.
@@ -4864,8 +3656,8 @@ check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-1
     });
 
     assert.ok(
-      vermerk.length <= ADDIN_NOTE_MAX_LENGTH,
-      `${was}: der Vermerk ist ${String(vermerk.length)} Zeichen lang, die Tür nimmt ${String(ADDIN_NOTE_MAX_LENGTH)}`,
+      vermerk.length <= MAIL_NOTE_MAX_LENGTH,
+      `${was}: der Vermerk ist ${String(vermerk.length)} Zeichen lang, die Tür nimmt ${String(MAIL_NOTE_MAX_LENGTH)}`,
     );
     assert.equal(
       nimmtAn(addinTuer, { title: 'Wartung Nord', note: vermerk }),
@@ -4877,7 +3669,7 @@ check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-1
   // Die Gegenprobe zur Behebung: Die alte Rechnung — voll ausschneiden, Hinweis
   // danach anhängen — ergibt einen Vermerk, den die Tür abweist. Ohne sie stünde
   // nur fest, dass es heute passt, und nicht, dass es je ein Problem war.
-  const alt = `${'a'.repeat(ADDIN_NOTE_MAX_LENGTH)}\n…(gekürzt)`;
+  const alt = `${'a'.repeat(MAIL_NOTE_MAX_LENGTH)}\n…(gekürzt)`;
   assert.equal(
     nimmtAn(addinTuer, { title: 'Wartung Nord', note: alt }),
     false,
@@ -4885,48 +3677,7 @@ check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-1
   );
 });
 
-check('die Leistung: was die Add-in-Tür annimmt, nimmt die Haupttür auch an (O-AR)', () => {
-  /*
-   * Die zweite der beiden `4000` in `routes/addin/schema.ts` — und sie ist
-   * **nicht** dieselbe Wahrheit wie die erste. Der Vermerk begrenzt übernommenen
-   * E-Mail-Text (B-12.3 Punkt 3, geht nie in den Export); die Leistung ist eine
-   * Eingabe des Benutzers und geht in die Abrechnungsdatei (A-7.4). Gleiche
-   * Zahl, andere Bedeutung — die Begründung steht an der Konstante, nicht hier.
-   *
-   * Was hier zu messen ist, ist die **eine Richtung, in der eine Abweichung
-   * weh tut**: Eine Buchung, die über den Aufgabenbereich entsteht, muss in der
-   * Hauptanwendung bearbeitbar bleiben. Das ist der Befund C-03 in seiner
-   * allgemeinen Form — dieselbe Handlung, zwei Ergebnisse —, und er hängt nicht
-   * daran, dass beide Deckel gleich sind, sondern daran, dass der engere im
-   * Add-in liegt.
-   *
-   * Diese Zeile bleibt deshalb auch dann grün, wenn der Orchestrator die offene
-   * Frage andersherum entscheidet und beide Türen gleichzieht. Sie wird rot,
-   * wenn das Add-in eines Tages **mehr** annimmt als die Hauptanwendung — genau
-   * der Zustand, der zwischen T-101 und T-114 zwei Wellen lang bestand.
-   */
-  const gerade = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH);
-  const einsZuViel = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH + 1);
-  const buchung = { startedAt: '2026-09-04T08:00:00Z', endedAt: '2026-09-04T08:30:00Z' };
-
-  // Die Bindung an der Add-in-Tür: Der Deckel wirkt wirklich.
-  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: gerade }), true, 'die Add-in-Tür nimmt ihren Deckel nicht an');
-  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
-
-  // Und die Richtung, auf die es ankommt: Die Haupttür nimmt alles an, was hier
-  // durchgeht. Derselbe Text, dieselbe Spalte, zwei Wege.
-  assert.equal(
-    nimmtAn(MAIN_TIME_SCHEMAS.createTimeEntry, {
-      todoId: ID.todoStoerung,
-      ...buchung,
-      note: gerade,
-    }),
-    true,
-    'eine über den Aufgabenbereich gebuchte Leistung ist in der Hauptanwendung nicht mehr speicherbar (C-03)',
-  );
-});
-
-check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () => {
+check('T-114 Punkt 4: der Vermerk trägt die Wache bewusst nicht', () => {
   /*
    * Kein Versehen, sondern dieselbe Grenze, die die Eingangswache des Dienstes
    * (`FREMDE_ORTE.eingangswache`) zwischen
@@ -5484,7 +4235,7 @@ check('Gegenprobe: der Schnitt vor T-119 hinterließ eine halbe Ersatzstelle', (
 
 check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
   /*
-   * Derselbe Befund eine Funktion weiter. `prepareNote` schneidet bei 4000,
+   * Derselbe Befund eine Funktion weiter. `prepareNote` schneidet bei `MAIL_NOTE_MAX_LENGTH`,
    * wenn in der zweiten Hälfte keine Zeilengrenze liegt — ein Textkörper aus
    * Emoji ist genau dieser Fall. Der Vermerk geht in die Datenbank; was dort
    * ankäme, wäre dann nicht, was im Feld stand.
@@ -5502,7 +4253,7 @@ check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
 
   /*
    * **Hier stand bis T-134 die Erwartung, die den Fehler nachrechnete:**
-   * `MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length`. Sie war grün, und der
+   * `Deckel + '\n…(gekürzt)'.length`. Sie war grün, und der
    * Vermerk war trotzdem elf Zeichen zu lang für die Tür, die ihn annehmen soll
    * — weil die Erwartung dieselbe Rechnung anstellte wie der Fehler. Eine
    * Prüfung, die den Prüfling nachbaut, bestätigt ihn.
@@ -5511,7 +4262,7 @@ check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
    * Abschnitt 16 („der übernommene Vermerk passt durch die Tür").
    */
   assert.ok(
-    vermerk.length <= MAX_TAKEOVER_CHARACTERS,
+    vermerk.length <= MAIL_NOTE_MAX_LENGTH,
     `Länge ${String(vermerk.length)} — mehr als der Deckel`,
   );
 });
@@ -5530,61 +4281,37 @@ check('cutToCharacterBoundary kostet höchstens eine Einheit und nur, wenn es mu
 });
 
 heading(
-  '18  Die Frist wird eingetragen — und kein Anhang entsteht an einem vorhandenen Todo (A-19.21, A-A-82)',
+  '18  Die Frist wird eingetragen — und ein vorhandenes Todo erreicht nur die enge Mail-Tür (A-19.21, A-10.11 bis A-10.13)',
 );
 
 /*
- * ===========================================================================
- * **Was dieser Abschnitt seit T-304 zusichert — und was er bis dahin zusicherte**
- * ===========================================================================
+ * What this section asserts since T-398c (E-134 point 3).
  *
- * Bis T-247 lautete die Zusage: „Über das Add-in entsteht kein Anhang." Das war
- * der Wortlaut von A-19.19, und dieser Abschnitt maß ihn an der Wirkung — null
- * Zeilen in `todo_attachment`, mit Gegenprobe.
+ * Until PR #19 the promise was A-A-82 in its old form: no attachment ever
+ * reaches a todo that existed before. A-10.11 to A-10.13 (section 25a) replaced
+ * it. The boundary that holds today, word for word:
  *
- * **E-108 hat diesen Wortlaut aufgehoben.** Über das Add-in entstehen jetzt
- * Anhänge: die E-Mail als Datei, ihre Dateianhänge, ihre Cloud-Verweise. Ein
- * Wächter, der weiterhin „null Zeilen" zählte, wäre ab heute rot an einer
- * Fläche, die es geben **soll** — oder, schlimmer, jemand entschärfte ihn zu
- * einem Lauf, der nichts mehr mißt. Beides ist die Bauart vom 2026-09-10, nur
- * in der anderen Richtung: ein Wächter, der das Gegenteil des Bestands
- * behauptet.
+ *   > An existing todo receives a mail — entry and attachments — only through
+ *   > `POST /addin/todos/{todoId}/mails`, and only when the request carries the
+ *   > todo's own valid call number (A-10.11). No other door under `/addin`
+ *   > writes to an existing todo, and the mail door changes no todo field,
+ *   > done flag, timer, time entry or export state (A-10.12).
  *
- * **Was E-108 nicht aufgehoben hat, ist A-A-82**, und das ist die Zusage ab
- * hier, wörtlich:
+ * Measured at the effect, not at the name:
  *
- *   > Über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da
- *   > war.
- *
- * Sie wird an der **Wirkung** gemessen und nicht am Namen. Der Typ der Naht
- * trägt sie schon — `AddinDeps.emailAttachments` hat keinen Parameter vom Typ
- * `TodoId` —, aber ein Typ trägt beim Übersetzen und nicht beim Fahren. Dieser
- * Lauf mißt sie unabhängig davon, an echten Zeilen.
- *
- * Und sie hat eine **Gegenprobe, die rot wird, wenn jemand einen
- * `todoId`-Parameter nachrüstet**: Die Anfrage schickt die Kennung eines
- * vorhandenen Todos mit. Heute fällt sie in zod still weg, die Anhänge landen
- * am neuen Todo, und das vorhandene bleibt bei null. Läse die Tür sie, stünden
- * sie am vorhandenen — und die Zeile wäre rot.
- *
- * Sieben Ebenen, in dieser Reihenfolge:
- *
- *  18a  Der Aufgabenbereich entscheidet **nicht**, was ein Tag ist — er fragt
- *       die Domäne. Rein, ohne Dienst.
- *  18b  Beide Türen, jede einzeln gegen die Domäne gemessen (T-123).
- *  18c  Die Route gegen eine **echte** Datenbank: Was kommt in der Spalte an?
- *  18d  A-A-82 an der Wirkung: Die Anhänge hängen am **neuen** Todo, das
- *       vorhandene bleibt bei null — mit der Gegenprobe, daß diese Messung rot
- *       werden kann, und mit **A-19.33** von Ende zu Ende (zwei Dateianhänge
- *       ergeben drei Anhänge).
- *  18e  A-19.2: Die Frist heißt im Aufgabenbereich „Frist" — und die drei
- *       verbotenen Wörter stehen in keinem sichtbaren Text (V-09).
- *  18f  Und **der ganze Teilbaum** `/addin` am fertigen Dienst: Nach jeder
- *       Route mit gültigem Token hat das vorhandene Todo weiterhin null
- *       Anhänge, und es gibt keine Tür unter `/addin`, die eine Todo-Kennung
- *       entgegennimmt und einen Anhang erzeugt. Ohne 18f bliebe dieser
- *       Abschnitt grün, während nebenan eine zweite Tür aufgeht — genau das
- *       ist zwischen PR #16 und F-21 geschehen.
+ *  18a  The task pane does not decide what a day is — it asks the domain.
+ *  18b  Both doors, each measured against the domain (T-123).
+ *  18c  The route against a real database: what arrives in the column?
+ *  18d  Creating: the attachments hang on the **new** todo, the existing one
+ *       stays at zero, with A-19.33 end to end (two files make three
+ *       attachments).
+ *  18e  A-19.2: the deadline is called „Frist" — measured on visible text
+ *       (bundle values, string literals, JSX text), not on identifiers (E-130).
+ *  18f  The whole subtree `/addin` on the composed service: after every route
+ *       the carrier todo has no attachment from a door other than `/mails`,
+ *       no time entry appears, and `/mails` with a **different** call number
+ *       answers 422 and writes nothing — with the counter-check that the same
+ *       request with the matching number does attach, so the zero can turn red.
  */
 
 // 18a — die Regel wird gerufen, nicht nachgebaut
@@ -5920,11 +4647,17 @@ check('der Add-in-Abschnitt beschreibt den Anhangsweg — und keinen zweiten (A-
     'die Beschreibung führt unter /addin einen zweiten Weg für Anhänge',
   );
 
+  // E-120: no booking path under /addin on paper either; 18f measures the running service.
+  assert.deepEqual(
+    addinPfade.filter((pfad) => /time|timer|book|done/i.test(pfad)),
+    [],
+    'die Beschreibung führt unter /addin einen Weg zum Buchen oder Erledigen (E-120, A-10.12)',
+  );
+
   /*
    * **Kein Add-in-Rumpf benennt ein vorhandenes Todo.** Der Pfadparameter
-   * `{todoId}` an `…/time-entries` ist davon ausgenommen und zwar mit Grund:
-   * Dort wird gebucht, nicht angehängt, und das ist A-10.9. Was gemessen wird,
-   * sind die **Rumpfschlüssel**.
+   * `{todoId}` an `…/mails` ist davon ausgenommen: Dort ergänzt die E-Mail die
+   * gewählte Aufgabe (A-10.11). Was gemessen wird, sind die **Rumpfschlüssel**.
    */
   const benennend = [];
   for (const pfad of addinPfade) {
@@ -5997,7 +4730,24 @@ check('O-BB: jede beschriebene Add-in-Route mit Rumpf hat ein Schema an der Tür
   // gleichaussehende daneben. Ein zweites Schema unter demselben Schlüssel
   // wäre die Doppelung, die diese Aufstellung gerade abschafft.
   assert.equal(ADDIN_REQUEST_SCHEMAS.createAddinTodo, addinCreateTodoSchema);
-  assert.equal(ADDIN_REQUEST_SCHEMAS.createAddinTimeEntry, addinBookSchema);
+  // E-120: no booking door, so no booking body schema either (A-10.12, A-10.16).
+  assert.equal(Object.hasOwn(ADDIN_REQUEST_SCHEMAS, 'createAddinTimeEntry'), false, 'die Add-in-Tür führt wieder ein Buchungsschema');
+});
+
+check('A-28.9: eine Frist in der Vergangenheit ist erlaubt — im Feld und an der Tür, ohne Uhrzeit', () => {
+  // 30 days back, so no time zone turns "past" into "today"; plus a fixed old day.
+  const vorDreissigTagen = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const tag of [vorDreissigTagen, '2020-01-15']) {
+    assert.equal(readDueDate(tag).kind, 'day', `das Feld weist die vergangene Frist ${tag} ab`);
+    const geprueft = addinTuer.safeParse({ title: 'Wartung Nord', dueDate: tag });
+    assert.equal(geprueft.success, true, `die Add-in-Tür weist die vergangene Frist ${tag} ab`);
+    // E-122 point 3: no 00:00 is set on the add-in path.
+    assert.equal(geprueft.data.dueTime, null, 'die Add-in-Tür setzt ohne Eingabe eine Uhrzeit');
+  }
+  // No lower bound on the date input either; `min` would reintroduce the old limit in the pane.
+  const datumsfeld = /type="date"[\s\S]{0,200}?\/>/.exec(paneQuelle)?.[0] ?? '';
+  assert.ok(datumsfeld.length > 0, 'das Datumsfeld der Frist ist nicht auffindbar');
+  assert.equal(/\bmin=/.test(datumsfeld), false, 'das Fristfeld hat wieder eine Untergrenze');
 });
 
 // 18c — die Route gegen eine echte Datenbank: was steht in der Spalte?
@@ -6436,6 +5186,11 @@ await checkAsync('die Gegenprobe: diese Messung kann rot werden', async () => {
  *
  * Das **Manifest** liegt daneben: Sein `DisplayName` steht in Outlook auf dem
  * Bildschirm, ohne je durch ein Bündel zu laufen.
+ *
+ * Since T-398c (E-130) the TypeScript sources are reduced one step further, to
+ * their visible values: string literals, template parts and JSX text. The
+ * source without comments still held identifiers, and `deadlineHintCore`
+ * turned this guard red although no user ever reads it.
  */
 
 /** Die drei Wörter, die A-19.2 verbietet. */
@@ -6459,6 +5214,43 @@ const sichtbareTexte = () => {
 
   return eintraege;
 };
+
+/**
+ * Visible text of one TypeScript source: string literals, template parts and
+ * JSX text — no identifiers, no property keys written as names, no comments.
+ *
+ * E-130: A-19.2 binds the words on the screen, not identifiers such as
+ * `deadlineHintCore`. Bundle values and JSX attribute values are string
+ * literals, so they are part of this set.
+ */
+const sichtbareWerteAus = (dateiname, quelltext) => {
+  const art = dateiname.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const quelle = ts.createSourceFile(dateiname, quelltext, ts.ScriptTarget.Latest, false, art);
+  const werte = [];
+  const besuche = (knoten) => {
+    if (
+      ts.isStringLiteral(knoten) ||
+      ts.isNoSubstitutionTemplateLiteral(knoten) ||
+      ts.isTemplateHead(knoten) ||
+      ts.isTemplateMiddle(knoten) ||
+      ts.isTemplateTail(knoten)
+    ) {
+      werte.push(knoten.text);
+    } else if (ts.isJsxText(knoten)) {
+      werte.push(knoten.text.replace(/\s+/g, ' ').trim());
+    }
+    ts.forEachChild(knoten, besuche);
+  };
+  besuche(quelle);
+  return werte.filter((wert) => wert.length > 0);
+};
+
+/** What the user can read, per file: visible values of TS sources, other files without comments, and the manifest. */
+const sichtbareWerte = () =>
+  sichtbareTexte().map(({ datei, text }) => ({
+    datei,
+    werte: /\.tsx?$/.test(datei) ? sichtbareWerteAus(datei, readFileSync(path.join(here, '..', datei), 'utf8')) : [text],
+  }));
 
 /**
  * Die Anrede „du" in allen Formen, die in deutschen Oberflächentexten
@@ -6564,18 +5356,44 @@ const IMPERATIV_NACHHER = 'Öffnen Sie eine E-Mail, um daraus ein Todo anzulegen
 /** Findet ein Wort ohne Rücksicht auf Groß- und Kleinschreibung. */
 const findeWort = (text, wort) => text.toLowerCase().includes(wort.toLowerCase());
 
+/** Which forbidden deadline words stand in these values? */
+const fristwortTreffer = (datei, werte) => {
+  const treffer = [];
+  for (const wort of VERBOTENE_FRISTWOERTER) {
+    if (werte.some((wert) => findeWort(wert, wort))) treffer.push(`${datei}: „${wort}"`);
+  }
+  return treffer;
+};
+
 check('A-19.2: „Fälligkeitsdatum", „fällig am" und „Deadline" stehen in keinem sichtbaren Text', () => {
-  const texte = sichtbareTexte();
+  const texte = sichtbareWerte();
   assert.ok(texte.length > 15, `nur ${String(texte.length)} Texte gefunden — der Scan greift ins Leere`);
 
-  const treffer = [];
-  for (const { datei, text } of texte) {
-    for (const wort of VERBOTENE_FRISTWOERTER) {
-      if (findeWort(text, wort)) treffer.push(`${datei}: „${wort}"`);
-    }
-  }
-
+  const treffer = texte.flatMap(({ datei, werte }) => fristwortTreffer(datei, werte));
   assert.deepEqual(treffer, [], 'A-19.2 verbietet diese Wörter auf dem Bildschirm');
+});
+
+check('A-19.2, Gegenprobe: Bezeichner zählen nicht, Bündelwerte und JSX-Text schon (E-130)', () => {
+  // Identifiers and key names stay English (E-118) and are not visible text.
+  const nurBezeichner = sichtbareWerteAus(
+    'probe.tsx',
+    "const deadlineHintCore = TEXTS.deadlineHintCore;\nconst x = <Field label={TEXTS.deadlineTimeLabel} />;",
+  );
+  assert.deepEqual(fristwortTreffer('probe.tsx', nurBezeichner), [], 'ein Bezeichner zählt als sichtbarer Text');
+
+  // An inserted „Deadline" in a bundle value, in JSX text or in a template must still turn the run red.
+  const verletzungen = [
+    ['texts.ts', "export const TEXTS = { deadlineHintCore: 'Die Deadline ist ein Kalendertag.' };"],
+    ['probe.tsx', 'const x = <p>Fällig am Montag</p>;'],
+    ['probe.ts', 'const satz = `Fälligkeitsdatum ${tag}`;'],
+  ];
+  for (const [datei, quelltext] of verletzungen) {
+    assert.notDeepEqual(
+      fristwortTreffer(datei, sichtbareWerteAus(datei, quelltext)),
+      [],
+      `der Wächter übersieht einen verbotenen Wortlaut in: ${quelltext}`,
+    );
+  }
 });
 
 check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst die Abwesenheit nichts', () => {
@@ -6584,13 +5402,19 @@ check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst di
    * nicht gäbe. Gemessen wird deshalb dieselbe Menge mit demselben Sucher:
    * Was die Abwesenheit prüft, muss das Vorhandene finden können.
    */
-  const texte = sichtbareTexte();
-  const mitFrist = texte.filter(({ text }) => findeWort(text, 'Frist'));
-  assert.ok(mitFrist.length > 0, 'in keinem sichtbaren Text kommt „Frist" vor — der Sucher findet nichts');
-
+  const texte = sichtbareWerte();
   const pane = texte.find(({ datei }) => datei.endsWith(path.join('ui', 'TaskPane.tsx')));
   assert.notEqual(pane, undefined, 'der Aufgabenbereich ist nicht unter den gemessenen Texten');
-  assert.match(pane.text, /label="Frist"/, 'das Feld heißt nicht mehr „Frist" — oder es steht nicht mehr da');
+  assert.ok(pane.werte.includes('Frist'), 'das Feld heißt nicht mehr „Frist" — oder es steht nicht mehr da');
+
+  // T-391c point 3: the time belongs to the deadline and says so; „Fälligkeit" is a second word for the thing.
+  assert.equal(TEXTS.deadlineTimeLabel, 'Uhrzeit der Frist (optional)');
+  const alleWerte = texte.flatMap(({ werte }) => werte);
+  assert.equal(alleWerte.some((wert) => /Fälligkeit/i.test(wert)), false, '„Fälligkeit" steht wieder auf dem Bildschirm');
+  const frist = paneQuelle.indexOf('label="Frist"');
+  const uhrzeit = paneQuelle.indexOf('label={TEXTS.deadlineTimeLabel}');
+  const tags = paneQuelle.indexOf('label="Tags"');
+  assert.ok(frist >= 0 && uhrzeit > frist && uhrzeit < tags, 'die Uhrzeit steht nicht unmittelbar beim Fristfeld, vor den Tags');
 });
 
 // 18f — die zweite Tür: **daß es sie nicht gibt** (A-19.19, F-21, T-247)
@@ -6613,7 +5437,7 @@ check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst di
  *     zwar mit einem **gültigen** Add-in-Token. Ohne Token wäre ein 401 die
  *     Antwort, und ein 401 sagt nichts über die Existenz einer Route.
  *  2. Die Gegenprobe im selben Lauf: dieselbe Klammer, dasselbe Token, die
- *     **Nachbarroute** `…/time-entries` — sie antwortet nicht mit 404. Ohne
+ *     **Nachbarroute** `…/mails` — sie antwortet nicht mit 404. Ohne
  *     sie bestünde Punkt 1 auch dann, wenn Token, Herkunft oder Pfadanfang
  *     falsch wären.
  *  3. Und die Fläche selbst: Die Pfade unter `/addin` sind die
@@ -6675,7 +5499,7 @@ check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst di
  * Angriff der ersten Runde zu wiederholen.
  *
  * - Die Rundfahrt **kam nicht an**. `PROBE_RUMPF` trug Bruchteile im
- *   Zeitstempel, `…/time-entries` antwortete 422 — und mit fremder Herkunft
+ *   Zeitstempel, die damalige Buchungsroute antwortete 422 — und mit fremder Herkunft
  *   (4 × 403) oder ohne Token (4 × 401) blieb derselbe Lauf grün. Die
  *   Untergrenze zählte gefundene **Pfade** statt angekommener **Anfragen**;
  *   das ist wörtlich der Fall, gegen den A-A-60 geschrieben wurde.
@@ -6838,18 +5662,12 @@ await checkAsync(
       // Die Gegenprobe: dasselbe Token, dieselbe Herkunft, der Nachbarpfad.
       // Antwortete auch er mit 404, sagte die Zeile darüber nichts über die
       // Route, sondern etwas über den Aufbau dieser Messung.
-      const nachbar = await anfrage(`/addin/todos/${todoId}/time-entries`, {
-        method: 'POST',
-        body: {
-          startedAt: '2026-09-30T08:00:00.000Z',
-          endedAt: '2026-09-30T08:30:00.000Z',
-          note: 'Leistung aus dem Prüflauf',
-        },
-      });
+      // An empty body is enough: it must reach the schema (422), not the 404 of a missing route.
+      const nachbar = await anfrage(`/addin/todos/${todoId}/mails`, { method: 'POST', body: {} });
       assert.notEqual(
         nachbar.status,
         404,
-        'auch die Buchungsroute ist nicht erreichbar — dann mißt der 404 oben den Aufbau',
+        'auch die Zuordnungsroute ist nicht erreichbar — dann mißt der 404 oben den Aufbau',
       );
       assert.notEqual(
         nachbar.status,
@@ -6893,7 +5711,6 @@ const ADDIN_FLAECHE = Object.freeze([
   'GET /api/v1/addin/context',
   'GET /api/v1/addin/todo-matches',
   'POST /api/v1/addin/todos',
-  'POST /api/v1/addin/todos/:todoId/time-entries',
   'POST /api/v1/addin/todos/:todoId/mails',
 ]);
 
@@ -6955,10 +5772,12 @@ const doppelt = (service) => {
  *
  * Bis T-247-9 stand hier `2026-09-30T08:00:00.000Z`, und der Satz daneben
  * lautete, der Statuscode sei gleichgültig. Beides zusammen war der Befund
- * T-247-12: Das Buchungsschema verlangt `T\d{2}:\d{2}:\d{2}Z` **ohne**
- * Bruchteile, `…/time-entries` antwortete mit **422**, und die Rundfahrt kam
- * damit an der **einzigen** schreibenden Route neben dem Anlegen nie an. Sie
- * maß dort die Eingabeprüfung und nicht den Schreibpfad — und blieb grün.
+ * T-247-12: Die damalige Buchungsroute verlangte `T\d{2}:\d{2}:\d{2}Z` **ohne**
+ * Bruchteile, antwortete mit **422**, und die Rundfahrt kam dort nie an. Sie
+ * maß die Eingabeprüfung und nicht den Schreibpfad — und blieb grün.
+ *
+ * Since E-120 `startedAt`, `endedAt` and `note` stay in the body as bait: any
+ * door under `/addin` that books from them is caught by {@link mitBuchung}.
  *
  * Für die **Behauptung** ist der Statuscode weiterhin gleichgültig (die Zahl
  * in `todo_attachment` muß immer null bleiben, ob 201, 422 oder 404). Für die
@@ -7032,6 +5851,10 @@ const zaehleAnhaenge = (service) =>
     service.database.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n'],
   );
 
+/** How many time entries exist at all, running ones included (E-120: the add-in books none). */
+const zaehleBuchungen = (service) =>
+  Number(service.database.connection.prepare('SELECT COUNT(*) AS n FROM time_entry').get()['n']);
+
 /**
  * Der tragende Teil von A-A-71: **jede** Route unter `/addin` wird mit
  * gültigem Add-in-Token angesprochen, und danach muss `todo_attachment` bei
@@ -7050,6 +5873,7 @@ const rundfahrt = async ({ service, anfrage, todoId, rumpf = PROBE_RUMPF, option
     const pfad = vollerPfad.replace('/api/v1', '').replace(':todoId', todoId);
     const vorher = zaehleAnhaengeAm(service, todoId);
     const vorherGesamt = zaehleAnhaenge(service);
+    const buchungenVorher = zaehleBuchungen(service);
     const antwort = await anfrage(verfahren === 'GET' ? `${pfad}?callNumber=TCK-000042` : pfad, {
       method: verfahren,
       ...(verfahren === 'GET' ? {} : { body: vollerPfad.endsWith('/mails') ? {
@@ -7078,6 +5902,8 @@ const rundfahrt = async ({ service, anfrage, todoId, rumpf = PROBE_RUMPF, option
        * Schreibpfad nie berührt und ihre Null sagte nichts.
        */
       irgendwo: zaehleAnhaenge(service) > vorherGesamt,
+      // E-120: a time entry created by this door, on any todo.
+      bucht: zaehleBuchungen(service) > buchungenVorher,
     });
   }
   return fahrten;
@@ -7092,6 +5918,9 @@ const mitWirkung = (fahrten) => fahrten.filter(({ wirkung }) => wirkung).map(({ 
 /** Die Routen, nach denen **irgendwo** ein Anhang entstanden ist. Siehe `irgendwo`. */
 const mitSchreibpfad = (fahrten) =>
   fahrten.filter(({ irgendwo }) => irgendwo).map(({ eintrag }) => eintrag);
+
+/** The routes after which a time entry appeared — with path, so the message names the door. */
+const mitBuchung = (fahrten) => fahrten.filter(({ bucht }) => bucht).map(({ eintrag }) => eintrag);
 
 /**
  * **Ist die Rundfahrt angekommen?** (A-A-73, und dahinter A-A-60.)
@@ -7161,6 +5990,12 @@ const durchgriffsPfade = (todoId) => [
   `/addin/todos/${todoId}/files`,
   `/addin/todos/${todoId}/mail`,
   '/addin/attachments',
+  // E-120, spanned at A-10.12 rather than at the fallen route: booking, timer, done flag.
+  `/addin/todos/${todoId}/time-entries`,
+  '/addin/time-entries',
+  `/addin/todos/${todoId}/timer`,
+  '/addin/timer/start',
+  `/addin/todos/${todoId}/done`,
   `/addin/beliebig-${randomBytes(6).toString('hex')}`,
 ];
 
@@ -7223,6 +6058,56 @@ const zusatzroute = (pfad, schreibtAnhang) => (service) => {
     return c.json({ data: { ok: true } }, 201);
   });
 };
+
+/** How many mail entries hang on this todo (A-10.12: stored apart from the todo's own notes)? */
+const zaehleMailsAm = (service, todoId) =>
+  Number(
+    service.database.connection.prepare('SELECT COUNT(*) AS n FROM todo_mail WHERE todo_id = ?').get(todoId)['n'],
+  );
+
+/**
+ * A `/mails` body with one cloud link — invented values only (B-7.1). A link and
+ * not a file: the composed service has no attachment directory, and a link runs
+ * through the same intake and the same transaction.
+ */
+const mailRumpf = (callNumber, requestId, identity) => ({
+  requestId,
+  callNumber,
+  mail: { identity, subject: 'Probe', sender: 'probe@example.test', receivedAt: null, internetMessageId: null, outlookLink: null, excerpt: null },
+  note: '',
+  attachments: PROBE_RUMPF.attachments,
+});
+
+await checkAsync(
+  'A-10.11/E-134: /mails mit abweichender Call-Nummer → 422, am vorhandenen Todo entsteht nichts — mit Gegenprobe',
+  async () => {
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      // The carrier todo carries TCK-000042; the request names a different, valid number.
+      const todoId = await traegerTodo(anfrage, secret);
+      const pfad = `/addin/todos/${todoId}/mails`;
+
+      const fremd = await anfrage(pfad, {
+        method: 'POST',
+        body: mailRumpf('TCK-000043', '00000000-0000-4000-8000-000000000101', 'proof-mail-fremd'),
+      });
+      assert.equal(fremd.status, 422, fremd.text);
+      // The 422 must come from the call number rule, not from a body the schema rejected.
+      assert.match(fremd.text, /nicht dieselbe gültige Call-Nummer/, fremd.text);
+      assert.equal(zaehleAnhaengeAm(service, todoId), 0, 'eine fremde Call-Nummer hat einen Anhang am vorhandenen Todo erzeugt');
+      assert.equal(zaehleAnhaenge(service), 0, 'eine fremde Call-Nummer hat irgendwo einen Anhang erzeugt');
+      assert.equal(zaehleMailsAm(service, todoId), 0, 'eine fremde Call-Nummer hat einen Mail-Eintrag erzeugt');
+
+      // Counter-check: the same request with the todo's own number does attach — so the zero above can turn red.
+      const eigen = await anfrage(pfad, {
+        method: 'POST',
+        body: mailRumpf('TCK-000042', '00000000-0000-4000-8000-000000000102', 'proof-mail-eigen'),
+      });
+      assert.equal(eigen.status, 200, eigen.text);
+      assert.equal(zaehleAnhaengeAm(service, todoId), 1, `die passende Anfrage hängt den Verweis nicht an: ${eigen.text}`);
+      assert.equal(zaehleMailsAm(service, todoId), 1, 'die passende Anfrage legt keinen Mail-Eintrag an');
+    });
+  },
+);
 
 await checkAsync('A-A-71: die Fläche unter /addin ist die ausgeschriebene Menge der vier', async () => {
   await withComposedService(async ({ service }) => {
@@ -7297,6 +6182,122 @@ await checkAsync(
   },
 );
 
+/*
+ * E-120 — die Buchungstür ist gefallen, und ihre Abwesenheit wird gemessen
+ * ----------------------------------------------------------------------------
+ *
+ * Wie bei A-19.19 (E-100 Punkt 3) wird die Menge an der Anforderung
+ * aufgespannt, nicht an der Route, die fiel: A-10.12 sagt, das Add-in ändert
+ * weder Timer noch Zeitbuchungen noch das Erledigt-Kennzeichen. Also fährt die
+ * Rundfahrt **jede** Tür unter `/addin` mit `startedAt`, `endedAt` und `note`
+ * im Rumpf an und zählt danach `time_entry` über die ganze Tabelle; das
+ * Trägertodo ist vorher erledigt und muß es bleiben. Die Gegenprobe darunter
+ * hängt eine buchende Tür unter einem harmlosen Namen ein und muß rot werden.
+ */
+const erledigtAm = (service, todoId) =>
+  service.database.connection.prepare('SELECT completed_at FROM todo WHERE id = ?').get(todoId)?.[
+    'completed_at'
+  ] ?? null;
+
+/** A test-only door that books silently under a harmless name — the counter-probe for {@link mitBuchung}. */
+const buchendeZusatzroute = (pfad) => (service) => {
+  service.app.post(pfad, (c) => {
+    service.database.connection
+      .prepare(
+        'INSERT INTO time_entry (id, todo_id, started_at, ended_at, note, source, created_at, updated_at)' +
+          ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        randomBytes(8).toString('hex'),
+        c.req.param('todoId'),
+        '2026-09-30T08:00:00Z',
+        '2026-09-30T08:30:00Z',
+        'Leistung aus dem Prüflauf',
+        'manual',
+        '2026-09-30T08:30:00Z',
+        '2026-09-30T08:30:00Z',
+      );
+    return c.json({ data: { ok: true } }, 201);
+  });
+};
+
+await checkAsync(
+  'E-120/A-10.12: keine Tür unter /addin bucht Zeit oder hebt „Erledigt" auf — über jede Route gemessen',
+  async () => {
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+      const erledigt = await anfrage(`/todos/${todoId}/done`, { method: 'PUT', credential: secret });
+      assert.ok(
+        erledigt.status >= 200 && erledigt.status < 300,
+        `das Trägertodo läßt sich nicht erledigen — dann mißt die Zeile über „Erledigt" nichts: ${erledigt.text}`,
+      );
+      const vorher = erledigtAm(service, todoId);
+      assert.notEqual(vorher, null, 'das Trägertodo ist nicht erledigt');
+      assert.equal(zaehleBuchungen(service), 0, 'schon vor der Messung steht eine Buchung da');
+
+      // Die gefallene Tür selbst, mit gültigem Add-in-Token.
+      const versuch = await anfrage(`/addin/todos/${todoId}/time-entries`, {
+        method: 'POST',
+        body: PROBE_RUMPF,
+      });
+      assert.equal(
+        versuch.status,
+        404,
+        `die Buchungsroute des Add-ins antwortet weiterhin (${String(versuch.status)}): ${versuch.text}`,
+      );
+
+      // Und jede Tür, die es gibt — angekommen, nicht bloß angefragt.
+      const fahrten = await rundfahrt({ service, anfrage, todoId });
+      assert.deepEqual(
+        ankunftsMaengel(fahrten),
+        [],
+        `die Rundfahrt ist nicht angekommen — ${ankunftsMaengel(fahrten).join('; ')} (gefahren: ${fahrtprotokoll(fahrten)})`,
+      );
+      assert.deepEqual(
+        mitBuchung(fahrten),
+        [],
+        `über das Add-in-Token entsteht eine Zeitbuchung (E-120, A-10.12): ${mitBuchung(fahrten).join(', ')}`,
+      );
+      assert.equal(zaehleBuchungen(service), 0, 'nach der Rundfahrt steht eine Buchung in der Datenbank');
+      assert.equal(
+        erledigtAm(service, todoId),
+        vorher,
+        'eine Tür unter /addin hat das Erledigt-Kennzeichen des vorhandenen Todos verändert (A-10.12)',
+      );
+
+      // Daneben, billig und nicht allein tragend: der Name.
+      assert.deepEqual(
+        addinFlaeche(service).filter((eintrag) => /time|timer|book|done/i.test(eintrag)),
+        [],
+        'unter /addin steht wieder ein Weg zum Buchen oder Erledigen, und er nennt sich auch so',
+      );
+    });
+  },
+);
+
+await checkAsync(
+  'E-120, Gegenprobe: eine buchende Tür unter harmlosem Namen macht den Lauf rot — mit Pfad',
+  async () => {
+    const pfad = '/api/v1/addin/todos/:todoId/notiz';
+    await withComposedService(
+      async ({ service, anfrage, secret }) => {
+        const todoId = await traegerTodo(anfrage, secret);
+
+        const probe = await anfrage(`/addin/todos/${todoId}/notiz`, { method: 'POST', body: PROBE_RUMPF });
+        assert.equal(probe.status, 201, `die eingehängte Tür antwortet nicht — dann mißt die Gegenprobe nichts: ${probe.text}`);
+        assert.equal(zaehleBuchungen(service), 1, 'die eingehängte Tür bucht nicht');
+
+        // Der Name verrät sie nicht; die Wirkung schon.
+        assert.deepEqual(addinFlaeche(service).filter((eintrag) => /time|timer|book|done/i.test(eintrag)), []);
+        const fahrten = await rundfahrt({ service, anfrage, todoId });
+        assert.deepEqual(mitBuchung(fahrten), [`POST ${pfad}`], 'die buchende Tür bleibt unbemerkt');
+        assert.deepEqual(ankunftsMaengel(fahrten), [], fahrtprotokoll(fahrten));
+      },
+      buchendeZusatzroute(pfad),
+    );
+  },
+);
+
 await checkAsync(
   'A-A-73, Gegenprobe 1: mit fremder Herkunft wird die Rundfahrt rot — sie hat nichts gemessen',
   async () => {
@@ -7351,15 +6352,13 @@ await checkAsync(
 );
 
 await checkAsync(
-  'A-A-73, Gegenprobe 3: ein Zeitstempel mit Bruchteilen wird rot — genau der alte Probenrumpf',
+  'A-A-73, Gegenprobe 3: ein Probenrumpf, den die Prüfschicht abweist, wird rot — mit Route und Statuscode',
   async () => {
     /*
-     * Die Verstümmelung ist hier **der Stand von gestern**: `PROBE_RUMPF` mit
-     * `.000Z`. Das Buchungsschema verlangt die Form ohne Bruchteile, die Route
-     * antwortete mit 422, und die Rundfahrt kam an der einzigen schreibenden
-     * Route neben dem Anlegen nie an. Auffallen muss sie an **dieser** Zeile —
-     * die Untergrenze und die Wirkung bleiben dabei nämlich grün, und das ist
-     * der ganze Punkt des Befunds.
+     * Der Befund T-247-12 an der Tür, die es noch gibt. Bis E-120 war die
+     * Verstümmelung ein Zeitstempel mit Bruchteilen gegen die Buchungsroute;
+     * die ist gefallen. Ein leerer Titel trifft dieselbe Lage an der Anlegetür:
+     * Wirkung und Untergrenze bleiben grün, auffallen muß es an **dieser** Zeile.
      */
     await withComposedService(async ({ service, anfrage, secret }) => {
       const todoId = await traegerTodo(anfrage, secret);
@@ -7367,11 +6366,7 @@ await checkAsync(
         service,
         anfrage,
         todoId,
-        rumpf: {
-          ...PROBE_RUMPF,
-          startedAt: '2026-09-30T08:00:00.000Z',
-          endedAt: '2026-09-30T08:30:00.000Z',
-        },
+        rumpf: { ...PROBE_RUMPF, title: '   ' },
       });
 
       // Das, was gestern grün war, ist auch heute grün — und trägt nicht:
@@ -7386,7 +6381,7 @@ await checkAsync(
       );
       assert.match(
         maengel[0],
-        /POST \/api\/v1\/addin\/todos\/:todoId\/time-entries: 422/,
+        /POST \/api\/v1\/addin\/todos: 422/,
         `die Meldung nennt Route und Statuscode nicht: ${maengel[0]}`,
       );
     });
@@ -7413,10 +6408,7 @@ await checkAsync(
       // Erst der Nachweis, dass der Aufbau trägt: Wären Token, Wirt oder
       // Herkunft falsch, antwortete alles mit 401 oder 403 — und ein Lauf, in
       // dem nichts 404 ist, wäre trotzdem grün, wenn niemand hinsieht.
-      const nachbar = await anfrage(`/addin/todos/${todoId}/time-entries`, {
-        method: 'POST',
-        body: PROBE_RUMPF,
-      });
+      const nachbar = await anfrage('/addin/context');
       assert.ok(
         nachbar.status >= 200 && nachbar.status < 300,
         `die Nachbarroute antwortet ${String(nachbar.status)} — dann mißt die Durchgriffsprobe den Aufbau: ${nachbar.text}`,
@@ -7647,7 +6639,7 @@ await checkAsync(
      * dabei die **zuerst** registrierte; wer seine Zeile über
      * `api.route('/addin', …)` setzt, beantwortet einen der vier Pfade selbst.
      */
-    const pfad = '/api/v1/addin/todos/:todoId/time-entries';
+    const pfad = '/api/v1/addin/todos/:todoId/mails';
     await withComposedService(
       async ({ service }) => {
         assert.deepEqual(
@@ -7691,8 +6683,9 @@ heading('19  Jedes Feld verweist auf seinen Hinweis und auf seine Meldung (V-03/
  *       immer im Baum (SC 4.1.3, dieselbe Bauart wie B-5/T-118).
  *  19c  **Jede** Aufrufstelle reicht die Attribute bis an ihr Bedienelement
  *       durch. Ein Feld, das sie liegen lässt, ist der Zustand von vorher.
- *  19d  Der Wortlaut am Fristfeld (V-04): die tragende Aussage zuerst, der
- *       Fülltext der Hauptanwendung gestrichen.
+ *  19d  Der Wortlaut am Fristfeld (V-04, O-GF): die tragende Aussage zuerst,
+ *       der gemeinsame Kern aus dem Bündel und zeichengleich mit der
+ *       Hauptanwendung (GF-03).
  *
  * Die Nachlese aus T-169 hängt daran, weil sie dieselben Flächen betrifft:
  *
@@ -7937,56 +6930,108 @@ check('der Tag-Auswähler erzeugt seine Kennung nicht mehr selbst', () => {
   assert.match(picker, /withDescription\s*\(\s*aria\s*,/, 'die eigene Zeile tritt nicht zur Beschreibung des Feldes hinzu');
 });
 
-// 19d — der Wortlaut am Fristfeld (V-04)
+// 19d — der Wortlaut am Fristfeld (V-04, O-GF)
 
-const paneQuelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
-const fristHinweis = /label="Frist"[\s\S]{0,300}?hint="([^"]*)"/.exec(paneQuelle)?.[1] ?? '';
+const fristHinweis = `${TEXTS.deadlineHintAddinPrefix} ${TEXTS.deadlineHintCore}`;
+
+/*
+ * The approved wording from T-393 (O-GF), written out as a requirement and not
+ * derived from the bundle: a guard that read its expectation from the bundle
+ * would follow any change. Changing it needs the spec-ux-reviewer (E-078 point 3).
+ */
+const FREIGEGEBENER_KERN =
+  'Ein Kalendertag, die Uhrzeit ist optional. Überfällig ist die Frist erst ab dem Folgetag. ' +
+  'Leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export.';
+const FREIGEGEBENER_ADDIN_SATZ = 'SuperTakt liest die Frist nicht aus der E-Mail — Sie tragen sie selbst ein.';
+
+/**
+ * Reads every value of `key` from a source text: one string literal or several
+ * joined with `+`. Template literals with `${` are not read — a computed core
+ * could not be compared character by character anyway.
+ */
+const textWerte = (quelltext, key) => {
+  const literal = String.raw`(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|` + '`(?:[^`\\\\$]|\\\\.)*`)';
+  const eintrag = new RegExp(String.raw`\b${key}\s*:\s*(${literal}(?:\s*\+\s*${literal})*)`, 'g');
+  const werte = [];
+  for (const treffer of quelltext.matchAll(eintrag)) {
+    const teile = treffer[1].match(new RegExp(literal, 'g')) ?? [];
+    // Escapes are only unwrapped (`\'` becomes `'`); UI sentences carry no `\n` or `\u`.
+    werte.push(teile.map((teil) => teil.slice(1, -1).replace(/\\(.)/g, '$1')).join(''));
+  }
+  return werte;
+};
 
 check('V-04: der Hinweis am Fristfeld nennt die Abwesenheit — und zwar zuerst', () => {
-  /*
-   * Vier Aussagen standen dort, und die einzige, die auf dieser Fläche etwas
-   * erklärt, stand an dritter Stelle. Sie steht jetzt an erster.
-   *
-   * Gemessen wird die **Stellung**, nicht der Wortlaut: Wer den Satz
-   * umschreibt, darf das — wer die Aussage über die E-Mail hinter die
-   * Bedienhinweise schiebt, nicht.
-   */
-  assert.ok(fristHinweis.length > 0, 'das Fristfeld hat gar keinen Hinweis mehr');
+  // Measured by position, not wording: the statement about the mail stays in front of the operating hints.
   const ueberDieMail = fristHinweis.indexOf('E-Mail');
+  const bedienhinweis = fristHinweis.indexOf('Kalendertag');
   assert.notEqual(ueberDieMail, -1, 'der Hinweis sagt nicht, dass die Frist nicht aus der E-Mail kommt');
-
-  const bedienhinweis = fristHinweis.indexOf('Uhrzeit optional');
-  assert.notEqual(bedienhinweis, -1, 'der Hinweis sagt nicht mehr, dass die Frist ein Tag und keine Uhrzeit ist');
-  assert.ok(
-    ueberDieMail < bedienhinweis,
-    `die tragende Aussage steht wieder hinten: „${fristHinweis}"`,
-  );
+  assert.notEqual(bedienhinweis, -1, 'der Hinweis sagt nicht mehr, dass die Frist ein Kalendertag ist');
+  assert.ok(ueberDieMail < bedienhinweis, `die tragende Aussage steht wieder hinten: „${fristHinweis}"`);
 });
 
-check('V-04: der Fülltext der Hauptanwendung steht nicht mehr im Aufgabenbereich', () => {
-  /*
-   * „ändert nichts an Pools, Spalten, Buchungen oder Export" beantwortet in
-   * der Hauptanwendung eine reale Sorge — dort gibt es Pools, Spalten und
-   * eine Exportansicht. Im Aufgabenbereich gibt es keine davon; der Satz
-   * schob dort nur die tragende Aussage in die Mitte.
-   *
-   * Der Satz bleibt gültig (A-19.7) und bleibt dort stehen, wo er gilt.
-   */
-  for (const wort of ['Pools', 'Spalten', 'Export']) {
-    assert.equal(
-      fristHinweis.includes(wort),
-      false,
-      `„${wort}" steht wieder im Hinweis des Aufgabenbereichs: „${fristHinweis}"`,
-    );
+check('O-GF / GF-01: der Hinweis ist der freigegebene Wortlaut — Add-in-Satz, dann der Kern', () => {
+  assert.equal(TEXTS.deadlineHintAddinPrefix, FREIGEGEBENER_ADDIN_SATZ, 'der Add-in-Satz weicht vom freigegebenen Wortlaut ab (T-393)');
+  assert.equal(TEXTS.deadlineHintCore, FREIGEGEBENER_KERN, 'der Kern weicht vom freigegebenen Wortlaut ab (T-393)');
+  // A-19.7 is part of the core since O-GF; the V-04 guard that kept it out of the pane is superseded (GF-01).
+  for (const wort of ['Pools', 'Spalten', 'Buchungen', 'Export', 'Folgetag']) {
+    assert.ok(fristHinweis.includes(wort), `„${wort}" fehlt im Hinweis: „${fristHinweis}"`);
   }
 });
 
-check('A-19.1: „leer lassen" bleibt gesagt — ohne Frist ist ein Todo gültig', () => {
-  assert.match(
-    fristHinweis,
-    /leer lassen/i,
-    `der Hinweis sagt nicht mehr, dass ein leeres Feld erlaubt ist: „${fristHinweis}"`,
+check('E-122 Punkt 3: der Hinweis im Aufgabenbereich verspricht keine 00:00', () => {
+  // The add-in sends no time without input (`dueTime: null`); "00:00" is a main-application sentence only.
+  assert.equal(/00:00|Uhrzeit gilt/.test(fristHinweis), false, `der Hinweis nennt eine Vorgabeuhrzeit: „${fristHinweis}"`);
+  assert.match(paneQuelle, /dueTime:\s*dueDate\s*\?\s*dueTime\s*\|\|\s*null\s*:\s*null/, 'ohne eingetragene Uhrzeit schickt der Aufgabenbereich nicht mehr `null`');
+});
+
+check('O-GF: das Fristfeld liest seinen Hinweis aus dem Textbündel, nicht aus dem JSX', () => {
+  const feld = /label="Frist"[\s\S]{0,400}?error=/.exec(paneQuelle)?.[0] ?? '';
+  assert.ok(feld.length > 0, 'das Fristfeld hat keinen Hinweis aus einem Ausdruck mehr');
+  assert.match(feld, /TEXTS\.deadlineHintAddinPrefix/, 'der Add-in-Satz kommt nicht aus dem Bündel');
+  assert.match(feld, /TEXTS\.deadlineHintCore/, 'der Kern kommt nicht aus dem Bündel');
+  assert.equal(
+    files.filter((datei) => datei.endsWith('.tsx') && sourceWithoutComments(datei).includes('Überfällig ist die Frist')).length,
+    0,
+    'der Kern steht wieder wörtlich in einer Oberflächendatei',
   );
+});
+
+check('A-19.1: „Leer lassen" bleibt gesagt — ohne Frist ist ein Todo gültig', () => {
+  assert.match(fristHinweis, /leer lassen/i, `der Hinweis sagt nicht mehr, dass ein leeres Feld erlaubt ist: „${fristHinweis}"`);
+});
+
+check('O-GF / GF-03: der Kern ist zeichengleich mit dem Textbündel der Hauptanwendung', () => {
+  /*
+   * Two copies by design: `packages/domain` carries no UI text (E-121 point 9),
+   * so the equality is measured. The main application's bundle is found by its
+   * key, not by a path (T-400a places it). No key found is red, not skipped
+   * (E-121 point 10).
+   */
+  const webBuendel = locateSingleSource({
+    root: path.join(paketWurzel('@takt/web'), 'src'),
+    accept: (name) => /\.tsx?$/.test(name),
+    carries: (text) => /\bdeadlineHintCore\s*:/.test(text),
+    description: 'das Textbündel der Hauptanwendung mit dem Schlüssel `deadlineHintCore`',
+  });
+  const werte = textWerte(webBuendel.text, 'deadlineHintCore');
+  assert.ok(
+    werte.length > 0,
+    `${webBuendel.name} führt \`deadlineHintCore\`, aber nicht als lesbare Zeichenkette — der Gleichlauf ist nicht meßbar`,
+  );
+  assert.ok(
+    werte.includes(TEXTS.deadlineHintCore),
+    `der Kern weicht zwischen Add-in und ${webBuendel.name} ab:\n        Add-in: „${TEXTS.deadlineHintCore}"\n        ` +
+      werte.map((wert) => `Web:    „${wert}"`).join('\n        '),
+  );
+});
+
+check('GF-03, Gegenprobe: der Vergleich liest Verkettung und sieht eine Abweichung', () => {
+  const quelle = `const t = { deadlineHintCore:\n    'Ein Kalendertag. ' +\n    "Leer lassen.", other: 'x' };`;
+  assert.deepEqual(textWerte(quelle, 'deadlineHintCore'), ['Ein Kalendertag. Leer lassen.']);
+  assert.deepEqual(textWerte(`{ deadlineHintCore: 'Sie\\'s' }`, 'deadlineHintCore'), ["Sie's"]);
+  assert.equal(textWerte(`{ deadlineHintCore: 'Ein Kalendertag.' }`, 'deadlineHintCore').includes(FREIGEGEBENER_KERN), false);
+  assert.deepEqual(textWerte('{ deadlineHintCore: `${a} b` }', 'deadlineHintCore'), []);
 });
 
 /*
@@ -8027,6 +7072,7 @@ const gateFall = (abweichung) =>
     connection: 'ready',
     callNumberProblem: null,
     dueDateInvalid: false,
+    targetChoiceMissing: false,
     ...abweichung,
   });
 
@@ -8036,9 +7082,11 @@ check('V-11: nichts offen — kein Riegel und kein Satz', () => {
   assert.equal(gate.reason, null, 'ein Grund steht da, obwohl nichts fehlt');
 });
 
-check('V-11: jeder der fünf Zustände nennt seinen Grund', () => {
+check('V-11: jeder der sechs Zustände nennt seinen Grund', () => {
   const faelle = [
     [{ callNumberProblem: 'irgendetwas stimmt nicht' }, /Call-Nummer/],
+    // A-10.11: several matches and no choice — the button names why it waits (T-409c).
+    [{ targetChoiceMissing: true }, /Mehrere Todos passen/],
     [{ title: '   ' }, /Titel/],
     [{ dueDateInvalid: true }, /Frist/],
     [{ connection: 'loading' }, /Tags/],
@@ -8053,7 +7101,7 @@ check('V-11: jeder der fünf Zustände nennt seinen Grund', () => {
   }
 });
 
-check('V-11: Sperre und Grund sind dieselbe Rechnung — über alle 24 Möglichkeiten', () => {
+check('V-11: Sperre und Grund sind dieselbe Rechnung — über alle 48 Möglichkeiten', () => {
   /*
    * Die eigentliche Zusicherung. Ein Knopf, der gesperrt ist und keinen Grund
    * nennt, ist der Befund; ein Grund ohne Sperre wäre seine Umkehrung und
@@ -8064,18 +7112,17 @@ check('V-11: Sperre und Grund sind dieselbe Rechnung — über alle 24 Möglichk
     for (const title of ['Rechnung prüfen', '']) {
       for (const callNumberProblem of [null, 'unbrauchbar']) {
         for (const dueDateInvalid of [false, true]) {
-          const gate = createTodoGate({ title, connection, callNumberProblem, dueDateInvalid });
-          gezaehlt += 1;
-          assert.equal(
-            gate.blocked,
-            gate.reason !== null,
-            `Sperre und Grund fallen auseinander: ${JSON.stringify({ connection, title, callNumberProblem, dueDateInvalid })}`,
-          );
+          for (const targetChoiceMissing of [false, true]) {
+            const eingaben = { title, connection, callNumberProblem, dueDateInvalid, targetChoiceMissing };
+            const gate = createTodoGate(eingaben);
+            gezaehlt += 1;
+            assert.equal(gate.blocked, gate.reason !== null, `Sperre und Grund fallen auseinander: ${JSON.stringify(eingaben)}`);
+          }
         }
       }
     }
   }
-  assert.equal(gezaehlt, 24, 'die Schleife hat nicht alle Möglichkeiten durchlaufen');
+  assert.equal(gezaehlt, 48, 'die Schleife hat nicht alle Möglichkeiten durchlaufen');
 });
 
 check('V-11: genannt wird der erste Grund in der Lesereihenfolge der Fläche', () => {
@@ -8085,9 +7132,14 @@ check('V-11: genannt wird der erste Grund in der Lesereihenfolge der Fläche', (
     'bei vier offenen Gründen steht nicht der oberste da',
   );
   assert.match(
+    gateFall({ targetChoiceMissing: true, title: '', dueDateInvalid: true, connection: 'failed' }).reason,
+    /Mehrere Todos passen/,
+    'nach der Call-Nummer kommt die Auswahl unter den passenden Todos',
+  );
+  assert.match(
     gateFall({ title: '', dueDateInvalid: true, connection: 'failed' }).reason,
     /Titel/,
-    'nach der Call-Nummer kommt der Titel',
+    'nach der Auswahl kommt der Titel',
   );
   assert.match(gateFall({ dueDateInvalid: true, connection: 'failed' }).reason, /Frist/, 'nach dem Titel kommt die Frist');
 });
@@ -8095,6 +7147,7 @@ check('V-11: genannt wird der erste Grund in der Lesereihenfolge der Fläche', (
 check('V-11: die Sätze sind kurz und ohne Anrede (E-078, E-080)', () => {
   const saetze = [
     gateFall({ callNumberProblem: 'x' }).reason,
+    gateFall({ targetChoiceMissing: true }).reason,
     gateFall({ title: '' }).reason,
     gateFall({ dueDateInvalid: true }).reason,
     gateFall({ connection: 'loading' }).reason,
@@ -8119,6 +7172,37 @@ check('V-11: der Aufgabenbereich benutzt die Rechnung und rechnet nicht daneben'
     /title\.trim\(\)\.length === 0 \|\|/.test(paneQuelle),
     false,
     'der alte vierteilige Sperrausdruck steht wieder daneben — zwei Rechnungen für eine Frage',
+  );
+  // T-409c: the ambiguity lock stood next to the gate and had no reason; now it runs through the gate.
+  assert.equal(
+    /offers\.length > 1 && target === 'auto'\)\}/.test(paneQuelle),
+    false,
+    'die Sperre bei mehreren Treffern steht wieder neben der Rechnung — ohne Grund',
+  );
+  assert.match(paneQuelle, /targetChoiceMissing: choosingTarget/, 'die Auswahl unter mehreren Treffern geht nicht in die Rechnung');
+  // While a choice is missing the button must not promise a new todo (A-10.11).
+  assert.match(
+    paneQuelle,
+    /\{appending \|\| choosingTarget \? TEXTS\.appendButton : TEXTS\.createButton\}/,
+    'der Knopf heißt bei offener Auswahl „Neues Todo anlegen"',
+  );
+});
+
+check('A-10.16: Fehlschlag und Abbruch beim Ergänzen sagen, ob die E-Mail angehängt wurde', () => {
+  // SP-A-32 stays word for word for creating; appending gets its own sentence (T-409c, E-133 point 4).
+  assert.equal(TEXTS.failureNothingCreated, 'Es ist kein Todo entstanden.');
+  assert.match(TEXTS.failureNothingAppended, /E-Mail wurde nicht angehängt/);
+  assert.match(TEXTS.cancelledAppend, /E-Mail wurde nicht angehängt/);
+  assert.match(TEXTS.failureAppendUnknown, /Ob die E-Mail angehängt wurde/);
+
+  assert.match(paneQuelle, /appending=\{failure\.appending\}/, '`Failure` erfährt nicht, ob ergänzt wurde');
+  for (const schluessel of ['failureNothingAppended', 'failureAppendUnknown', 'cancelledAppend', 'cancelledCreate']) {
+    assert.ok(paneQuelle.includes(`TEXTS.${schluessel}`), `der Aufgabenbereich zeigt TEXTS.${schluessel} nirgends`);
+  }
+  assert.equal(
+    paneQuelle.includes('<p className="pane-note">Es ist kein Todo entstanden.</p>'),
+    false,
+    'der Fehlschlag behauptet wieder unbedingt, es sei kein Todo entstanden — auch beim Ergänzen',
   );
 });
 
@@ -8371,28 +7455,19 @@ const uiQuelle = (...teile) => sourceWithoutComments(path.join(srcRoot, ...teile
  * SP-A-05 und die Leistungsbezeichnung sind mit den Buchungsbedienelementen
  * des Duplikatfalls gefallen (PR #15).
  *
- * SP-A-27 und SP-A-28 sind mit PR #15 entstanden, als die Warnung noch eine
- * Handlung anbot; seit T-247 (Entscheidung zu F-21) bietet sie keine mehr.
- * Die beiden Sätze bleiben stehen, und sie tragen jetzt **mehr**: Sie sind die
- * einzige Stelle, an der der Aufgabenbereich ausspricht, was bei einem Treffer
- * **nicht** geschieht — keine Zeit, kein Wiederöffnen.
- *
- * **Ihr Wortlaut ist in T-247-3 geändert** (Befund Y-02), und das ist bei
- * einem gesperrten Satz die Ausnahme und nicht der Regelfall: Sie standen
- * zeichengleich da, ihr Bezugswort aber nicht mehr. „Dabei" verwies auf das
- * Anhängen; nach dem Rückbau stand davor „Bearbeiten Sie das vorhandene Todo
- * in SuperTakt", und auf **diesem** Weg behaupteten beide Sätze über die
- * Hauptanwendung das Gegenteil dessen, was A-2.5 dort tut. Der neue Wortlaut
- * bindet sie an den Zweig, auf den sie zutreffen: an das **neue** Todo. Der
- * spec-ux-reviewer hat der Änderung nach E-078 Punkt 3 ausdrücklich
- * zugestimmt; die Aussage der beiden Sperren ist dieselbe geblieben, nur ihr
- * Bezug ist eindeutig.
+ * SP-A-27 and SP-A-28 date from PR #15. Since T-398c (A-10.11, A-10.16) the
+ * mail can extend an existing todo again, and both sentences show only on that
+ * branch (`target !== 'new'`). There they are the one place where the task
+ * pane says what appending does not do (A-10.12): record time, reopen a done
+ * todo, touch timer or bookings. The wording changed in T-247-3 and again in
+ * T-398c; the spec-ux-reviewer approved the latter (T-414 S-7, E-078 point 3).
  *
  * Der Satz selbst steht in Abschnitt 5b (`SP_A_27`, `SP_A_28`) und wird von
  * hier gelesen — einmal im Lauf und nicht zweimal.
  */
 const TASKPANE = path.join('ui', 'TaskPane.tsx');
-const DUPLICATE_OFFER = path.join('ui', 'DuplicateOffer.tsx');
+// SP-A-27 and SP-A-28 moved from `DuplicateOffer.tsx` into the text bundle in T-398c (E-118).
+const TEXT_BUNDLE = path.join('ui', 'texts.ts');
 const TAGPICKER = path.join('ui', 'TagPicker.tsx');
 
 /**
@@ -8420,22 +7495,21 @@ const GESPERRTE_TEXTE = Object.freeze([
   }),
   Object.freeze({
     sperre: 'SP-A-27',
-    datei: DUPLICATE_OFFER,
+    datei: TEXT_BUNDLE,
     text: SP_A_27,
-    verletzung: 'Ein neues Todo steht daneben',
+    verletzung: 'Das Ergänzen bucht nichts',
     grund:
-      'PR #15, neu gefasst in T-247-3 (Y-02) — das **neue** Todo erfasst keine Zeit auf dem ' +
-      'vorhandenen; unter dem Verweis nach SuperTakt sagte die alte Fassung das Gegenteil dessen, ' +
-      'was A-2.5 dort tut',
+      'A-10.12, neu gefasst in T-398c — das Ergänzen eines vorhandenen Todos erfasst keine Zeit; ' +
+      'der Satz steht nur, wenn die E-Mail ein vorhandenes Todo ergänzt',
   }),
   Object.freeze({
     sperre: 'SP-A-28',
-    datei: DUPLICATE_OFFER,
+    datei: TEXT_BUNDLE,
     text: SP_A_28,
-    verletzung: 'ändert daran nichts.',
+    verletzung: 'und ändert sonst nichts.',
     grund:
-      'PR #15, neu gefasst in T-247-3 (Y-02) — das Erledigt-Kennzeichen des vorhandenen Todos ' +
-      'bleibt unberührt, und zwar durch das Anlegen des neuen und nicht durch SuperTakt',
+      'A-10.12, neu gefasst in T-398c — das Ergänzen ändert Erledigt, Timer und Buchungen nicht; ' +
+      'ohne den Satz fehlt die Zusage zum Erledigt-Kennzeichen',
   }),
   Object.freeze({
     sperre: 'SP-A-12',
@@ -8474,7 +7548,7 @@ const fehlendeSperrtexte = (quellen) =>
 const sperrQuellen = () =>
   new Map([
     [TASKPANE, flaeche('ui', 'TaskPane.tsx')],
-    [DUPLICATE_OFFER, flaeche('ui', 'DuplicateOffer.tsx')],
+    [TEXT_BUNDLE, flaeche('ui', 'texts.ts')],
     [TAGPICKER, flaeche('ui', 'TagPicker.tsx')],
   ]);
 

@@ -26,7 +26,7 @@ test('A-10.14 — mail history and planning survive storage and main-app editing
     await expect(page.getByText('45 Minuten', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
     await expect(page.getByLabel('Frist', { exact: true })).toHaveValue('2026-10-25');
-    await expect(page.getByLabel('Fälligkeitsuhrzeit', { exact: true })).toHaveValue('02:30');
+    await expect(page.getByLabel('Uhrzeit der Frist (optional)', { exact: true })).toHaveValue('02:30');
     await page.getByLabel('Zeitschätzung in Minuten').fill('60');
     await page.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(page.getByText('60 Minuten', { exact: true })).toBeVisible();

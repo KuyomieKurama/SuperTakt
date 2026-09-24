@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { errorMessage } from "../../api/client";
+import { errorCode, errorMessage, isServiceError } from "../../api/client";
 import {
   getOrphanedTimer,
   getRunningTimer,
@@ -20,14 +20,25 @@ import {
   type RunningTimerView,
 } from "./api";
 import type { ForeignText, Id } from "../../api/types";
-import { FormDialog } from "../../shared/ui/FormDialog";
+import { FormDialog, TextField } from "../../shared/ui/FormDialog";
 import { NoteField } from "../../shared/ui/NoteField";
 import {
   calendarDayOf,
+  formatDateTime,
   formatDuration,
   formatStopwatch,
+  fromLocalInputValue,
+  toLocalInputValue,
 } from "../../lib/format";
-import { BILLING_NOTE_MAY_BE_EMPTY } from "../../lib/labels";
+import {
+  bookingEndProblem,
+  exceedsBookingLimit,
+  latestBookingEnd,
+  secondsToBook,
+} from "../../lib/bookingEnd";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { timerTexts } from "./texts";
 import { bookingSentence, withMovement } from "../../lib/movement";
 import { loadDayGroupInsight } from "../../app/dayGroup";
 import { useRefresh } from "../../app/RefreshContext";
@@ -39,6 +50,7 @@ import { IdleRecovery } from "./IdleRecovery";
 import { stopMessage } from "./stopMessage";
 import { useReactivation } from "./useReactivation";
 import { Button } from "../../shared/ui/Primitives";
+import { Icon } from "../../shared/ui/Icon";
 
 /**
  * Takt — der Timer, überall erreichbar (A-13.4, I-04, I-05).
@@ -100,10 +112,84 @@ export interface TimerApi {
 
 const TimerContext = createContext<TimerApi | null>(null);
 
+/** A failure shown in one of the timer dialogs, with its origin for `lang` (A-28.2). */
+interface DialogFailure {
+  readonly message: string;
+  readonly fromService: boolean;
+}
+
+function dialogFailure(cause: unknown): DialogFailure {
+  return { message: errorMessage(cause), fromService: isServiceError(cause) };
+}
+
+/**
+ * The service refuses a plain stop after more than 24 hours (A-28.6). The UI then asks for the
+ * end instead of showing a dead-end error (welle-18-fluss.md 4.1, clock drift included).
+ */
+function needsNamedEnd(cause: unknown): boolean {
+  const code = errorCode(cause);
+  return code === "timer_stop_end_required" || code === "time_entry_too_long";
+}
+
+/** The end question of a long stop, prefilled with start + 24 h (A-28.6). */
+interface EndQuestion {
+  readonly startedAt: string;
+  /** Value of the `datetime-local` field. */
+  readonly value: string;
+  /** A submit was attempted; only then does the field show its message (SC 3.3.1). */
+  readonly attempted: boolean;
+}
+
+function endQuestionFor(startedAt: string): EndQuestion {
+  return { startedAt, value: toLocalInputValue(latestBookingEnd(startedAt)), attempted: false };
+}
+
+/** The named end, or `null` while the field is not valid. */
+function endOf(question: EndQuestion): string | null {
+  const end = fromLocalInputValue(question.value);
+  return bookingEndProblem(question.startedAt, end, true) === null ? end : null;
+}
+
+function LongStopFields({
+  question,
+  label,
+  onChange,
+}: {
+  readonly question: EndQuestion;
+  readonly label: string;
+  readonly onChange: (value: string) => void;
+}) {
+  const text = timerTexts();
+  const end = fromLocalInputValue(question.value);
+  const problem = bookingEndProblem(question.startedAt, end, true);
+  const seconds = secondsToBook(question.startedAt, end);
+  return (
+    <>
+      <p className="dialog__consequence dialog__consequence--warning">
+        <Icon name="alert-triangle" size={14} />
+        <span>{text.longStopLead}</span>
+      </p>
+      <TextField
+        label={label}
+        type="datetime-local"
+        value={question.value}
+        onChange={onChange}
+        required
+        hint={text.longStopHint(formatDateTime(question.startedAt))}
+        {...(question.attempted && problem !== null ? { error: labels().bookingEndProblem[problem] } : {})}
+      />
+      {/* Recomputed on change; not a live region (welle-18-fluss.md 4.2). */}
+      <p className="dialog__hint tabular">
+        {seconds === null ? null : text.longStopReadout(formatDuration(seconds))}
+      </p>
+    </>
+  );
+}
+
 export function useTimer(): TimerApi {
   const api = useContext(TimerContext);
   if (api === null) {
-    throw new Error("useTimer steht nur innerhalb von TimerProvider zur Verfügung.");
+    throw new Error("useTimer is only available inside TimerProvider.");
   }
   return api;
 }
@@ -125,7 +211,7 @@ interface StartConflict {
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const toasts = useToasts();
   const { bump } = useRefresh();
-  const { promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes } = usePreferences();
+  const { promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes } = usePreferences();
   const directStopPending = useRef(false);
 
   const [running, setRunning] = useState<RunningTimerView | null>(null);
@@ -136,11 +222,16 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
 
   const [stopOpen, setStopOpen] = useState(false);
   const [stopNote, setStopNote] = useState("");
+  /** `null`: a normal stop. Otherwise the timer ran for more than 24 hours (A-28.6). */
+  const [stopEnd, setStopEnd] = useState<EndQuestion | null>(null);
+  /** With the Leistung prompt off, the long-stop dialog asks only for the end (A-22). */
+  const [stopAsksNote, setStopAsksNote] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<DialogFailure | null>(null);
 
   const [conflict, setConflict] = useState<StartConflict | null>(null);
   const [conflictNote, setConflictNote] = useState("");
+  const [conflictEnd, setConflictEnd] = useState<EndQuestion | null>(null);
 
   const [orphanChoice, setOrphanChoice] = useState<"book_until_heartbeat" | "discard">(
     "book_until_heartbeat",
@@ -148,6 +239,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
 
   const runningRef = useRef<RunningTimerView | null>(null);
   runningRef.current = running;
+  const elapsedRef = useRef(0);
 
   /* Laden und Fortzählen                                              */
 
@@ -172,12 +264,13 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const idleChanged = useCallback(() => { refresh(); bump(); }, [refresh, bump]);
   const idle = useIdleTimer({ running, enabled: idleDetectionEnabled, thresholdMinutes: idleThresholdMinutes,
     blocked: busy || stopOpen || conflict !== null || orphan !== null, changed: idleChanged });
+  const pausedForIdle = idle.session !== null;
   const actionPending = useRef(false);
   const guardIdle = useCallback((action: () => void) => {
     if (actionPending.current || busy || stopOpen || conflict !== null || orphan !== null) return;
     actionPending.current = true;
-    void idle.check().then(pending => { if (pending === null || pending.returnedAt !== null) action(); })
-      .catch((cause: unknown) => toasts.failure("Timer konnte nicht geprüft werden", errorMessage(cause)))
+    void idle.check().then(pending => { if (pending === null) action(); })
+      .catch((cause: unknown) => toasts.failure(timerTexts().checkFailed, errorMessage(cause), isServiceError(cause)))
       .finally(() => { actionPending.current = false; });
   }, [idle.check, busy, stopOpen, conflict, orphan, toasts]);
 
@@ -189,19 +282,19 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    if (running === null) return;
+    if (running === null || pausedForIdle) return;
     const handle = window.setInterval(() => setTick((value) => value + 1), 1000);
     return () => window.clearInterval(handle);
-  }, [running]);
+  }, [running, pausedForIdle]);
 
   /** E-036 — Lebenszeichen. Deckelt den Schaden eines Absturzes auf ein Intervall. */
   useEffect(() => {
-    if (running === null) return;
+    if (running === null || pausedForIdle) return;
     const handle = window.setInterval(() => {
       void touchTimerHeartbeat().catch(() => undefined);
     }, HEARTBEAT_MS);
     return () => window.clearInterval(handle);
-  }, [running]);
+  }, [running, pausedForIdle]);
 
   /** Ein Timer kann auch anderswo entstehen. Selten nachfragen genügt. */
   useEffect(() => {
@@ -214,6 +307,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     void tick;
     return anchor.seconds + Math.max(0, Math.floor((Date.now() - anchor.atMs) / 1000));
   }, [anchor, tick]);
+  elapsedRef.current = elapsedSeconds;
 
   /* Stoppen                                                           */
 
@@ -241,10 +335,10 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   );
 
   const performStop = useCallback(
-    async (note: ForeignText): Promise<boolean> => {
+    async (note: ForeignText, endedAt?: string): Promise<boolean> => {
       const current = runningRef.current;
       if (current === null) return false;
-      const result = await stopTimer(note);
+      const result = await stopTimer(note, endedAt);
       runningRef.current = null;
       setRunning(null);
       setAnchor(null);
@@ -260,8 +354,8 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         */
         toasts.show({
           tone: "info",
-          title: "Nichts gebucht.",
-          body: `Der Timer auf ${quotedName(current.todoTitle)} lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.`,
+          title: timerTexts().nothingBooked,
+          body: timerTexts().underOneSecond(quotedName(current.todoTitle)),
         });
         return true;
       }
@@ -278,15 +372,29 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     [bump, refresh, reportStopped, toasts],
   );
 
+  const openStopDialog = useCallback((current: RunningTimerView, askEnd: boolean) => {
+    setStopNote(current.entry.note);
+    setStopEnd(askEnd ? endQuestionFor(current.entry.startedAt) : null);
+    setStopAsksNote(promptOnTimerStop);
+    setDialogError(null);
+    setStopOpen(true);
+  }, [promptOnTimerStop]);
+
   const requestStop = useCallback(() => {
     const current = runningRef.current;
     if (current === null || directStopPending.current || busy || stopOpen || conflict !== null) return;
-    if (!promptOnTimerStop) {
+    // After more than 24 hours the end question opens even with the prompt off (A-28.6).
+    const askEnd = exceedsBookingLimit(elapsedRef.current);
+    if (!promptOnTimerStop && !askEnd) {
       directStopPending.current = true;
       setBusy(true);
       void performStop(current.entry.note)
         .catch((cause: unknown) => {
-          toasts.failure("Der Timer ließ sich nicht stoppen", errorMessage(cause));
+          if (needsNamedEnd(cause)) {
+            openStopDialog(current, true);
+            return;
+          }
+          toasts.failure(timerTexts().stopFailed, errorMessage(cause), isServiceError(cause));
           refresh();
         })
         .finally(() => {
@@ -295,21 +403,34 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         });
       return;
     }
-    setStopNote(current.entry.note);
-    setDialogError(null);
-    setStopOpen(true);
-  }, [busy, conflict, performStop, promptOnTimerStop, refresh, stopOpen, toasts]);
+    openStopDialog(current, askEnd);
+  }, [busy, conflict, openStopDialog, performStop, promptOnTimerStop, refresh, stopOpen, toasts]);
 
   const confirmStop = useCallback(() => {
+    const current = runningRef.current;
+    let endedAt: string | undefined;
+    if (stopEnd !== null) {
+      setStopEnd({ ...stopEnd, attempted: true });
+      const end = endOf(stopEnd);
+      if (end === null) return;
+      endedAt = end;
+    }
     setBusy(true);
     setDialogError(null);
-    void performStop(stopNote)
+    void performStop(stopAsksNote ? stopNote : current?.entry.note ?? "", endedAt)
       .then((done) => {
         if (done) setStopOpen(false);
       })
-      .catch((cause: unknown) => setDialogError(errorMessage(cause)))
+      .catch((cause: unknown) => {
+        // A plain stop the service refuses as too long turns into the end question.
+        if (stopEnd === null && current !== null && needsNamedEnd(cause)) {
+          setStopEnd(endQuestionFor(current.entry.startedAt));
+          return;
+        }
+        setDialogError(dialogFailure(cause));
+      })
       .finally(() => setBusy(false));
-  }, [performStop, stopNote]);
+  }, [performStop, stopAsksNote, stopEnd, stopNote]);
 
   /* A-6.8 — die Rückfrage                                             */
 
@@ -374,15 +495,21 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
    * nichts geändert, kein Timer ist beendet, und der Dialog ist die Stelle, an
    * der der Benutzer eben „Wechseln" gedrückt hat.
    */
-  const performSwitch = useCallback(async (pending: StartConflict, note: ForeignText, showDialog: boolean) => {
+  const performSwitch = useCallback(async (pending: StartConflict, note: ForeignText, showDialog: boolean, endedAt?: string) => {
     setBusy(true);
     setDialogError(null);
     /* Schritt 1 — der Stopp. Sein Fehler gehört noch in den Dialog. */
     try {
-      await performStop(note);
+      await performStop(note, endedAt);
     } catch (cause) {
-      if (showDialog) setDialogError(errorMessage(cause));
-      else toasts.failure("Der Timer ließ sich nicht stoppen", errorMessage(cause));
+      const startedAt = runningRef.current?.entry.startedAt;
+      if (endedAt === undefined && startedAt !== undefined && needsNamedEnd(cause)) {
+        // The running timer is older than 24 hours: ask for its end, start nothing yet (4.3).
+        setConflictNote(note);
+        setConflictEnd(endQuestionFor(startedAt));
+        setConflict(pending);
+      } else if (showDialog) setDialogError(dialogFailure(cause));
+      else toasts.failure(timerTexts().stopFailed, errorMessage(cause), isServiceError(cause));
       refresh();
       setBusy(false);
       return;
@@ -399,14 +526,14 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     /* Schritt 3 — der Start. Ab hier meldet nur noch der Stapel. */
     const failed = (detail: string) => {
       toasts.failure(
-        `Gebucht, aber der Timer auf ${quotedName(pending.todoTitle)} ließ sich nicht starten`,
-        `Die Zeit des vorigen Timers ist gebucht — daran ändert das nichts. ${detail}`,
+        timerTexts().switchStartFailed(quotedName(pending.todoTitle)),
+        timerTexts().switchStartFailedBody(detail),
       );
     };
     try {
       const result = await startTimer(pending.todoId, false);
       if (result.kind === "confirmation_required") {
-        failed("Es läuft weiterhin ein Timer. Bitte starten Sie erneut.");
+        failed(timerTexts().stillRunning);
         return;
       }
       announceStart(
@@ -422,11 +549,18 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
 
   const confirmSwitch = useCallback(() => {
     if (conflict === null || directStopPending.current) return;
+    let endedAt: string | undefined;
+    if (conflictEnd !== null) {
+      setConflictEnd({ ...conflictEnd, attempted: true });
+      const end = endOf(conflictEnd);
+      if (end === null) return;
+      endedAt = end;
+    }
     directStopPending.current = true;
-    void performSwitch(conflict, conflictNote, true).finally(() => {
+    void performSwitch(conflict, conflictNote, true, endedAt).finally(() => {
       directStopPending.current = false;
     });
-  }, [conflict, conflictNote, performSwitch]);
+  }, [conflict, conflictEnd, conflictNote, performSwitch]);
 
   /* Starten                                                           */
 
@@ -439,9 +573,12 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           const result = await startTimer(todoId, false);
           if (result.kind === "confirmation_required") {
             const pending = { todoId, todoTitle, runningTitle: result.runningTodoTitle };
-            if (promptOnTimerStop) {
+            // The running timer is older than 24 hours: the dialog opens even with the prompt off (4.3).
+            const askEnd = exceedsBookingLimit(elapsedRef.current);
+            if (promptOnTimerStop || askEnd) {
               setDialogError(null);
               setConflictNote(result.running.note);
+              setConflictEnd(askEnd ? endQuestionFor(result.running.startedAt) : null);
               setConflict(pending);
             } else {
               await performSwitch(pending, result.running.note, false);
@@ -450,7 +587,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           }
           announceStart(todoId, todoTitle, result.doneCleared, result.poolMovement);
         } catch (cause) {
-          toasts.failure("Der Timer ließ sich nicht starten", errorMessage(cause));
+          toasts.failure(timerTexts().startFailed, errorMessage(cause), isServiceError(cause));
         } finally {
           directStopPending.current = false;
         }
@@ -497,9 +634,9 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             „Es".
           */
           toasts.success(
-            `Buchung auf ${quotedName(pending.todoTitle)} abgeschlossen.`,
+            timerTexts().orphanBooked(quotedName(pending.todoTitle)),
             withMovement(
-              `Gebucht bis zum letzten Lebenszeichen: ${formatDuration(result.entry.durationSeconds)}.`,
+              timerTexts().orphanBookedBody(formatDuration(result.entry.durationSeconds)),
               bookingSentence(result.poolMovement),
             ),
           );
@@ -526,29 +663,30 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           result.reason === "orphan_discarded"
             ? {
                 tone: "info",
-                title: "Buchung verworfen.",
-                body: `Sie haben die unvollständige Buchung auf ${quotedName(pending.todoTitle)} verworfen. Es ist keine Zeit gebucht worden.`,
+                title: timerTexts().orphanDiscarded,
+                body: timerTexts().orphanDiscardedBody(quotedName(pending.todoTitle)),
               }
             : {
                 tone: "info",
-                title: "Nichts zu buchen.",
-                body: `Zwischen dem Start und dem letzten Lebenszeichen liegt auf ${quotedName(pending.todoTitle)} weniger als eine Sekunde. Die unvollständige Buchung ist damit weg, gebucht wurde nichts.`,
+                title: timerTexts().orphanNothing,
+                body: timerTexts().orphanNothingBody(quotedName(pending.todoTitle)),
               },
         );
       })
-      .catch((cause: unknown) => setDialogError(errorMessage(cause)))
+      .catch((cause: unknown) => setDialogError(dialogFailure(cause)))
       .finally(() => setBusy(false));
   }, [bump, orphan, orphanChoice, toasts]);
 
   const isRunningFor = useCallback(
-    (todoId: Id) => runningRef.current?.entry.todoId === todoId,
-    [],
+    (todoId: Id) => !pausedForIdle && runningRef.current?.entry.todoId === todoId,
+    [pausedForIdle],
   );
+  const visibleRunning = pausedForIdle ? null : running;
 
   const api = useMemo<TimerApi>(
     () => ({
-      running,
-      elapsedSeconds,
+      running: visibleRunning,
+      elapsedSeconds: pausedForIdle ? 0 : elapsedSeconds,
       loading,
       isRunningFor,
       start: (id, title) => guardIdle(() => start(id, title)),
@@ -560,7 +698,8 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       clearReactivated,
     }),
     [
-      running,
+      visibleRunning,
+      pausedForIdle,
       elapsedSeconds,
       loading,
       isRunningFor,
@@ -575,86 +714,110 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     ],
   );
 
+  const text = timerTexts();
+
   return (
     <TimerContext.Provider value={api}>
       {children}
-      {idle.session === null ? null : <IdleRecovery key={idle.session.previousPeriods?.[0]?.id ?? idle.session.id} session={idle.session} changed={idle.refresh} running={running !== null} resumeAfter={!idleKeepTimerRunning} />}
-      <div role="alert">{idle.error === null ? null : <aside className="idle-reminder">Inaktivität konnte nicht geprüft werden: {idle.error}<Button onClick={idle.refresh}>Erneut prüfen</Button></aside>}</div>
+      {idle.session === null ? null : <IdleRecovery key={idle.session.previousPeriods?.[0]?.id ?? idle.session.id} session={idle.session} changed={idle.refresh} running={false} resumeAfter />}
+      <div role="alert">{idle.error === null ? null : <aside className="idle-reminder">{text.idleCheckFailed}<ServiceText text={idle.error} fromService={idle.errorFromService} /><Button onClick={idle.refresh}>{text.checkAgain}</Button></aside>}</div>
 
       <FormDialog
         open={stopOpen}
-        title="Timer stoppen"
+        title={text.stopTitle}
         description={
           running === null
             ? undefined
-            : `Läuft seit ${formatStopwatch(elapsedSeconds)} auf ${quotedName(running.todoTitle)}.`
+            : text.runningFor(formatStopwatch(elapsedSeconds), quotedName(running.todoTitle))
         }
-        submitLabel="Stoppen und buchen"
-        cancelLabel="Weiterlaufen lassen"
+        submitLabel={text.stopAndBook}
+        cancelLabel={text.keepRunning}
         busy={busy}
-        error={dialogError}
+        error={dialogError?.message ?? null}
+        errorFromService={dialogError?.fromService ?? false}
         onSubmit={confirmStop}
+        // Cancel books nothing; the timer keeps running (A-28.6, AK-4.3).
         onCancel={() => setStopOpen(false)}
       >
-        <NoteField
-          scope="billing"
-          value={stopNote}
-          onChange={setStopNote}
-          rows={3}
-          maxLength={8192}
-          placeholder="Was wurde geleistet?"
-        />
-        {/*
-          Derselbe Satz steht seit T-118 auch im Dialog „Zeit von Hand
-          erfassen" (B-4). Er kommt aus `lib/labels.ts`, damit es ihn genau
-          einmal gibt.
-        */}
-        <p className="dialog__hint">{BILLING_NOTE_MAY_BE_EMPTY}</p>
+        {/* The end comes first and takes the initial focus: it is the question (4.2). */}
+        {stopEnd === null ? null : (
+          <LongStopFields
+            question={stopEnd}
+            label={text.longStopEnd}
+            onChange={(value) => setStopEnd({ ...stopEnd, value })}
+          />
+        )}
+        {stopAsksNote ? (
+          <>
+            <NoteField
+              scope="billing"
+              value={stopNote}
+              onChange={setStopNote}
+              rows={3}
+              maxLength={8192}
+              placeholder={text.notePlaceholder}
+            />
+            {/*
+              Derselbe Satz steht seit T-118 auch im Dialog „Zeit von Hand
+              erfassen" (B-4). Er kommt aus `lib/labels.ts`, damit es ihn genau
+              einmal gibt.
+            */}
+            <p className="dialog__hint">{labels().billingNoteMayBeEmpty}</p>
+          </>
+        ) : null}
       </FormDialog>
 
       <FormDialog
         open={conflict !== null}
-        title="Es läuft bereits ein Timer"
+        title={text.alreadyRunning}
         description={
           conflict === null
             ? undefined
-            : `Auf ${quotedName(conflict.runningTitle)} läuft ein Timer. Er wird gestoppt und die Zeit gebucht, dann startet der Timer auf ${quotedName(conflict.todoTitle)}.`
+            : text.switchLead(quotedName(conflict.runningTitle), quotedName(conflict.todoTitle))
         }
-        submitLabel="Stoppen und wechseln"
-        cancelLabel="Abbrechen"
+        submitLabel={text.stopAndSwitch}
+        cancelLabel={labels().cancel}
         busy={busy}
-        error={dialogError}
+        error={dialogError?.message ?? null}
+        errorFromService={dialogError?.fromService ?? false}
         onSubmit={confirmSwitch}
+        // Cancel: the old timer keeps running, the new one does not start, nothing is booked.
         onCancel={() => setConflict(null)}
       >
-        <NoteField
-          scope="billing"
-          value={conflictNote}
-          onChange={setConflictNote}
-          label={conflict === null ? "Leistung" : `Leistung für ${quotedName(conflict.runningTitle)}`}
-          rows={3}
-          maxLength={8192}
-          placeholder="Was wurde geleistet?"
-        />
+        {conflict === null || conflictEnd === null ? null : (
+          <LongStopFields
+            question={conflictEnd}
+            label={text.longStopEndFor(quotedName(conflict.runningTitle))}
+            onChange={(value) => setConflictEnd({ ...conflictEnd, value })}
+          />
+        )}
+        {promptOnTimerStop ? (
+          <NoteField
+            scope="billing"
+            value={conflictNote}
+            onChange={setConflictNote}
+            label={conflict === null ? text.note : text.noteFor(quotedName(conflict.runningTitle))}
+            rows={3}
+            maxLength={8192}
+            placeholder={text.notePlaceholder}
+          />
+        ) : null}
       </FormDialog>
 
       <FormDialog
         open={orphan !== null}
-        title="Eine Buchung ohne Ende"
-        description={
-          orphan === null
-            ? undefined
-            : `Beim letzten Mal wurde SuperTakt nicht ordentlich beendet. Auf ${quotedName(orphan.todoTitle)} lief ein Timer, der nie gestoppt wurde.`
-        }
-        submitLabel="Entscheiden"
-        cancelLabel="Später entscheiden"
+        title={text.orphanTitle}
+        description={orphan === null ? undefined : text.orphanLead(quotedName(orphan.todoTitle))}
+        submitLabel={text.decide}
+        cancelLabel={text.decideLater}
         busy={busy}
-        error={dialogError}
+        error={dialogError?.message ?? null}
+        errorFromService={dialogError?.fromService ?? false}
         onSubmit={confirmOrphan}
         onCancel={() => setOrphan(null)}
       >
         <fieldset className="choice">
-          <legend className="field__label">Was soll damit geschehen?</legend>
+          <legend className="field__label">{text.whatShouldHappen}</legend>
           <label className="choice__option">
             <input
               type="radio"
@@ -664,11 +827,11 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
               onChange={() => setOrphanChoice("book_until_heartbeat")}
             />
             <span>
-              <strong>Bis zum letzten Lebenszeichen buchen</strong>
+              <strong>{text.bookUntilHeartbeat}</strong>
               <span className="choice__hint">
                 {orphan === null
                   ? ""
-                  : `Das ergibt ${formatDuration(orphan.bookableSeconds)}. Gibt es kein Lebenszeichen, gibt es nichts zu buchen — dann wird verworfen.`}
+                  : text.bookUntilHeartbeatHint(formatDuration(orphan.bookableSeconds))}
               </span>
             </span>
           </label>
@@ -681,14 +844,13 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
               onChange={() => setOrphanChoice("discard")}
             />
             <span>
-              <strong>Verwerfen</strong>
-              <span className="choice__hint">Es wird keine Zeit gebucht.</span>
+              <strong>{text.discard}</strong>
+              <span className="choice__hint">{text.discardHint}</span>
             </span>
           </label>
         </fieldset>
         <p className="dialog__hint">
-          „Bis jetzt buchen“ gibt es bewusst nicht. Genau das wäre der Weg, auf dem ein über
-          Nacht vergessener Timer vierzehn Stunden in eine Rechnung bringt.
+          {text.noBookUntilNow}
         </p>
       </FormDialog>
     </TimerContext.Provider>

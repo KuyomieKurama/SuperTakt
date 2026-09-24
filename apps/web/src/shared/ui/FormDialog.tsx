@@ -13,11 +13,17 @@ import { Dialog } from "@ark-ui/react/dialog";
 import { cx } from "../../lib/cx";
 import { FieldMessageQuietContext, useFieldMessageLive } from "../../lib/fieldMessages";
 import { revealFirstInvalidWithin } from "../../lib/focus";
-import { SubmitAttemptContext, useSubmitAttempt } from "../../lib/submitAttempt";
+import {
+  SubmitAttemptContext,
+  SubmitRefusalShownContext,
+  useSubmitAttempt,
+} from "../../lib/submitAttempt";
 import { touchedOnBlur } from "../../lib/touched";
 import { DialogSurface } from "./DialogSurface";
 import { Icon } from "./Icon";
 import { Button, IconButton, InlineMessage } from "./Primitives";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "./ServiceText";
 
 /**
  * Takt — modaler Dialog mit einem Formular darin.
@@ -128,6 +134,8 @@ export interface FormDialogProps {
   readonly description?: ReactNode;
   readonly children: ReactNode;
   readonly submitLabel: string;
+  /** Alternative bestätigende Aktion, z. B. speichern ohne anschließend fortzufahren. */
+  readonly secondarySubmitLabel?: string;
   readonly cancelLabel?: string;
   readonly tone?: "default" | "danger";
   readonly busy?: boolean;
@@ -150,7 +158,12 @@ export interface FormDialogProps {
   readonly submitRefusal?: string;
   /** Fehler aus dem letzten Versuch. Bleibt stehen, bis er behoben ist. */
   readonly error?: string | null;
+  /** `error` is the service's own message and stays German (A-28.2); see `useMutation`. */
+  readonly errorFromService?: boolean;
   readonly onSubmit: () => void;
+  readonly onSecondarySubmit?: () => void;
+  /** Ergänzende Klasse für eine fachlich eigene Aktionsleiste. */
+  readonly footerClassName?: string;
   readonly onCancel: () => void;
   /** Breiter Dialog, etwa für eine Vorschau. */
   readonly wide?: boolean;
@@ -177,13 +190,17 @@ export function FormDialog({
   description,
   children,
   submitLabel,
-  cancelLabel = "Abbrechen",
+  secondarySubmitLabel,
+  cancelLabel = labels().cancel,
   tone = "default",
   busy = false,
   submitDisabled = false,
   submitRefusal,
   error = null,
+  errorFromService = false,
   onSubmit,
+  onSecondarySubmit,
+  footerClassName,
   onCancel,
   wide = false,
 }: FormDialogProps) {
@@ -371,7 +388,7 @@ export function FormDialog({
             versperren, ist kein Weg, sondern ein Loch.
           */}
           <Dialog.CloseTrigger asChild>
-            <IconButton label="Dialog schließen" icon="x" size="sm" disabled={busy} />
+            <IconButton label={labels().formDialog.close} icon="x" size="sm" disabled={busy} />
           </Dialog.CloseTrigger>
         </div>
 
@@ -390,12 +407,16 @@ export function FormDialog({
                 Gelegenheiten geschaffen, die zehnte anders zu schreiben.
           */}
           <FieldMessageQuietContext.Provider value={quiet}>
-            <SubmitAttemptContext.Provider value={submitAttempt}>{children}</SubmitAttemptContext.Provider>
+            <SubmitAttemptContext.Provider value={submitAttempt}>
+              <SubmitRefusalShownContext.Provider value={refusalShown}>
+                {children}
+              </SubmitRefusalShownContext.Provider>
+            </SubmitAttemptContext.Provider>
           </FieldMessageQuietContext.Provider>
           {error === null ? null : (
             <div ref={errorRef}>
-              <InlineMessage tone="danger" title="Das hat nicht geklappt">
-                {error}
+              <InlineMessage tone="danger" title={labels().formDialog.failed}>
+                <ServiceText text={error} fromService={errorFromService} />
               </InlineMessage>
             </div>
           )}
@@ -439,10 +460,21 @@ export function FormDialog({
           ) : null}
         </div>
 
-        <div className="dialog__footer">
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+        <div className={cx("dialog__footer", footerClassName)}>
+          <Button className="dialog__cancel" variant="ghost" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </Button>
+          {secondarySubmitLabel === undefined || onSecondarySubmit === undefined ? null : (
+            <Button
+              type="button"
+              className="dialog__secondary-submit"
+              variant="secondary"
+              disabled={busy || submitDisabled}
+              onClick={onSecondarySubmit}
+            >
+              {secondarySubmitLabel}
+            </Button>
+          )}
           {/*
             **Gesperrt, aber erreichbar** (E-093, T-220). `aria-disabled` statt
             `disabled`: Der Knopf bleibt im Tabulatorlauf, nimmt den Klick
@@ -458,6 +490,7 @@ export function FormDialog({
           */}
           <Button
             type="submit"
+            className="dialog__submit"
             variant={tone === "danger" ? "danger" : "primary"}
             loading={busy}
             ariaDisabled={submitDisabled}
@@ -495,13 +528,10 @@ export function FormDialog({
  * Die Form ist P-5 aus T-177 — ein Wert, der da ist, aber nicht stimmt, nennt
  * die **eine** verletzte Regel hinter der Feldbeschriftung: `„<Feld>: <Regel>."`
  */
-const INCOMPLETE_INPUT_RULE: Record<TextFieldType, string | undefined> = {
-  text: undefined,
-  time: "Stunde und Minute gehören dazu.",
-  number: "Eine gültige Zahl ist erforderlich.",
-  date: "Tag, Monat und Jahr gehören dazu.",
-  "datetime-local": "Datum und Uhrzeit gehören dazu.",
-};
+function incompleteInputRule(type: TextFieldType): string | undefined {
+  if (type === "text") return undefined;
+  return labels().formDialog.incompleteInput[type];
+}
 
 export type TextFieldType = "text" | "datetime-local" | "date" | "time" | "number";
 
@@ -639,7 +669,7 @@ export function TextField({
     onTouchedRef.current?.();
   }, [submitAttempt]);
 
-  const incompleteRule = incomplete ? INCOMPLETE_INPUT_RULE[type] : undefined;
+  const incompleteRule = incomplete ? incompleteInputRule(type) : undefined;
   const shownError = (incompleteRule === undefined ? undefined : `${label}: ${incompleteRule}`) ?? error;
 
   const describedBy = [
@@ -661,7 +691,7 @@ export function TextField({
         {required ? (
           <>
             <span aria-hidden> *</span>
-            <span className="visually-hidden"> (Pflichtfeld)</span>
+            <span className="visually-hidden">{labels().requiredField}</span>
           </>
         ) : null}
       </label>

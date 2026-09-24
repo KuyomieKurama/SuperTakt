@@ -101,8 +101,12 @@ export function startTimer(todoId: Id, stopRunning = false): Promise<StartTimerR
   });
 }
 
-export function stopTimer(note: ForeignText): Promise<StopTimerResult> {
-  return request<StopTimerResult>("/timer/stop", { method: "POST", body: { note } });
+/** `endedAt` (A-28.6): the real end, named by the user when the timer ran for more than 24 hours. */
+export function stopTimer(note: ForeignText, endedAt?: Timestamp): Promise<StopTimerResult> {
+  return request<StopTimerResult>("/timer/stop", {
+    method: "POST",
+    body: endedAt === undefined ? { note } : { note, endedAt },
+  });
 }
 
 /** E-036 — Lebenszeichen. Mindestens jede Minute, solange ein Timer läuft. */

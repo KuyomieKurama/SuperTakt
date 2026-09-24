@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { errorMessage } from '../../api/client';
+import { errorMessage, isServiceError } from '../../api/client';
 import { beginIdleSession, getIdleSession, getRunningTimer, returnFromIdle, type IdleSession, type RunningTimerView } from './api';
 import { idleCandidate, idleReturnTime } from './idle';
 import { readIdleActivity } from '../../app/connection';
@@ -14,6 +14,7 @@ export function useIdleTimer(options: {
   latest.current = options;
   const [session, setSession] = useState<IdleSession | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorFromService, setErrorFromService] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
   const alive = useRef(true);
   const cached = useRef<{ session: IdleSession | null; syncedAt: number } | null>(null);
@@ -49,7 +50,7 @@ export function useIdleTimer(options: {
           pending?.returnedAt && pending.returnedAt > running.entry.startedAt ? pending.returnedAt : running.entry.startedAt,
           current.thresholdMinutes);
         const canReturn = pending !== null && pending.returnedAt === null && idleReturnTime(activity, pending.startedAt) !== null;
-        const canBegin = (pending === null || pending.returnedAt !== null) && current.enabled && candidateFor() !== null;
+        const canBegin = pending === null && current.enabled && candidateFor() !== null;
         if (canReturn || canBegin) {
           if (!synced) pending = await synchronize();
           running = await getRunningTimer();
@@ -77,7 +78,10 @@ export function useIdleTimer(options: {
     checking.current = work().catch((cause: unknown) => {
       cached.current = null;
       retryAt.current = Date.now() + SERVER_SYNC_MS;
-      if (alive.current) setError(errorMessage(cause));
+      if (alive.current) {
+        setError(errorMessage(cause));
+        setErrorFromService(isServiceError(cause));
+      }
       throw cause;
     }).finally(() => { checking.current = null; });
     return checking.current;
@@ -97,5 +101,5 @@ export function useIdleTimer(options: {
     latest.current.changed();
     void check().catch(() => undefined);
   }, [check]);
-  return { session, supported, error, check, refresh, clear: () => { cached.current = null; setSession(null); } };
+  return { session, supported, error, errorFromService, check, refresh, clear: () => { cached.current = null; setSession(null); } };
 }

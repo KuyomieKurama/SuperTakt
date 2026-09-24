@@ -15,11 +15,23 @@ const STARTUP_POLL_MS = 5_000;
 const UNKNOWN_POLL_MS = 60_000;
 const KNOWN_POLL_MS = 5 * 60_000;
 
-/** Liest ausschließlich den lokalen Cache; der Dienst taktet GitHub selbst. */
-export function useVersionFacts(): VersionFacts | null {
+/**
+ * Liest ausschließlich den lokalen Cache; der Dienst taktet GitHub selbst.
+ *
+ * With the version check switched off (A-28.1) only the installed version is read once;
+ * the check result is neither read nor polled, and nothing is reported as available.
+ */
+export function useVersionFacts(checkEnabled: boolean): VersionFacts | null {
   const [facts, setFacts] = useState<VersionFacts | null>(null);
 
   useEffect(() => {
+    if (!checkEnabled) {
+      let live = true;
+      void readInstalledVersion()
+        .then((installed) => { if (live) setFacts({ installed, latest: null }); })
+        .catch(() => { if (live) setFacts(null); });
+      return () => { live = false; };
+    }
     const startedAt = Date.now();
     let stopped = false;
     let inFlight = false;
@@ -78,7 +90,7 @@ export function useVersionFacts(): VersionFacts | null {
       window.removeEventListener('focus', resume);
       window.removeEventListener('online', resume);
     };
-  }, []);
+  }, [checkEnabled]);
 
   return facts;
 }

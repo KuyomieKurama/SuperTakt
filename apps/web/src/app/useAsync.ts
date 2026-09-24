@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DependencyList } from "react";
-import { errorCode, errorMessage } from "../api/client";
+import { errorCode, errorMessage, isServiceError } from "../api/client";
 
 /**
  * Takt — Laden, Warten, Scheitern.
@@ -43,7 +43,13 @@ import { errorCode, errorMessage } from "../api/client";
 export type AsyncState<T> =
   | { readonly status: "loading" }
   | { readonly status: "ready"; readonly value: T; readonly refreshing: boolean }
-  | { readonly status: "error"; readonly message: string; readonly code: string | null };
+  | {
+      readonly status: "error";
+      readonly message: string;
+      readonly code: string | null;
+      /** The message is the service's own and stays German (A-28.2). */
+      readonly fromService: boolean;
+    };
 
 export interface AsyncResult<T> {
   readonly state: AsyncState<T>;
@@ -86,7 +92,12 @@ export function useAsync<T>(
       (cause: unknown) => {
         if (generation.current !== current) return;
         if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setState({ status: "error", message: errorMessage(cause), code: errorCode(cause) });
+        setState({
+          status: "error",
+          message: errorMessage(cause),
+          code: errorCode(cause),
+          fromService: isServiceError(cause),
+        });
       },
     );
   }, []);
@@ -132,6 +143,8 @@ export function useAsync<T>(
 export interface MutationResult {
   readonly busy: boolean;
   readonly error: string | null;
+  /** `error` is the service's own message and stays German (A-28.2). */
+  readonly errorFromService: boolean;
   readonly run: (task: () => Promise<void>) => Promise<boolean>;
   readonly clearError: () => void;
 }
@@ -139,6 +152,7 @@ export interface MutationResult {
 export function useMutation(): MutationResult {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorFromService, setErrorFromService] = useState(false);
 
   const run = useCallback(async (task: () => Promise<void>): Promise<boolean> => {
     setBusy(true);
@@ -148,6 +162,7 @@ export function useMutation(): MutationResult {
       return true;
     } catch (cause) {
       setError(errorMessage(cause));
+      setErrorFromService(isServiceError(cause));
       return false;
     } finally {
       setBusy(false);
@@ -156,5 +171,5 @@ export function useMutation(): MutationResult {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { busy, error, run, clearError };
+  return { busy, error, errorFromService, run, clearError };
 }

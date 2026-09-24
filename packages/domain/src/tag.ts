@@ -90,6 +90,15 @@ export type ApplyDefaultTags = (
 
 // Umsetzung (T-009)
 
+/** Most tag ids one request may attach to a todo — main door and add-in door alike (O-AR c). */
+export const TODO_TAG_IDS_MAX = 200;
+/**
+ * Most tag names one request may create and attach. Smaller than the id cap: ids come from a
+ * picker, names from a text field — fifty new tags in one request is a script, not a workflow.
+ */
+export const TODO_TAG_NAMES_MAX = 50;
+
+
 /** Selbstzuordnung und Zuordnung unter eigene Nachfahren verhindern; die Wurzelebene ist zulässig. */
 export const checkFolderMove: CheckFolderMove = ({ folderId, newParentId, targetAncestors }) => {
   if (newParentId === null) return ok(undefined);

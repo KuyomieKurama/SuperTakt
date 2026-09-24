@@ -9,6 +9,7 @@ import type {
   ExportTransformationInfo,
 } from "./api";
 import { foreignText, foreignTextFrom, quotedName } from "../../lib/foreign";
+import { exportTexts } from "./texts";
 
 export type {
   ExportConditionOperator,
@@ -288,24 +289,25 @@ export function parseTemplateDefinition(
   catalog: SourceCatalog,
 ): TemplateParseResult {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return fail("Die Vorlage ist kein Objekt.");
+    return fail(exportTexts().parse.notAnObject);
   }
 
   const envelope = input as Record<string, unknown>;
   if (envelope["version"] !== 1) {
-    return fail("Unbekannte Vorlagenfassung. Diese Anwendung liest Fassung 1.");
+    return fail(exportTexts().parse.unknownVersion);
   }
 
   const rawFields = envelope["fields"];
   if (!Array.isArray(rawFields)) {
-    return fail("Die Vorlage führt keine Feldliste.");
+    return fail(exportTexts().parse.noFieldList);
   }
 
+  const text = exportTexts().parse;
   const fields: ExportFieldDefinition[] = [];
   for (const [index, rawField] of rawFields.entries()) {
-    const position = index + 1;
+    const position = String(index + 1);
     if (typeof rawField !== "object" || rawField === null || Array.isArray(rawField)) {
-      return fail(`Feld ${String(position)} ist kein Objekt.`);
+      return fail(text.fieldNotAnObject(position));
     }
     const candidate = rawField as Record<string, unknown>;
 
@@ -319,19 +321,17 @@ export function parseTemplateDefinition(
      */
     const name = foreignTextFrom(candidate["name"]);
     if (name === null || name.trim().length === 0) {
-      return fail(`Feld ${String(position)} hat keinen Namen.`);
+      return fail(text.fieldWithoutName(position));
     }
 
     const source = candidate["source"];
     if (!catalog.hasSource(source)) {
-      return fail(
-        `Feld ${String(position)} (${quotedName(name)}) nennt eine Quelle, die diese Anwendung nicht kennt.`,
-      );
+      return fail(text.unknownSource(position, quotedName(name)));
     }
 
     const transformation = candidate["transformation"];
     if (!catalog.hasTransformation(transformation)) {
-      return fail(`Feld ${String(position)} (${quotedName(name)}) nennt eine unbekannte Transformation.`);
+      return fail(text.unknownTransformation(position, quotedName(name)));
     }
 
     const rawCondition = candidate["condition"];
@@ -340,20 +340,16 @@ export function parseTemplateDefinition(
       continue;
     }
     if (typeof rawCondition !== "object" || Array.isArray(rawCondition)) {
-      return fail(`Die Bedingung von Feld ${String(position)} (${quotedName(name)}) ist kein Objekt.`);
+      return fail(text.conditionNotAnObject(position, quotedName(name)));
     }
     const parts = rawCondition as Record<string, unknown>;
     const conditionSource = parts["source"];
     const operator = parts["op"];
     if (!catalog.hasSource(conditionSource)) {
-      return fail(
-        `Die Bedingung von Feld ${String(position)} (${quotedName(name)}) nennt eine unbekannte Quelle.`,
-      );
+      return fail(text.conditionUnknownSource(position, quotedName(name)));
     }
     if (!catalog.hasConditionOperator(operator)) {
-      return fail(
-        `Die Bedingung von Feld ${String(position)} (${quotedName(name)}) nennt einen unbekannten Vergleich.`,
-      );
+      return fail(text.conditionUnknownOperator(position, quotedName(name)));
     }
     fields.push({
       name,
@@ -427,6 +423,7 @@ export function describeDeviations(
   builtin: readonly ExportFieldDefinition[],
   catalog: SourceCatalog,
 ): readonly TemplateDeviation[] {
+  const text = exportTexts().deviation;
   const out: TemplateDeviation[] = [];
   const byName = new Map<string, ExportFieldDefinition>();
   for (const field of draft) byName.set(field.name, field);
@@ -438,7 +435,7 @@ export function describeDeviations(
       out.push({
         id: `missing-${at}`,
         tone: "warning",
-        text: `Das Feld ${quotedName(expected.name)} der Standardvorlage fehlt. Das Abrechnungstool erwartet es.`,
+        text: text.missing(quotedName(expected.name)),
       });
       continue;
     }
@@ -446,14 +443,18 @@ export function describeDeviations(
       out.push({
         id: `source-${at}`,
         tone: "warning",
-        text: `${quotedName(expected.name)} liest ${catalog.sourceLabel(actual.source)} statt ${catalog.sourceLabel(expected.source)}.`,
+        text: text.source(quotedName(expected.name), catalog.sourceLabel(actual.source), catalog.sourceLabel(expected.source)),
       });
     }
     if (actual.transformation !== expected.transformation) {
       out.push({
         id: `transformation-${at}`,
         tone: "warning",
-        text: `${quotedName(expected.name)} wird als ${catalog.transformationLabel(actual.transformation)} ausgegeben, die Standardvorlage benutzt ${catalog.transformationLabel(expected.transformation)}.`,
+        text: text.transformation(
+          quotedName(expected.name),
+          catalog.transformationLabel(actual.transformation),
+          catalog.transformationLabel(expected.transformation),
+        ),
       });
     }
     if (actual.condition !== undefined) {
@@ -464,7 +465,11 @@ export function describeDeviations(
         // einer Bedingung" laesst offen, unter welcher — und genau das ist
         // die Angabe, die man braucht, um zu beurteilen, ob eine Zeile im
         // Abrechnungstool ankommt.
-        text: `${quotedName(expected.name)} steht nur in der Datei, wenn ${catalog.sourceLabel(actual.condition.source)} ${catalog.conditionOperatorLabel(actual.condition.op)}. Die Standardvorlage gibt das Feld immer aus.`,
+        text: text.condition(
+          quotedName(expected.name),
+          catalog.sourceLabel(actual.condition.source),
+          catalog.conditionOperatorLabel(actual.condition.op),
+        ),
       });
     }
   }
@@ -475,7 +480,7 @@ export function describeDeviations(
     out.push({
       id: `extra-${String(index)}`,
       tone: "info",
-      text: `Zusätzliches Feld ${quotedName(field.name)}, das die Standardvorlage nicht kennt.`,
+      text: text.extra(quotedName(field.name)),
     });
   }
 
@@ -498,7 +503,7 @@ export function describeDeviations(
        * `string` heißt, nur eine Ebene tiefer. Abschnitt 6 des Nachweises
        * misst genau das.
        */
-      text: `Die Felder stehen in einer anderen Reihenfolge als in der Standardvorlage (${sharedBuiltin.map(foreignText).join(", ")}).`,
+      text: text.order(sharedBuiltin.map(foreignText).join(", ")),
     });
   }
 

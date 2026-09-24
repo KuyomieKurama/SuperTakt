@@ -29,6 +29,8 @@ import type {
   CalendarDay,
   ExportStatus,
   PoolMovement,
+  PoolId,
+  TagId,
   TimeEntry,
   TimeEntryId,
   Timestamp,
@@ -73,6 +75,7 @@ import {
 import { markNotBilled, setExportStatus } from '../export/status.ts';
 import { data, fail, failValidation } from '../../http/problem.ts';
 import {
+  commaSeparatedIds,
   daySchema,
   idSchema,
   readFlag,
@@ -128,8 +131,12 @@ const startSchema = z.object({
   stopRunning: z.boolean().default(false),
 });
 
-const stopSchema = z.object({ note: textSchema.default('') });
-const resolveSchema = z.object({ resolution: z.enum(['book_until_heartbeat', 'discard']) });
+// `endedAt` (A-28.6): the real end when the timer ran for more than 24 hours.
+const stopSchema = z.object({ note: textSchema.default(''), endedAt: timestampSchema.optional() });
+const resolveSchema = z.object({
+  resolution: z.enum(['book_until_heartbeat', 'discard']),
+  endedAt: timestampSchema.optional(),
+});
 const idleBeginSchema = z.object({ entryId: idSchema, startedAt: timestampSchema, returnedAt: timestampSchema.optional() }).strict();
 const idleReturnSchema = z.object({ id: idSchema, returnedAt: timestampSchema.optional() }).strict();
 const idleResolveSchema = z.object({
@@ -137,6 +144,13 @@ const idleResolveSchema = z.object({
   resume: z.boolean(),
   allocations: z.array(z.object({ todoId: idSchema.nullable(), seconds: z.number().int().min(1).max(315360000), note: textSchema }).strict()).min(1).max(50),
 }).strict();
+
+/** Query filters of `GET /time-entries` (C-14). Lists are comma separated like on `GET /todos`. */
+const timeEntryListFilterSchema = z.object({
+  tagId: commaSeparatedIds.optional(),
+  poolId: commaSeparatedIds.optional(),
+  hasNote: z.enum(['true', 'false']).optional(),
+});
 
 /** Rumpfschemata nach `operationId`; gelesen von `proof:openapi`, siehe `todos.ts`. */
 export const REQUEST_SCHEMAS = Object.freeze({
@@ -157,6 +171,15 @@ export function createTimeEntryRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.get('/', async (c) => {
     const query = c.req.query();
+    // C-14 (E-124 point 5): tag, pool and "has a service text" filter in SQL, before the page
+    // limit — the booking overview and the export selection read the same list.
+    const filters = timeEntryListFilterSchema.safeParse({
+      tagId: query['tagId'],
+      poolId: query['poolId'],
+      hasNote: query['hasNote'],
+    });
+    if (!filters.success) return failValidation(c, toFieldErrors(filters.error));
+    const { tagId: tagIds, poolId: poolIds, hasNote } = filters.data;
     const page = await listTimeEntries(
       context,
       {
@@ -175,6 +198,9 @@ export function createTimeEntryRoutes(context: AppContext): Hono<TaktEnv> {
           ? {}
           : { toDay: daySchema.parse(query['toDay']) as CalendarDay }),
         ...(readFlag(query['onlyPreviouslyExported']) ? { onlyPreviouslyExported: true } : {}),
+        ...(tagIds === undefined ? {} : { tagIds: tagIds as TagId[] }),
+        ...(poolIds === undefined ? {} : { poolIds: poolIds as PoolId[] }),
+        ...(hasNote === undefined ? {} : { hasNote: hasNote === 'true' }),
       },
       readPagination(query),
     );
@@ -291,7 +317,7 @@ export function createTimerRoutes(context: AppContext): Hono<TaktEnv> {
     const parsed = stopSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
-    const result = await stopTimer(context, parsed.data.note);
+    const result = await stopTimer(context, parsed.data.note, parsed.data.endedAt as Timestamp | undefined);
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
@@ -328,7 +354,7 @@ export function createTimerRoutes(context: AppContext): Hono<TaktEnv> {
     const parsed = resolveSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
-    const result = await resolveOrphanedTimer(context, parsed.data.resolution);
+    const result = await resolveOrphanedTimer(context, parsed.data.resolution, parsed.data.endedAt as Timestamp | undefined);
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 

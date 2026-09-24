@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Popover } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
 import { Icon } from './Icon';
+import { labels } from '../../lib/labels';
 
 /** Ortszeit ohne Datums- oder Zeitzonenumrechnung, minutengenau. */
 export function TimeField({ label, value, onChange, disabled = false }: {
@@ -11,6 +12,7 @@ export function TimeField({ label, value, onChange, disabled = false }: {
   readonly disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const text = labels().timeField;
   const [hour, minute] = (value || '00:00').split(':').map(Number);
   const select = (part: 'hour' | 'minute', number: number) => {
     const hours = part === 'hour' ? number : hour ?? 0;
@@ -24,13 +26,13 @@ export function TimeField({ label, value, onChange, disabled = false }: {
       <span>{value || '00:00'}</span><Icon name="clock" size={16} />
     </Popover.Trigger>
     <Portal><Popover.Positioner className="popover-layer">
-      <Popover.Content className="time-field__picker" aria-label={`${label} wählen`}>
-        <Popover.Title className="time-field__title">Uhrzeit</Popover.Title>
+      <Popover.Content className="time-field__picker" aria-label={text.pick(label)}>
+        <Popover.Title className="time-field__title">{text.title}</Popover.Title>
         <div className="time-field__columns">
           {(['hour', 'minute'] as const).map(part => {
             const selected = (part === 'hour' ? hour : minute) ?? 0;
             const count = part === 'hour' ? 24 : 60;
-            const title = part === 'hour' ? 'Stunde' : 'Minute';
+            const title = part === 'hour' ? text.hour : text.minute;
             return <div key={part}>
               <div className="field__label">{title}</div>
               <div className="time-field__options" role="listbox" aria-label={title}>
@@ -52,7 +54,7 @@ export function TimeField({ label, value, onChange, disabled = false }: {
             </div>;
           })}
         </div>
-        <Popover.CloseTrigger className="time-field__done" aria-label="Übernehmen">Übernehmen</Popover.CloseTrigger>
+        <Popover.CloseTrigger className="time-field__done" aria-label={text.apply}>{text.apply}</Popover.CloseTrigger>
       </Popover.Content>
     </Popover.Positioner></Portal>
   </Popover.Root>;

@@ -13,6 +13,7 @@ import type {
   Todo,
   TodoFilter,
   TodoId,
+  TodoMatchOrigin,
   TodoNote,
 } from '@takt/domain';
 import {
@@ -617,28 +618,36 @@ export async function findTodosByCallNumber(
  * muss sie in der Oberfläche wieder auseinandernehmen.
  */
 export interface SearchResult {
-  readonly todos: Page<Todo>;
+  readonly todos: Page<TodoSearchHit>;
   readonly timeEntries: readonly TimeEntry[];
 }
 
+/**
+ * A todo hit of the global search: the todo, flat as everywhere else, plus where it matched
+ * (C-22, K-1). Flat and not `{ todo, origins }` so that the current screen keeps reading the
+ * todo fields unchanged (same reason as `TodoAfterDone`). No note text (K-3).
+ */
+export type TodoSearchHit = Todo & { readonly origins: readonly TodoMatchOrigin[] };
+
+/**
+ * Global search (A-13.7, E-038, C-22): title, call number and — only here — the internal note
+ * (K-4); service texts filtered in SQL (C22-04). The origins are decided in the service (K-5).
+ */
 export async function searchEverything(
   context: AppContext,
   term: string,
   pagination: Pagination,
 ): Promise<SearchResult> {
   return context.transactions.inTransaction(async (unit) => {
-    const todos = await unit.todos.search({ search: term }, pagination);
+    const page = await unit.todos.search({ search: term, searchIncludesNote: true }, pagination);
+    const origins = await unit.todos.matchOrigins(page.items.map((todo) => todo.id), term);
+    const todos: Page<TodoSearchHit> = {
+      ...page,
+      items: page.items.map((todo) => ({ ...todo, origins: origins.get(todo.id) ?? [] })),
+    };
 
-    // Buchungen werden über die Todos ihrer Treffer gefunden **und** über den
-    // Leistungstext. Der zweite Weg braucht keinen eigenen Port: Er ist ein
-    // Filter auf derselben Suche, nur eine Ebene tiefer.
-    const found = await unit.timeEntries.search({}, { limit: 200 });
-    const needle = term.trim().toLowerCase();
-    const timeEntries = found.items.filter((entry) =>
-      entry.note.toLowerCase().includes(needle),
-    );
-
-    return { todos, timeEntries };
+    const found = await unit.timeEntries.search({ noteContains: term }, { limit: 200 });
+    return { todos, timeEntries: found.items };
   });
 }
 

@@ -37,6 +37,7 @@ import {
   normalizeAttachmentLink,
   checkAttachmentPath,
   dropHiddenCharacters,
+  exceedsMaximumDuration,
   isCalendarDay,
   MAX_NAME_LENGTH,
   MAX_TITLE_CHARACTERS,
@@ -506,6 +507,7 @@ async function importExternal(context: AppContext, external: ExternalData, exclu
     const defaultStatus = await unit.statuses.defaultStatus();
     const titles = new Map(external.tasks.map((task) => [task.externalId, task.title]));
     let timeEntries = 0;
+    let rejectedTimeEntries = 0;
     let transferredEntries = 0;
     for (const task of external.tasks) {
       const tagIds = [projectTags.get(task.project)];
@@ -533,6 +535,11 @@ async function importExternal(context: AppContext, external: ExternalData, exclu
         if (!isCalendarDay(day) || seconds < 1) continue;
         const started = `${day}T08:00:00Z` as Timestamp;
         const ended = `${new Date(Date.parse(started) + seconds * 1000).toISOString().slice(0, 19)}Z` as Timestamp;
+        // A-28.6: a foreign entry over 24 hours is rejected and counted, not shortened.
+        if (exceedsMaximumDuration(started, ended)) {
+          rejectedTimeEntries += 1;
+          continue;
+        }
         const entry = await unit.timeEntries.create({ todoId: created.id, startedAt: started, endedAt: ended, note: task.billingNotesByDay[day] ?? '' }, now);
         const recorded = await expectCreated(entry);
         if (task.transferredDays.includes(day)) {
@@ -557,6 +564,7 @@ async function importExternal(context: AppContext, external: ExternalData, exclu
       sections: external.sections.length,
       tags: projectTags.size + sectionTags.size + labelTags.size + priorityTags.size,
       timeEntries,
+      rejectedTimeEntries,
       images: 0,
       // Aus einem Fremdbackup entstehen Verweise und Dateipfade (A-20.7), nie
       // eine Datei, die SuperTakt selbst ablegt — deshalb null und nicht
@@ -564,6 +572,9 @@ async function importExternal(context: AppContext, external: ExternalData, exclu
       files: 0,
       warnings: [
         ...external.warnings,
+        ...(rejectedTimeEntries === 0 ? [] : [
+          `${rejectedTimeEntries} ${rejectedTimeEntries === 1 ? 'Zeitbuchung dauert' : 'Zeitbuchungen dauern'} länger als 24 Stunden und ${rejectedTimeEntries === 1 ? 'wurde' : 'wurden'} nicht übernommen.`,
+        ]),
         ...(transferredEntries === 0 ? [] : [excludeTransferred
           ? `${transferredEntries} bereits in OutlookBridge übertragene Tagesbuchungen wurden mit Herkunftsvermerk ausgebucht und sind vom erneuten Export ausgenommen.`
           : `${transferredEntries} bereits in OutlookBridge übertragene Tagesbuchungen wurden auf Wunsch erneut als offen übernommen.`]),

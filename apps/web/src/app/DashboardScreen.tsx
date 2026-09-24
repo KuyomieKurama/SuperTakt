@@ -21,13 +21,15 @@ import {
   formatTimeRange,
   plural,
 } from "../lib/format";
-import { doneFlagState } from "../lib/labels";
+import { doneFlagState, labels } from "../lib/labels";
 import { AsyncBoundary } from "../shared/ui/AsyncBoundary";
 import { ScreenBody } from "../shared/ui/ScreenBody";
 import { ScreenHeader } from "../shared/ui/ScreenHeader";
 import { StatTile } from "../shared/ui/StatTile";
 import { TodoFormDialog } from "../features/todos/TodoFormDialog";
 import { Foreign } from "../shared/ui/Foreign";
+import { ServiceText } from "../shared/ui/ServiceText";
+import { appTexts } from "./texts";
 
 /**
  * Takt — S-01, das Dashboard (Abschnitt 12).
@@ -122,7 +124,7 @@ export function DashboardScreen() {
     const preview = outcome.kind === "ready" ? outcome.preview : null;
 
     return {
-      previewProblem: outcome.kind === "failed" ? outcome.message : null,
+      previewProblem: outcome.kind === "failed" ? { message: outcome.message, fromService: outcome.fromService } : null,
       quarters: preview?.totalQuarters ?? null,
       rowCount: preview?.rows.length ?? 0,
       blocked: preview?.skipped.length ?? 0,
@@ -136,6 +138,7 @@ export function DashboardScreen() {
     };
   }, [today], [version]);
 
+  const texts = appTexts().dashboard;
   return (
     <section className="screen screen--dashboard">
       {/*
@@ -150,15 +153,15 @@ export function DashboardScreen() {
         senkrecht mittig aus (`parts.tsx`).
       */}
       <ScreenHeader
-        title="Dashboard"
+        title={texts.title}
         refreshing={data.state.status === "ready" && data.state.refreshing}
         actions={
           <>
             <Button variant="primary" iconStart="plus" onClick={() => setFormOpen(true)}>
-              Neues Todo
+              {texts.newTodo}
             </Button>
             <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
-              Zeiterfassung
+              {texts.timeTracking}
             </Button>
           </>
         }
@@ -175,8 +178,8 @@ export function DashboardScreen() {
         zusammen mit Kopf und Timerkarte über die Hälfte des Inhaltsbereichs im
         Standardfenster.
       */}
-      <ScreenBody label="Dashboard">
-        <AsyncBoundary state={data.state} label="Dashboard wird geladen" rows={4} onRetry={data.reload}>
+      <ScreenBody label={texts.title}>
+        <AsyncBoundary state={data.state} label={texts.loading} rows={4} onRetry={data.reload}>
           {(value) => {
             const todaySeconds = value.todayEntries.reduce(
               (sum, entry) => sum + entry.durationSeconds,
@@ -187,32 +190,36 @@ export function DashboardScreen() {
               <>
                 <div className="stat-grid">
                   <StatTile
-                    label="Heute erfasst"
+                    label={texts.todayRecorded}
                     value={formatDuration(todaySeconds)}
-                    detail={plural(value.todayEntries.length, "Buchung", "Buchungen")}
+                    detail={plural(value.todayEntries.length, texts.entryOne, texts.entryMany)}
                   />
                   <StatTile
-                    label="Noch nicht exportiert"
+                    label={texts.notExported}
                     value={formatDuration(value.openSeconds)}
                     tone="warning"
                     detail={
                       value.previewProblem !== null
-                        ? `${plural(value.openEntryCount, "offene Buchung", "offene Buchungen")} · Exportwert nicht abrufbar`
+                        ? texts.exportValueUnavailable(plural(value.openEntryCount, texts.openEntryOne, texts.openEntryMany))
                         : value.quarters === null
-                          ? plural(value.openEntryCount, "offene Buchung", "offene Buchungen")
-                          : `${plural(value.openEntryCount, "Buchung", "Buchungen")} in ${plural(value.rowCount, "Exportzeile", "Exportzeilen")} · ${formatQuarters(value.quarters)} h`
+                          ? plural(value.openEntryCount, texts.openEntryOne, texts.openEntryMany)
+                          : texts.exportSummary(
+                              plural(value.openEntryCount, texts.entryOne, texts.entryMany),
+                              plural(value.rowCount, texts.exportRowOne, texts.exportRowMany),
+                              formatQuarters(value.quarters),
+                            )
                     }
                     action={
                       <Button size="sm" variant="secondary" iconStart="download" onClick={() => navigate("export")}>
-                        Zur Export-Ansicht
+                        {texts.toExport}
                       </Button>
                     }
                   />
                   <StatTile
-                    label="Offene Todos"
+                    label={texts.openTodos}
                     value={String(value.openTodoCount)}
                     tone="accent"
-                    detail="In Pool-Ansichten sichtbar."
+                    detail={texts.openTodosDetail}
                   />
                   {/*
                     Die Kachel steht **nur da, wenn es etwas zu sagen gibt**. Eine
@@ -223,10 +230,10 @@ export function DashboardScreen() {
                   */}
                   {value.overdueCount === 0 ? null : (
                     <StatTile
-                      label="Überfällig"
+                      label={texts.overdue}
                       value={String(value.overdueCount)}
                       tone="danger"
-                      detail={`${plural(value.overdueCount, "offenes Todo", "offene Todos")} mit einer Frist in der Vergangenheit.`}
+                      detail={texts.overdueDetail(plural(value.overdueCount, texts.openTodoOne, texts.openTodoMany))}
                       action={
                         <Button
                           size="sm"
@@ -234,15 +241,15 @@ export function DashboardScreen() {
                           iconStart="calendar"
                           onClick={() => navigate("todos", undefined, { frist: "overdue" })}
                         >
-                          In der Todo-Liste zeigen
+                          {texts.showInTodoList}
                         </Button>
                       }
                     />
                   )}
                   <StatTile
-                    label="Erledigte Todos"
+                    label={texts.doneTodos}
                     value={String(value.doneTodoCount)}
-                    detail="Ausgeblendet, bis Sie sie einblenden — oder bis ein Timerstart das Kennzeichen aufhebt."
+                    detail={texts.doneTodosDetail}
                   />
                 </div>
 
@@ -256,7 +263,7 @@ export function DashboardScreen() {
                 {value.previewProblem === null ? null : (
                   <InlineMessage
                     tone="warning"
-                    title="Was der Export aus den offenen Buchungen macht, ließ sich nicht abrufen"
+                    title={texts.previewFailedTitle}
                     action={
                       <Button
                         size="sm"
@@ -264,49 +271,45 @@ export function DashboardScreen() {
                         iconStart="rotate-ccw"
                         onClick={data.reload}
                       >
-                        Erneut versuchen
+                        {labels().retry}
                       </Button>
                     }
                   >
-                    {value.previewProblem} Wie viel Zeit erfasst ist, steht fest — wie viele
-                    Exportzeilen und Stunden daraus werden, weiß SuperTakt gerade nicht und rät es
-                    nicht. Solange fehlt hier auch die Prüfung, ob eine Tagesgruppe ohne
-                    Leistung dasteht.
+                    <ServiceText text={value.previewProblem.message} fromService={value.previewProblem.fromService} />{" "}
+                    {texts.previewFailedBody}
                   </InlineMessage>
                 )}
 
                 {value.blocked > 0 ? (
                   <InlineMessage
                     tone="warning"
-                    title={`${plural(value.blocked, "Tagesgruppe geht", "Tagesgruppen gehen")} so nicht in den Export`}
+                    title={texts.blockedTitle(plural(value.blocked, texts.blockedGroupOne, texts.blockedGroupMany))}
                     className="message--inline-action"
                     action={
                       <Button size="sm" variant="secondary" onClick={() => navigate("export")}>
-                        In der Export-Ansicht ansehen
+                        {texts.showInExport}
                       </Button>
                     }
                   >
-                    Ohne Leistungstext nimmt das Abrechnungstool eine Zeile nicht an. Der
-                    übrige Export läuft trotzdem — diese Zeit bliebe aber liegen, ohne dass es
-                    jemandem auffiele.
+                    {texts.blockedBody}
                   </InlineMessage>
                 ) : null}
 
                 <div className="dash-columns">
                   <Card
-                    title="Zuletzt bearbeitet"
-                    description="Das jüngste zuerst — erledigte mit ihrem Kennzeichen. Ein Timerstart hebt es auf."
+                    title={texts.recent}
+                    description={texts.recentDescription}
                     flush
                   >
                     {value.recent.length === 0 ? (
                       <EmptyState
                         compact
                         icon="inbox"
-                        title="Noch kein Todo"
-                        description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an."
+                        title={texts.noTodo}
+                        description={texts.noTodoHint}
                         action={
                           <Button variant="primary" iconStart="plus" onClick={() => setFormOpen(true)}>
-                            Neues Todo
+                            {texts.newTodo}
                           </Button>
                         }
                       />
@@ -323,7 +326,7 @@ export function DashboardScreen() {
                                 iconStart={timer.isRunningFor(todo.id) ? "pause" : "play"}
                                 onClick={() => timer.toggle(todo.id, todo.title)}
                               >
-                                {timer.isRunningFor(todo.id) ? "Stopp" : "Start"}
+                                {timer.isRunningFor(todo.id) ? texts.stop : texts.start}
                               </Button>
                               <a className="pick-row__title grow truncate" href={href("todo", todo.id)}>
                                 <Foreign value={todo.title} />
@@ -343,13 +346,13 @@ export function DashboardScreen() {
                     )}
                   </Card>
 
-                  <Card title="Buchungen von heute" flush>
+                  <Card title={texts.todayEntries} flush>
                     {value.todayEntries.length === 0 ? (
                       <EmptyState
                         compact
                         icon="clock"
-                        title="Heute noch nichts erfasst"
-                        description="Der erste Timerstart legt die erste Buchung an."
+                        title={texts.nothingToday}
+                        description={texts.nothingTodayHint}
                       />
                     ) : (
                       <ul className="entry-list">
@@ -371,7 +374,7 @@ export function DashboardScreen() {
                               </span>
                               <span className="entry-row__note grow truncate">
                                 {entry.note.length === 0 ? (
-                                  <span className="muted">Ohne Leistung</span>
+                                  <span className="muted">{texts.withoutNote}</span>
                                 ) : (
                                   <Foreign value={entry.note} />
                                 )}
@@ -379,7 +382,7 @@ export function DashboardScreen() {
                               <a
                                 className="entry-row__link"
                                 href={href("todo", entry.todoId)}
-                                aria-label="Todo dieser Buchung öffnen"
+                                aria-label={texts.openTodoOfEntry}
                               >
                                 <Icon name="arrow-up-right" size={14} />
                               </a>

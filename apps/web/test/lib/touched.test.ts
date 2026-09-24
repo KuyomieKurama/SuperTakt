@@ -203,4 +203,35 @@ describe("touchedOnBlur — Regel P-8 (O-GS)", () => {
     // T-208, nicht hier — eine Prüfdatei mutiert kein Produktivcode.
     expect(vorDerBerichtigungOHY(value, edited)).toBe(true);
   });
+
+  it("touchedOnBlur schneidet selbst — die Stille an einem Leerraum-Feld hängt an keiner fremden Datei (O-IJ)", () => {
+    // `touchedCallSiteNeutrality.test.ts` läßt an einer Stelle offen, ob die
+    // Stille an `TextField` (`FormDialog.tsx`) nur deshalb eintritt, weil ein
+    // gespeicherter Name durch `nameSchema`
+    // (`apps/local-api/src/http/input.ts`, `z.string().trim().min(1)`,
+    // domain-dev-Hoheit, ein anderes Paket) nie aus reinem Leerraum bestehen
+    // kann — eine Eigenschaft außerhalb dieser Datei, die jener Prüffall
+    // ausdrücklich "nicht abschließend beweisen" kann. Dieser Fall beweist
+    // stattdessen die Aussage aus dem Kopfkommentar dieser Datei (T-207,
+    // Abschnitt "Die Berichtigung"): **`touchedOnBlur` schneidet selbst**, und
+    // die Stille ist eine Eigenschaft der Funktion — nicht ein Zufall darüber,
+    // was `nameSchema` heute zuläßt.
+    //
+    // Der Beweis führt über einen Wert, den `nameSchema` NIE zuließe — Tabs
+    // und Zeilenumbrüche ohne ein einziges druckbares Zeichen, also genau der
+    // Fall, den der Kopfkommentar als "ein Bestand, der an der Tür vorbei
+    // geschrieben wurde" benennt. Er kommt hier ohne jeden Bezug zu
+    // `nameSchema` an — kein Import, kein Aufruf, kein Bestand, keine
+    // Netzwerkschicht dazwischen —, und `touchedOnBlur` bleibt trotzdem still.
+    const value: DraftText = "\t\n  \t";
+    const edited = false;
+
+    expect(touchedOnBlur(value, edited)).toBe(false);
+
+    // Die Gegenprobe zur Behauptung "schneidet SELBST": Ohne das eigene
+    // `trim()` (die Fassung vor der Berichtigung O-HY) läge derselbe Wert
+    // NICHT still — `.length > 0` ist für ihn wahr. Der Unterschied entsteht
+    // also innerhalb dieser Funktion und nirgends sonst.
+    expect(vorDerBerichtigungOHY(value, edited)).toBe(true);
+  });
 });

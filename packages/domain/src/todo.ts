@@ -121,6 +121,11 @@ export interface TodoFilter {
   readonly withoutPriority?: boolean;
   readonly sortByPriority?: boolean;
   readonly search?: string;
+  /**
+   * `search` also looks into the internal note (C-22, K-4). Only the global search sets it; the
+   * todo list and pool members keep searching title and call number only (C22-03).
+   */
+  readonly searchIncludesNote?: boolean;
   readonly statusIds?: readonly StatusId[];
   readonly tagIds?: readonly TagId[];
   readonly poolIds?: readonly PoolId[];
@@ -142,6 +147,9 @@ export interface TodoFilter {
    */
   readonly sortByDueDate?: DueSortDirection;
 }
+
+/** Where a todo matched in the global search (C-22, K-1). Never the note text itself (K-3). */
+export type TodoMatchOrigin = 'title' | 'call_number' | 'todo_note';
 
 /** Welche Fristzustände die Liste zeigen soll, und gegen welchen Tag gerechnet wird. */
 export interface TodoDueFilter {

@@ -1,124 +1,39 @@
 /**
- * Takt — T-111, `findMatches`/`bookOnTodo` und `poolMovement` (E-061 Punkt 3,
- * Vorschlag aus `reports/T-104-integration-dev.md` "Nächster Schritt" 1 /
- * `reports/T-105-unit-tester.md` "Nächster Schritt" 2: "Sobald die Add-in-
- * Routen auf `bookingMovementStates(todo, {hasOpen, hasExported})` umgestellt
- * sind, wäre ein Attrappen-Test nach demselben Muster wie
- * `todo-done-movement.test.ts` denkbar").
+ * Takt — `findMatches`, the add-in's duplicate offer (A-10.9, A-10.11, E-120, E-125 point 1).
  *
- * Seit T-104 liefern beide Add-in-Routen `poolMovement` in DERSELBEN Form wie
- * jede Timer-Route (`{ appears, enters, leaves } | null`) statt der drei
- * Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames` von vorher
- * (E-061 Punkt 3). Diese Datei war bislang die einzige Lücke: kein
- * Einheitentest unter `apps/local-api/test/**` deckte `findMatches` oder
- * `bookOnTodo` ab (T-105 Annahme 6, T-104 "Kein Einheitentest ... ist
- * betroffen").
+ * This file replaces the earlier version built for T-111, which measured both `findMatches` and
+ * `bookOnTodo` and asserted that a match carried `poolMovement` in the same shape as the timer
+ * routes. Since the add-in booking rollback (T-389, E-120, A-10.12, A-10.16) `bookOnTodo` is
+ * gone: the add-in books no time and clears no "done" flag. Since T-398 (E-125 point 1) a match
+ * carries no `poolMovement` either — the add-in resolves no rule anymore, so the field described
+ * a movement that no longer exists.
  *
- * Attrappe für `AddinDeps`/`AddinUnit` nach demselben Muster wie
- * `todo-done-movement.test.ts` und `time-entry-movement.test.ts`: nur die
- * Ports, die `findMatches`/`bookOnTodo` und `poolMovementNamer` tatsächlich
- * lesen.
+ * `AddinUnit` is narrower for the same reason: `todos` has no `clearDone`, `timeEntries` has no
+ * `create`, `pools` has no `resolveAxes` (structural proof of A-10.12/E-125 point 1 — see the
+ * second `describe` block below). What this file measures now is the absence of the removed
+ * fields, named explicitly, instead of a shape that used to include them.
  *
- * Geprüft wird genau das, was der Auftrag zu T-111 benennt:
- *
- *  1. `findMatches` und die Buchungsroute (`bookOnTodo`) liefern
- *     `poolMovement` in derselben Gestalt wie die Timer-Routen — ein Feld,
- *     `{ appears, enters, leaves } | null`, KEINE der drei alten Listen.
- *  2. `null`, wenn das Todo offen ist und schon eine offene Buchung hat
- *     (TP-EXPST-12a) — UND ohne eine einzige Regel aufzulösen.
- *  3. Drei leere Listen, wenn nachgesehen und nichts gefunden wurde — das
- *     "Kein Treffer"-Todo aus TP-EXPST-12 ist erledigt (`docs/testplan.md`
- *     Zeile 2351: "ein Treffer, der keine Regel trifft, aber noch bewegt
- *     werden könnte ... bekommt weiterhin `{ appears: [], enters: [],
- *     leaves: [] }`").
- *  4. Keine Reste `poolNames`/`enteringPoolNames`/`leavingPoolNames` in der
- *     Antwort — ein Schlüsselvergleich, dieselbe Wache wie in
- *     `apps/outlook-addin/scripts/proof-addin.mjs` (T-104).
+ * The T-090 axis guard that used to live in `describe('findMatches — poolMovement …')`'s
+ * neighbourhood moved to `packages/domain/test/pool-rule-axes.test.ts` (T-398 open question 1):
+ * it is a pure domain fact and had no reader left in this narrower `AddinUnit`.
  */
 import { describe, expect, it } from 'vitest';
-import type {
-  Pool,
-  PoolCompletionFilter,
-  PoolExportFilter,
-  PoolId,
-  PoolSurface,
-  StatusId,
-  TagId,
-  TimeEntryId,
-  Timestamp,
-  Todo,
-  TodoId,
-} from '@takt/domain';
-import { ok } from '@takt/domain';
+import type { StatusId, TagId, Timestamp, Todo, TodoId } from '@takt/domain';
 import type { AddinDeps, AddinUnit } from '../../../src/routes/addin/ports.ts';
-import { bookOnTodo, findMatches } from '../../../src/routes/addin/service.ts';
+import { findMatches } from '../../../src/routes/addin/service.ts';
 
 const todoId = (value: string) => value as unknown as TodoId;
-const poolId = (value: string) => value as unknown as PoolId;
 const tagId = (value: string) => value as unknown as TagId;
 const statusId = (value: string) => value as unknown as StatusId;
 const timestamp = (value: string) => value as unknown as Timestamp;
-const timeEntryId = (value: string) => value as unknown as TimeEntryId;
 
 const NOW = timestamp('2026-08-31T09:00:00Z');
-const STARTED_AT = timestamp('2026-08-31T08:00:00Z');
-const ENDED_AT = timestamp('2026-08-31T08:15:00Z');
-// Erfunden, wie in `CLAUDE.md` verlangt — keine echte Call-Nummer.
+// Invented, as CLAUDE.md requires — never a real call number.
 const CALL_NUMBER = 'TCK-4711';
-
-interface PoolFixture {
-  readonly id: PoolId;
-  readonly name: string;
-  readonly completion: PoolCompletionFilter;
-  readonly exportState: PoolExportFilter;
-}
-
-function makePool(fixture: PoolFixture): Pool {
-  return {
-    id: fixture.id,
-    name: fixture.name,
-    matchMode: 'any',
-    includeSubfolders: false,
-    placement: 'both',
-    position: 0,
-    rule: [],
-    excludedTags: [],
-    statusIds: [],
-    completion: fixture.completion,
-    exportState: fixture.exportState,
-    createdAt: NOW,
-    updatedAt: NOW,
-  };
-}
-
-/** Eine Regel, die ausschließlich nach dem Exportstatus fragt — dieselbe Achse, die eine Buchung tatsächlich bewegt. */
-const POOL_ABRECHNUNG: PoolFixture = {
-  id: poolId('pool-abrechnung'),
-  name: 'Abrechnung',
-  completion: 'any',
-  exportState: 'open',
-};
-
-function fakePools(fixtures: readonly PoolFixture[]) {
-  const calls: (PoolSurface | 'all' | undefined)[] = [];
-  const pools: AddinUnit['pools'] = {
-    async list(shownOn) {
-      calls.push(shownOn);
-      return fixtures.map(makePool);
-    },
-    async resolveAxes() {
-      return {
-        required: { tagIds: [], emptyFolderIds: [] },
-        excluded: { tagIds: [], emptyFolderIds: [] },
-      };
-    },
-  };
-  return { pools, calls };
-}
 
 const baseTodo = (overrides: Partial<Todo> = {}): Todo => ({
   id: todoId('todo-1'),
-  title: 'Testtodo aus dem Add-in',
+  title: 'Test todo from the add-in',
   callNumber: CALL_NUMBER,
   statusId: statusId('status-1'),
   completedAt: null,
@@ -129,7 +44,7 @@ const baseTodo = (overrides: Partial<Todo> = {}): Todo => ({
   ...overrides,
 });
 
-/** Sekunden je Todo, wie `TimeEntryPort.sumSeconds` sie je Filter beantwortet. */
+/** Seconds per todo, exactly what `TimeEntryPort.sumSeconds` answers for a given filter. */
 interface Presence {
   readonly open: number;
   readonly exported: number;
@@ -140,73 +55,72 @@ function fakeTimeEntries(presence: Presence): AddinUnit['timeEntries'] {
     async sumSeconds(filter) {
       return filter.exportStatus === 'open' ? presence.open : presence.exported;
     },
-    async create(input, now) {
-      return ok({
-        id: timeEntryId('entry-1'),
-        todoId: input.todoId,
-        startedAt: input.startedAt,
-        endedAt: input.endedAt,
-        durationSeconds: 900,
-        note: input.note,
-        exportStatus: 'open',
-        exportCount: 0,
-        source: 'manual',
-        createdAt: now,
-        updatedAt: now,
-      });
-    },
   };
 }
 
-/**
- * Attrappe für `AddinDeps.emailAttachments` seit T-304 (E-108): Diese Datei
- * prüft `findMatches`/`bookOnTodo`, keine Anhangsübernahme, darum reicht der
- * Anlegevorgang unverändert durch — kein Anhang entsteht, keiner scheitert.
- *
- * Achtung beim Lesen dieses Prüffalls: Die Attrappe sagt nichts darüber aus,
- * *was* `createEmailAttachmentIntake`/`attachEmailToNewTodo` wirklich tun —
- * das mißt `apps/local-api/test/features/todos/email-attachments.test.ts`
- * (T-306). Hier steht sie nur, damit `AddinDeps` vollständig bleibt.
- */
-const passthroughEmailAttachments: AddinDeps['emailAttachments'] = async (_intake, create) => {
-  const created = await create();
-  if (!created.ok) return created;
-  return ok({
-    created: created.value.value,
-    attachments: { attached: [], failed: [] },
-  });
+/** `findMatches` never touches email attachments; a call here is a test-setup bug. */
+const unexpectedEmailAttachments: AddinDeps['emailAttachments'] = async () => {
+  throw new Error('not expected — findMatches never runs an attachment intake');
 };
 
 function buildDeps(unit: {
-  todos: Pick<AddinUnit['todos'], 'load' | 'findByCallNumber' | 'clearDone'>;
+  todos: Pick<AddinUnit['todos'], 'findByCallNumber'>;
   timeEntries: AddinUnit['timeEntries'];
-  pools: AddinUnit['pools'];
 }): AddinDeps {
   return {
     inTransaction: (work) => work(unit as unknown as AddinUnit),
     now: () => NOW,
-    emailAttachments: passthroughEmailAttachments,
+    emailAttachments: unexpectedEmailAttachments,
   };
 }
 
-describe('findMatches — poolMovement in derselben Form wie die Timer-Routen (E-061 Punkt 3, T-104)', () => {
-  it('offenes Todo MIT bestehender offener Buchung: poolMovement ist null, ohne eine einzige Regel aufzulösen (TP-EXPST-12a)', async () => {
-    const todo = baseTodo({ completedAt: null });
-    const { pools, calls } = fakePools([POOL_ABRECHNUNG]);
+describe('findMatches — duplicate offer without booking and without poolMovement (E-120, E-125 point 1)', () => {
+  it('an implausible value is never searched — no port is touched (R-15)', async () => {
     const deps = buildDeps({
       todos: {
-        async load() {
-          return todo;
+        async findByCallNumber() {
+          throw new Error('not expected — no search for an implausible input');
         },
+      },
+      timeEntries: {
+        async sumSeconds() {
+          throw new Error('not expected');
+        },
+      },
+    });
+
+    const result = await findMatches(deps, '   ');
+
+    expect(result.kind).toBe('not_searched');
+  });
+
+  it('a plausible call number with no matching todo: searched, but empty', async () => {
+    const deps = buildDeps({
+      todos: {
+        async findByCallNumber() {
+          return [];
+        },
+      },
+      timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
+    });
+
+    const result = await findMatches(deps, CALL_NUMBER);
+
+    expect(result.kind).toBe('searched');
+    if (result.kind !== 'searched') return;
+    expect(result.callNumber).toBe(CALL_NUMBER);
+    expect(result.matches).toEqual([]);
+  });
+
+  it('a match carries title, status, tags and the open/exported split (A-10.11)', async () => {
+    const todo = baseTodo({ completedAt: null });
+    const deps = buildDeps({
+      todos: {
         async findByCallNumber() {
           return [todo];
         },
-        async clearDone() {
-          throw new Error('nicht erwartet');
-        },
       },
-      timeEntries: fakeTimeEntries({ open: 600, exported: 0 }),
-      pools,
+      timeEntries: fakeTimeEntries({ open: 600, exported: 300 }),
     });
 
     const result = await findMatches(deps, CALL_NUMBER);
@@ -214,62 +128,65 @@ describe('findMatches — poolMovement in derselben Form wie die Timer-Routen (E
     expect(result.kind).toBe('searched');
     if (result.kind !== 'searched') return;
     expect(result.matches).toHaveLength(1);
-    expect(result.matches[0]?.poolMovement).toBeNull();
-    // Die ganze Sparsamkeit aus `bookingMovement`: Wo nichts zu rechnen ist,
-    // wird auch keine Regel aufgelöst (`unit.pools.list` bleibt ungerufen).
-    expect(calls).toEqual([]);
+    expect(result.matches[0]).toEqual({
+      id: todo.id,
+      title: todo.title,
+      callNumber: todo.callNumber,
+      statusId: todo.statusId,
+      tagIds: todo.tagIds,
+      completedAt: null,
+      openSeconds: 600,
+      exportedSeconds: 300,
+    });
   });
 
-  it('erledigtes Todo OHNE jeden Treffer: poolMovement ist drei leere Listen, NICHT null (TP-EXPST-12, "Kein Treffer")', async () => {
+  it('a completed todo is marked as such — completedAt is not null (A-10.11)', async () => {
     const doneAt = timestamp('2026-08-31T08:30:00Z');
     const todo = baseTodo({ completedAt: doneAt });
-    // Keine Regel, die auf dieses Todo passt: leere Poolliste genügt, um
-    // "nachgesehen und nichts gefunden" nachzubilden.
-    const { pools, calls } = fakePools([]);
     const deps = buildDeps({
       todos: {
-        async load() {
-          return todo;
-        },
         async findByCallNumber() {
           return [todo];
         },
-        async clearDone() {
-          throw new Error('nicht erwartet');
-        },
       },
       timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
-      pools,
     });
 
     const result = await findMatches(deps, CALL_NUMBER);
 
     expect(result.kind).toBe('searched');
     if (result.kind !== 'searched') return;
-    expect(result.matches).toHaveLength(1);
-    expect(result.matches[0]?.poolMovement).toEqual({ appears: [], enters: [], leaves: [] });
-    expect(result.matches[0]?.poolMovement).not.toBeNull();
-    // Hier WIRD gerechnet — anders als im Fall darüber.
-    expect(calls).toEqual(['all']);
+    expect(result.matches[0]?.completedAt).toBe(doneAt);
   });
 
-  it('ein Treffer trägt genau die Schlüssel der neuen Form — keine Reste poolNames/enteringPoolNames/leavingPoolNames', async () => {
-    const todo = baseTodo({ completedAt: null });
-    const { pools } = fakePools([POOL_ABRECHNUNG]);
+  it('several todos sharing the call number all come back, in the order the port returned them', async () => {
+    const first = baseTodo({ id: todoId('todo-1'), title: 'First' });
+    const second = baseTodo({ id: todoId('todo-2'), title: 'Second' });
     const deps = buildDeps({
       todos: {
-        async load() {
-          return todo;
-        },
         async findByCallNumber() {
-          return [todo];
-        },
-        async clearDone() {
-          throw new Error('nicht erwartet');
+          return [first, second];
         },
       },
       timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
-      pools,
+    });
+
+    const result = await findMatches(deps, CALL_NUMBER);
+
+    expect(result.kind).toBe('searched');
+    if (result.kind !== 'searched') return;
+    expect(result.matches.map((match) => match.title)).toEqual(['First', 'Second']);
+  });
+
+  it('a match carries exactly these eight keys — no poolMovement, no booking fields (E-125 point 1, E-120)', async () => {
+    const todo = baseTodo();
+    const deps = buildDeps({
+      todos: {
+        async findByCallNumber() {
+          return [todo];
+        },
+      },
+      timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
     });
 
     const result = await findMatches(deps, CALL_NUMBER);
@@ -285,115 +202,62 @@ describe('findMatches — poolMovement in derselben Form wie die Timer-Routen (E
         'exportedSeconds',
         'id',
         'openSeconds',
-        'poolMovement',
         'statusId',
         'tagIds',
         'title',
       ].sort(),
     );
-    expect(match?.poolMovement).not.toBeNull();
-    expect(Object.keys(match?.poolMovement ?? {}).sort()).toEqual(['appears', 'enters', 'leaves']);
+    // The absence itself, named rather than assumed: the old response shape (T-104) carried
+    // `poolMovement`, and before that three separate name lists.
+    expect(match).not.toHaveProperty('poolMovement');
+    expect(match).not.toHaveProperty('poolNames');
+    expect(match).not.toHaveProperty('enteringPoolNames');
+    expect(match).not.toHaveProperty('leavingPoolNames');
   });
 });
 
-describe('bookOnTodo — poolMovement in derselben Form wie die Timer-Routen (E-061 Punkt 3, T-104)', () => {
-  it('offenes Todo OHNE Buchung: die erste Buchung bewegt es in "Abrechnung" (exportState: open)', async () => {
-    const todo = baseTodo({ completedAt: null });
-    const { pools } = fakePools([POOL_ABRECHNUNG]);
-    const deps = buildDeps({
-      todos: {
-        async load() {
-          return todo;
-        },
-        async findByCallNumber() {
-          return [todo];
-        },
-        async clearDone() {
-          throw new Error('nicht erwartet — das Todo ist nicht erledigt');
-        },
+describe('AddinUnit is structurally narrower since E-120/A-10.12 and E-125 point 1', () => {
+  /**
+   * These three cases assert nothing at runtime beyond `Object.keys` — the real assertion is
+   * that `tsc` accepts the object literal as `AddinUnit['todos']` / `['timeEntries']` /
+   * `['pools']` at all. If a future change reintroduces `clearDone`, `timeEntries.create` or
+   * `pools.resolveAxes` as a *required* member, this file still compiles (Pick is additive-safe
+   * the other way), but the corresponding gap in `apps/local-api/src/routes/addin/service.ts`
+   * (no call to any of them) is what `findMatches — …` above exercises through behaviour.
+   */
+  it('AddinUnit.todos accepts an implementation without clearDone (A-10.12: the add-in clears no "done" flag)', () => {
+    const todos: AddinUnit['todos'] = {
+      async load() {
+        return null;
       },
-      timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
-      pools,
-    });
+      async findByCallNumber() {
+        return [];
+      },
+      async create() {
+        throw new Error('not expected in this guard');
+      },
+    };
 
-    const result = await bookOnTodo(deps, {
-      todoId: todo.id,
-      startedAt: STARTED_AT,
-      endedAt: ENDED_AT,
-      note: 'Aus dem Add-in gebucht',
-    });
-
-    expect(result.kind).toBe('booked');
-    if (result.kind !== 'booked') return;
-    expect(result.poolMovement).toEqual({ appears: ['Abrechnung'], enters: ['Abrechnung'], leaves: [] });
-    expect(result.todoWasDone).toBe(false);
-    expect(result.doneCleared).toBe(false);
+    expect(Object.keys(todos).sort()).toEqual(['create', 'findByCallNumber', 'load']);
   });
 
-  it('offenes Todo MIT bestehender offener Buchung: poolMovement ist null, ohne eine einzige Regel aufzulösen', async () => {
-    const todo = baseTodo({ completedAt: null });
-    const { pools, calls } = fakePools([POOL_ABRECHNUNG]);
-    const deps = buildDeps({
-      todos: {
-        async load() {
-          return todo;
-        },
-        async findByCallNumber() {
-          return [todo];
-        },
-        async clearDone() {
-          throw new Error('nicht erwartet');
-        },
+  it('AddinUnit.timeEntries accepts an implementation without create (E-120: the add-in books no time)', () => {
+    const timeEntries: AddinUnit['timeEntries'] = {
+      async sumSeconds() {
+        return 0;
       },
-      timeEntries: fakeTimeEntries({ open: 600, exported: 0 }),
-      pools,
-    });
+    };
 
-    const result = await bookOnTodo(deps, {
-      todoId: todo.id,
-      startedAt: STARTED_AT,
-      endedAt: ENDED_AT,
-      note: 'Zweite Buchung aus dem Add-in',
-    });
-
-    expect(result.kind).toBe('booked');
-    if (result.kind !== 'booked') return;
-    expect(result.poolMovement).toBeNull();
-    expect(calls).toEqual([]);
+    expect(Object.keys(timeEntries)).toEqual(['sumSeconds']);
   });
 
-  it('die Buchungsantwort trägt genau die Schlüssel der neuen Form — keine Reste poolNames/enteringPoolNames/leavingPoolNames', async () => {
-    const todo = baseTodo({ completedAt: null });
-    const { pools } = fakePools([POOL_ABRECHNUNG]);
-    const deps = buildDeps({
-      todos: {
-        async load() {
-          return todo;
-        },
-        async findByCallNumber() {
-          return [todo];
-        },
-        async clearDone() {
-          throw new Error('nicht erwartet');
-        },
+  it('AddinUnit.pools accepts an implementation without resolveAxes (E-125 point 1: a match resolves no rule)', () => {
+    const pools: AddinUnit['pools'] = {
+      async list() {
+        return [];
       },
-      timeEntries: fakeTimeEntries({ open: 0, exported: 0 }),
-      pools,
-    });
+    };
 
-    const result = await bookOnTodo(deps, {
-      todoId: todo.id,
-      startedAt: STARTED_AT,
-      endedAt: ENDED_AT,
-      note: 'Aus dem Add-in gebucht',
-    });
-
-    expect(result.kind).toBe('booked');
-    if (result.kind !== 'booked') return;
-    expect(Object.keys(result).sort()).toEqual(
-      ['doneCleared', 'kind', 'poolMovement', 'timeEntry', 'todoWasDone'].sort(),
-    );
-    expect(result.poolMovement).not.toBeNull();
-    expect(Object.keys(result.poolMovement ?? {}).sort()).toEqual(['appears', 'enters', 'leaves']);
+    expect(Object.keys(pools)).toEqual(['list']);
   });
 });

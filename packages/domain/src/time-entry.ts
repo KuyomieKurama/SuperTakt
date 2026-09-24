@@ -1,7 +1,7 @@
 /** Die Buchungsnotiz wird exportiert; der interne Todo-Vermerk bleibt davon getrennt. */
 
 import type { Seconds, Timestamp, TimeEntryId, TodoId } from './kernel.ts';
-import { secondsBetween } from './kernel.ts';
+import { earlierOf, secondsBetween } from './kernel.ts';
 
 // Exportstatus (A-6.5, A-6.9)
 
@@ -35,6 +35,11 @@ export interface TimeEntry {
    */
   readonly exportCount: number;
   readonly source: TimeEntrySource;
+  /**
+   * Read-only copy of `todo.no_export` (F-8, E-124 point 6, A-26). A NoExport booking is recorded
+   * but never "open for billing"; the time screen must not count it as open.
+   */
+  readonly todoNoExport: boolean;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -143,6 +148,22 @@ export interface StoppedTimeEntryDraft {
 /** Kürzeste Dauer, die als Buchung erhalten bleibt. Siehe `MinimumDurationSeconds`. */
 export const MINIMUM_DURATION_SECONDS: MinimumDurationSeconds = 1;
 
+/** Longest single time entry (A-28.6, E-120, E-124 point 3): 24 hours. */
+export const MAX_TIME_ENTRY_SECONDS = 24 * 60 * 60;
+
+/** Would a booking of `seconds` exceed {@link MAX_TIME_ENTRY_SECONDS}? A non-finite value answers `false`. */
+export const exceedsMaximumSeconds = (seconds: number): boolean =>
+  Number.isFinite(seconds) && seconds > MAX_TIME_ENTRY_SECONDS;
+
+/**
+ * Would a booking from `startedAt` to `endedAt` exceed {@link MAX_TIME_ENTRY_SECONDS}?
+ *
+ * Unreadable timestamps answer `false`: they are rejected by the rules that read them, and a
+ * `true` here would turn them into a stop that can never succeed.
+ */
+export const exceedsMaximumDuration = (startedAt: Timestamp, endedAt: Timestamp): boolean =>
+  exceedsMaximumSeconds(secondsBetween(startedAt, endedAt));
+
 /**
  * Ergebnis der reinen Stopp-Regel.
  *
@@ -223,6 +244,10 @@ export const decideTimerStop = (input: {
 }): TimerStopDecision => {
   const durationSeconds = secondsBetween(input.running.startedAt, input.now);
 
+  // An unreadable timestamp yields NaN; it must not pass as a booking (T-380).
+  if (!Number.isFinite(durationSeconds)) {
+    return { kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 };
+  }
   if (durationSeconds < MINIMUM_DURATION_SECONDS) {
     return { kind: 'discarded', reason: 'timer_too_short', durationSeconds };
   }
@@ -278,38 +303,30 @@ export const decideTimerStart = (input: {
 };
 
 /**
- * Fremde Zeitstempel müssen nicht dieselbe Breite haben; deshalb zeitlich statt lexikografisch
- * vergleichen.
- */
-const earlierOf = (a: Timestamp, b: Timestamp): Timestamp =>
-  Date.parse(a) <= Date.parse(b) ? a : b;
-
-/**
- * Nur nach Bestätigung bis höchstens min(Lebenszeichen, jetzt) buchen. Ohne Lebenszeichen oder bei
- * rückwärts laufender Uhr wird die Buchung zu kurz.
- * `now` muss im Produktivaufruf gesetzt sein; ohne diesen optionalen Wert fehlt die obere Grenze
- * gegen zukünftige Archivzeitstempel.
+ * Book only after confirmation, and at most until min(heartbeat, now) (E-036, A-A-129).
+ *
+ * Without a heartbeat, or when a bound is unreadable, the booking ends at its start and is
+ * discarded as too short: the cheap direction. Before T-388 an unreadable heartbeat made the
+ * comparison fall through to `now` and booked the wall clock (T-380).
  */
 export const decideOrphanedTimer = (input: {
   readonly running: RunningTimeEntry;
-  /** Letztes Lebenszeichen, `null` wenn nie eines geschrieben wurde. */
+  /** Last heartbeat, `null` when none was ever written. */
   readonly heartbeatAt: Timestamp | null;
   readonly resolution: 'book_until_heartbeat' | 'discard';
-  /**
-   * Wanduhr des fragenden Laufs — der Deckel nach oben. Fehlt sie, gibt es
-   * keinen; siehe den Absatz „Der Deckel greift in beide Richtungen".
-   */
-  readonly now?: Timestamp;
+  /** Wall clock of the asking run — the upper cap. Required since T-388. */
+  readonly now: Timestamp;
 }): TimerStopDecision => {
   if (input.resolution === 'discard') {
     return { kind: 'discarded', reason: 'orphan_discarded', durationSeconds: 0 };
   }
 
-  const untilHeartbeat = input.heartbeatAt ?? input.running.startedAt;
+  const cappedEnd =
+    input.heartbeatAt === null ? null : earlierOf(input.heartbeatAt, input.now);
 
   return decideTimerStop({
     running: input.running,
     note: input.running.note,
-    now: input.now === undefined ? untilHeartbeat : earlierOf(untilHeartbeat, input.now),
+    now: cappedEnd ?? input.running.startedAt,
   });
 };

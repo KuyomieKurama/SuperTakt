@@ -1,5 +1,6 @@
 import { listTimeEntries } from "../bookings/api";
 import type { ExportPreview, ForeignText, Id, SkippedExportGroup, TimeEntry, TimeEntryFilter } from "../../api/types";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — woraus die Export-Ansicht ihre Tagesgruppen bildet (S-07, E-020,
@@ -101,13 +102,11 @@ export function toLayout(preview: ExportPreview): readonly GroupLayout[] {
   return out.sort((left, right) => right.day.localeCompare(left.day));
 }
 
-export const ALL_EXCLUDED: GroupInsight = {
-  quarters: null,
-  blockedReason: "Alle Buchungen ausgeschlossen",
-};
+export function allExcluded(): GroupInsight {
+  return { quarters: null, blockedReason: exportTexts().allExcluded };
+}
 
 export function reasonText(reason: SkippedExportGroup["reason"]): string {
-  return reason === "empty_note"
-    ? "Leistung fehlt"
-    : "Nicht exportierbar";
+  const text = exportTexts();
+  return reason === "empty_note" ? text.noteMissing : text.notExportable;
 }

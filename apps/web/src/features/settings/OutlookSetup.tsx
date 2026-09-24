@@ -6,15 +6,9 @@ import { formatDateTime } from "../../lib/format";
 import { foreignText, foreignTextFrom } from "../../lib/foreign";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Button, Card, InlineMessage } from "../../shared/ui/Primitives";
+import { settingsTexts } from "./texts";
+import { ServiceText } from "../../shared/ui/ServiceText";
 
-const HTTPS_LABEL: Readonly<Record<OutlookCertificateFacts["https"], string>> = {
-  ready: "Die Add-in-Seite ist über HTTPS erreichbar; das Serverzertifikat wurde geprüft.",
-  unreachable: "Der lokale Add-in-Server ist nicht erreichbar. Prüfen Sie, ob SuperTakt vollständig gestartet ist.",
-  tls_failed: "Die HTTPS-Prüfung ist fehlgeschlagen. Prüfen Sie das Zertifikatsvertrauen und starten Sie Outlook nach einer Änderung neu.",
-  certificate_mismatch: "Der Add-in-Server verwendet ein anderes Zertifikat. Bitte SuperTakt neu starten und erneut prüfen.",
-  page_missing: "HTTPS funktioniert, aber die Add-in-Seite fehlt. Bitte die SuperTakt-Installation prüfen.",
-  certificate_invalid: "Das Zertifikat ist nicht gültig oder entspricht nicht dem lokalen SuperTakt-Serverzertifikat.",
-};
 
 /**
  * Tauri gibt ein `Result<_, String>` auf der JavaScript-Seite als verworfenen
@@ -70,50 +64,53 @@ export function OutlookSetup() {
 
   const value = status.state.status === "ready" ? status.state.value : undefined;
   const facts = value?.supported === true ? value : null;
+  const text = settingsTexts();
   return (
     <>
-      <Card title="Outlook lokal einrichten" description="Zertifikat prüfen, Vertrauen bestätigen und anschließend das Add-in verbinden.">
-        <p role="status">{status.state.status === "loading" ? "Lokales Zertifikat und HTTPS-Zugang werden geprüft …" : ""}</p>
-        {status.state.status === "error" ? <InlineMessage tone="danger" title="Die Einrichtung konnte nicht geprüft werden">{status.state.message}</InlineMessage> : null}
-        {value === null ? <p>Öffnen Sie diese Einstellungen in der SuperTakt-Desktop-App. Im Browser kann SuperTakt die lokalen Zertifikatsspeicher nicht prüfen.</p> : null}
-        {value?.supported === false ? <p>Für dieses Betriebssystem ist die Zertifikatseinrichtung noch nicht verfügbar. Unterstützt werden Windows, Linux und macOS.</p> : null}
+      <Card title={text.outlookTitle} description={text.outlookLead}>
+        <p role="status">{status.state.status === "loading" ? text.outlookChecking : ""}</p>
+        {status.state.status === "error" ? <InlineMessage tone="danger" title={text.outlookCheckFailed}>{status.state.message}</InlineMessage> : null}
+        {value === null ? <p>{text.outlookBrowserOnly}</p> : null}
+        {value?.supported === false ? <p>{text.outlookUnsupported}</p> : null}
         {facts === null ? null : (
           <>
             <dl className="facts">
-              <dt>Lokale Adresse</dt><dd>{"https://localhost:17844/index.html"}</dd>
-              <dt>Ausgestellt für</dt><dd>{facts.subject}</dd>
-              <dt>Aussteller</dt><dd>{facts.issuer}</dd>
-              <dt>Gültig ab</dt><dd>{formatDateTime(facts.validFrom)}</dd>
-              <dt>Gültig bis</dt><dd>{formatDateTime(facts.validUntil)}</dd>
-              <dt>SHA-256-Fingerabdruck</dt><dd className="outlook-setup__fingerprint mono">{facts.fingerprint.match(/.{2}/g)?.join(":")}</dd>
-              <dt>{facts.trustScope === "linux_nss" ? "Vertrauen in den Browser-Zertifikatsspeichern" : facts.trustScope === "macos_user" ? "Vertrauen im Benutzerschlüsselbund" : "Vertrauen im Windows-Benutzerkonto"}</dt><dd>{facts.installed ? "Hinterlegt" : "Nicht hinterlegt"}</dd>
+              <dt>{text.localAddress}</dt><dd>{"https://localhost:17844/index.html"}</dd>
+              <dt>{text.issuedFor}</dt><dd>{facts.subject}</dd>
+              <dt>{text.issuer}</dt><dd>{facts.issuer}</dd>
+              <dt>{text.validFrom}</dt><dd>{formatDateTime(facts.validFrom)}</dd>
+              <dt>{text.validUntil}</dt><dd>{formatDateTime(facts.validUntil)}</dd>
+              <dt>{text.fingerprint}</dt><dd className="outlook-setup__fingerprint mono">{facts.fingerprint.match(/.{2}/g)?.join(":")}</dd>
+              <dt>{facts.trustScope === "linux_nss" ? text.trustLinux : facts.trustScope === "macos_user" ? text.trustMac : text.trustWindows}</dt><dd>{facts.installed ? text.stored : text.notStored}</dd>
             </dl>
             {facts.trustStores?.length ? <ul>{facts.trustStores.map((store, index) => <li key={index}>
-              {store.kind === "chromium" ? "Chromium / Chrome / Brave" : store.kind === "firefox" ? "Firefox-Profil" : "macOS-Benutzerschlüsselbund"}: {store.installed ? "Vertrauen hinterlegt" : "Vertrauen nicht hinterlegt"}
+              {store.kind === "chromium" ? text.storeChromium : store.kind === "firefox" ? text.storeFirefox : text.storeMac}: {store.installed ? text.trustStored : text.trustNotStored}
             </li>)}</ul> : null}
-            {facts.toolsAvailable === false ? <InlineMessage tone="warning" title="Zertifikatswerkzeuge fehlen">Für die Einrichtung werden OpenSSL und unter Linux die NSS-Werkzeuge mit certutil benötigt. Installieren Sie die fehlenden Werkzeuge und wählen Sie „Erneut prüfen“.</InlineMessage> : null}
-            {facts.installFailed ? <InlineMessage tone="warning" title="Vertrauen nicht vollständig hinterlegt">Mindestens ein Zertifikatsspeicher konnte nicht geändert werden. Schließen Sie den Browser vollständig und versuchen Sie es erneut. Erfolgreiche Einträge bleiben erhalten.</InlineMessage> : null}
-            {facts.trustScope === "linux_nss" ? <p>Der Import gilt für den gemeinsamen Zertifikatsspeicher von Chromium und Brave und die hier erkannten Firefox-Profile dieses Benutzerkontos. Starten Sie den Browser nach dem Import vollständig neu. Separat abgeschottete Browser benötigen gegebenenfalls eine eigene Einrichtung.</p> : null}
-            <InlineMessage tone={facts.https === "ready" && facts.installed ? "success" : "warning"} title={facts.https === "ready" ? "Lokaler HTTPS-Server geprüft" : "HTTPS-Zugang noch nicht bereit"}>
-              {HTTPS_LABEL[facts.https]}
+            {facts.toolsAvailable === false ? <InlineMessage tone="warning" title={text.toolsMissing}>{text.toolsMissingBody}</InlineMessage> : null}
+            {facts.installFailed ? <InlineMessage tone="warning" title={text.trustIncomplete}>{text.trustIncompleteBody}</InlineMessage> : null}
+            {facts.trustScope === "linux_nss" ? <p>{text.linuxImportHint}</p> : null}
+            <InlineMessage tone={facts.https === "ready" && facts.installed ? "success" : "warning"} title={facts.https === "ready" ? text.httpsChecked : text.httpsNotReady}>
+              {text.httpsState[facts.https]}
             </InlineMessage>
             {!facts.installed && facts.validNow && facts.validProfile ? (
-              <Button disabled={mutation.busy || facts.toolsAvailable === false} onClick={() => { mutation.clearError(); setConfirmed(facts); }}>Zertifikat prüfen und vertrauen …</Button>
+              <Button disabled={mutation.busy || facts.toolsAvailable === false} onClick={() => { mutation.clearError(); setConfirmed(facts); }}>{text.checkAndTrust}</Button>
             ) : null}
-            <p className="field__hint">Nach erfolgreicher HTTPS-Prüfung importieren Sie manifest.xml in Outlook und tragen das unten erzeugte Zugangstoken in den Add-in-Einstellungen ein. Das Zertifikat bestätigt die lokale Verbindung; die Anmeldung beim Add-in erfolgt weiterhin mit dem Token.</p>
+            <p className="field__hint">{text.manifestHint}</p>
           </>
         )}
-        <Button variant="secondary" disabled={mutation.busy || status.state.status === "loading" || (status.state.status === "ready" && status.state.refreshing)} onClick={status.reload}>Erneut prüfen</Button>
+        <Button variant="secondary" disabled={mutation.busy || status.state.status === "loading" || (status.state.status === "ready" && status.state.refreshing)} onClick={status.reload}>{text.checkAgain}</Button>
       </Card>
       <ConfirmDialog
         open={confirmed !== null}
-        title="Diesem lokalen Zertifikat vertrauen?"
-        description={<span>Bestätigen Sie den SHA-256-Fingerabdruck des oben gezeigten Zertifikats: <span className="outlook-setup__fingerprint mono">{confirmed?.fingerprint.match(/.{2}/g)?.join(":")}</span></span>}
-        consequence={confirmed?.trustScope === "linux_nss" ? "Dieses Zertifikat wird als vertrauenswürdiges Serverzertifikat in den oben genannten Browser-Zertifikatsspeichern Ihres Benutzerkontos hinterlegt. Es gilt für localhost und 127.0.0.1. Dafür sind keine Administratorrechte nötig. Anschließend prüft SuperTakt die Einträge und die HTTPS-Verbindung. Starten Sie den Browser danach neu." : confirmed?.trustScope === "macos_user" ? "Dieses Zertifikat wird für localhost im Benutzerschlüsselbund als vertrauenswürdig hinterlegt. Bestätigen Sie gegebenenfalls die macOS-Sicherheitsabfrage. Anschließend prüft SuperTakt Vertrauen und HTTPS-Verbindung." : "Dieses Zertifikat wird im Zertifikatsspeicher Ihres Windows-Benutzerkontos als vertrauenswürdig hinterlegt. Es gilt für localhost und 127.0.0.1. Bestätigen Sie auch die anschließend angezeigte Windows-Sicherheitsabfrage. Dafür haben Sie drei Minuten Zeit. SuperTakt prüft danach die HTTPS-Verbindung erneut."}
-        acknowledgeLabel="Ich habe die Zertifikatsdaten geprüft und möchte diesem Zertifikat vertrauen."
-        confirmLabel="Zertifikat vertrauen"
+        title={text.trustTitle}
+        description={<span>{text.trustLead}<span className="outlook-setup__fingerprint mono">{confirmed?.fingerprint.match(/.{2}/g)?.join(":")}</span></span>}
+        consequence={confirmed?.trustScope === "linux_nss" ? text.trustLinuxConsequence : confirmed?.trustScope === "macos_user" ? text.trustMacConsequence : text.trustWindowsConsequence}
+        acknowledgeLabel={text.trustAcknowledge}
+        confirmLabel={text.trustConfirm}
         busy={mutation.busy}
-        refusal={mutation.error ?? undefined}
+        {...(mutation.error === null
+          ? {}
+          : { refusal: <ServiceText text={mutation.error} fromService={mutation.errorFromService} /> })}
         onConfirm={trust}
         onCancel={() => setConfirmed(null)}
       />

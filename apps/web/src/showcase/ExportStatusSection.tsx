@@ -1,7 +1,5 @@
 import { useState } from "react";
 import {
-  EXPORT_STATE,
-  EXPORT_STATUS_LABEL,
   ExportStatusBadge,
   ExportStatusMarker,
   exportStatusOf,
@@ -11,6 +9,7 @@ import { ExportSummaryStrip } from "../shared/ui/ExportSummaryStrip";
 import { Card, InlineMessage } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
 import { Section, SubHeading } from "./Section";
+import { labels } from "../lib/labels";
 
 const STATES: readonly ExportDisplayState[] = ["open", "exported", "reopened", "not_billed"];
 
@@ -81,10 +80,10 @@ const TRAITS: readonly TraitRow[] = [
   },
   {
     trait: "Fachlicher Status",
-    open: `${EXPORT_STATUS_LABEL[exportStatusOf("open")]} (open)`,
-    exported: `${EXPORT_STATUS_LABEL[exportStatusOf("exported")]} (exported)`,
-    reopened: `${EXPORT_STATUS_LABEL[exportStatusOf("reopened")]} (open) — kein eigener Wert`,
-    notBilled: `${EXPORT_STATUS_LABEL[exportStatusOf("not_billed")]} (exported) — kein eigener Wert`,
+    open: `${labels().exportStatus[exportStatusOf("open")]} (open)`,
+    exported: `${labels().exportStatus[exportStatusOf("exported")]} (exported)`,
+    reopened: `${labels().exportStatus[exportStatusOf("reopened")]} (open) — kein eigener Wert`,
+    notBilled: `${labels().exportStatus[exportStatusOf("not_billed")]} (exported) — kein eigener Wert`,
   },
 ];
 
@@ -148,7 +147,7 @@ export function ExportStatusSection() {
               >
                 <ExportStatusMarker state={state} labelled={false} />
                 <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-                  {EXPORT_STATE[state].label}
+                  {labels().exportState[state].label}
                 </span>
               </span>
             ))}

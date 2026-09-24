@@ -1,6 +1,6 @@
 /**
- * Takt — der Einstiegspunkt, den **`proof:access`** startet (T-146, Befund
- * T-145-1).
+ * Takt — der Einstiegspunkt, den **`proof:access`** und seit T-397a auch
+ * **`proof:export-api`** starten (T-146, Befund T-145-1).
  *
  * ===========================================================================
  * Warum es diese Datei gibt
@@ -43,7 +43,7 @@
  *
  * Hier ist es umgekehrt. `proof:access` mißt **genau diesen Start** — die
  * Migration, die Rechteprüfung, das Aufräumen liegengebliebener Exportdateien,
- * den Aufgabenbereich auf 17844, die Beendigungscodes. Ein nachgebauter Start
+ * den Aufgabenbereich auf seinem eigenen Port, die Beendigungscodes. Ein nachgebauter Start
  * wäre ein zweiter Weg, der vom echten abweichen kann, ohne daß ein Fall es
  * mißt — und dann prüfte der Nachweis eine Anwendung, die niemand ausliefert.
  *
@@ -62,6 +62,7 @@
 
 import { main } from '../src/main.ts';
 import type { ReleaseLookup, ReleaseSourcePort } from '../src/features/version/source.ts';
+import { proofPort } from './port-probe.mjs';
 
 /**
  * Die Abholfunktion des Nachweislaufs: **sie geht nirgendwohin.**
@@ -95,4 +96,10 @@ const offlineReleaseSource: ReleaseSourcePort = {
     Promise.resolve({ ok: false, reason: 'unreachable' } as const),
 };
 
-await main({ releaseSource: offlineReleaseSource });
+/*
+ * The port comes from TAKT_PROOF_PORT (E-083 point 4, E-121 point 8), read here and not in
+ * `main()`: the shipped `src/index.ts` passes no port, so the product stays on its fixed ports.
+ * Every proof run that starts the service as a process starts this entry (T-397b).
+ */
+const port: number = proofPort();
+await main({ releaseSource: offlineReleaseSource, port, taskpanePort: port + 1 });

@@ -1,3 +1,10 @@
+-- Takt — migration 0026 "todo_no_export", backward direction
+--
+-- Money path. Data loss, named: the NoExport mark of every todo is deleted, and the export view
+-- is rebuilt without that filter. Every open booking of a former NoExport todo therefore becomes
+-- exportable and appears in the next export. After going back below 0026, review the open
+-- bookings before the next export and mark the ones that must not be billed as "not billed".
+
 DROP VIEW v_export_candidate;
 CREATE VIEW v_export_candidate AS
 SELECT

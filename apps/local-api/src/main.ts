@@ -47,9 +47,23 @@ import { captureTimerRecovery } from './features/timer/timer.ts';
 import type { ReleaseSourcePort } from './features/version/source.ts';
 import { VERSION_CHECK_START_DELAY_MS } from './features/version/version.ts';
 
-/** Beendigungscodes, damit die Hülle den Grund unterscheiden kann. */
-const EXIT_CONFIG = 78;
-const EXIT_BIND = 74;
+/**
+ * Exit codes, one per start cause, so that the shell can name the cause and the self-help
+ * (A-28.10, A-28.5). Values follow `sysexits.h`; `sidecar.rs` maps the same numbers.
+ * 78 and 74 keep their earlier meaning for the handshake and the port.
+ */
+export const EXIT_CODES = Object.freeze({
+  /** No session secret or no usable Windows user name on stdin (handover of the session). */
+  handshake: 78,
+  /** The application data directory is not set or cannot be created. */
+  appData: 73,
+  /** The database could not be opened (locked, damaged, not readable). */
+  storeOpen: 66,
+  /** The migration failed; the service never runs on a schema it does not know. */
+  migration: 65,
+  /** The API port is in use or cannot be bound. */
+  bind: 74,
+});
 
 /**
  * Was der **Aufrufer im selben Prozeß** an diesem Start noch bestimmen darf.
@@ -104,9 +118,17 @@ export interface MainOptions {
    * nichts an — deshalb ist das Erzeugnis von diesem Parameter unberührt.
    */
   readonly releaseSource?: ReleaseSourcePort;
+  /**
+   * API and task pane ports for proof runs only (E-083 point 4, E-121 point 8).
+   * `src/index.ts` passes neither, so the product stays on 17843/17844 (B-1.5).
+   */
+  readonly port?: number;
+  readonly taskpanePort?: number;
 }
 
 export async function main(options: MainOptions = {}): Promise<void> {
+  const apiPort = options.port ?? DEFAULT_PORT;
+  const taskpanePort = options.taskpanePort ?? TASKPANE_PORT;
   const logger = createLogger();
   const started = performance.now();
   const startupPhase = (phase: string): void => {
@@ -161,7 +183,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
       // dieser Wert für den, der die Zeile später auswertet (T-132).
       `handshake_rejected reason=${handshake.reason}`,
     );
-    process.exit(EXIT_CONFIG);
+    process.exit(EXIT_CODES.handshake);
   }
 
   const paths = resolveAppDataDir({
@@ -177,13 +199,24 @@ export async function main(options: MainOptions = {}): Promise<void> {
         : 'Kein Benutzerverzeichnis gefunden.',
       `appdata_missing reason=${paths.reason}`,
     );
-    process.exit(EXIT_CONFIG);
+    process.exit(EXIT_CODES.appData);
   }
 
   // Das Verzeichnis mit engen Rechten anlegen, bevor irgendetwas darin
   // entsteht (E-018, B-2.2 Punkt 3). `0700` ausdrücklich gesetzt und nicht dem
   // `umask` überlassen — darin liegen Kundendatenbank, Token und Zertifikat.
-  await ensureDirectory(paths.dir, DIR_MODE);
+  try {
+    await ensureDirectory(paths.dir, DIR_MODE);
+  } catch (error) {
+    // Path-free on purpose (B-2.4): only the runtime's error code goes into the line.
+    const code = errorCodeOf(error);
+    logger.lifecycle(
+      'error',
+      'Das Anwendungsdatenverzeichnis ließ sich nicht anlegen.',
+      `appdata_unusable${code === null ? '' : ` code=${code.toLowerCase()}`}`,
+    );
+    process.exit(EXIT_CODES.appData);
+  }
 
   const store = createFileTokenStore(tokenFilePath(paths.dir));
 
@@ -204,7 +237,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   let composed: Composition;
   try {
     composed = compose({
-      port: DEFAULT_PORT,
+      port: apiPort,
       store,
       sessionSecret: handshake.secret,
       windowsUser: handshake.windowsUser,
@@ -223,7 +256,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   } catch (error) {
     const diagnosis = describeStoreOpenFailure(error);
     logger.lifecycle('error', diagnosis.sentence, diagnosis.key);
-    process.exit(EXIT_CONFIG);
+    process.exit(EXIT_CODES.storeOpen);
   }
   const { app, runtime, tokens, database, context, versionCheck } = composed;
 
@@ -237,7 +270,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   // ohne Bindung; der Schritt selbst liegt jetzt in `startup.ts` und ist ohne
   // laufenden Dienst prüfbar.
   if (database !== null && !(await bringDatabaseUpToDate(database.migrations, logger))) {
-    process.exit(EXIT_CONFIG);
+    process.exit(EXIT_CODES.migration);
   }
 
   /**
@@ -484,10 +517,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
       // als Takt ausgeben, um Tokens einzusammeln (B-1.5 Punkt 1).
       logger.lifecycle(
         'error',
-        `Der Port ${DEFAULT_PORT} ist belegt. Takt startet nicht und weicht nicht auf einen anderen Port aus.`,
-        `port_in_use port=${DEFAULT_PORT}`,
+        `Der Port ${apiPort} ist belegt. Takt startet nicht und weicht nicht auf einen anderen Port aus.`,
+        `port_in_use port=${apiPort}`,
       );
-      process.exit(EXIT_BIND);
+      process.exit(EXIT_CODES.bind);
     }
     // Der Grund wird genannt, nicht verschluckt (T-132). `error.code` ist ein
     // Schlüssel der Laufzeit (`EACCES`, `EADDRNOTAVAIL`), kein Pfad und kein
@@ -497,13 +530,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
       'Der lokale Dienst konnte nicht gestartet werden.',
       `listen_failed${runtimeCode(error)}`,
     );
-    process.exit(EXIT_BIND);
+    process.exit(EXIT_CODES.bind);
   });
 
   server.listen(
     {
       host: BIND_ADDRESS,
-      port: DEFAULT_PORT,
+      port: apiPort,
       // Belegt den Port ausschließlich. Unter Windows kann sonst ein zweiter
       // Prozess denselben Port binden (B-1.5 Punkt 1).
       exclusive: true,
@@ -519,11 +552,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
           'Der lokale Dienst lauscht nicht ausschließlich auf 127.0.0.1. Abbruch.',
           'not_loopback',
         );
-        server.close(() => process.exit(EXIT_BIND));
+        server.close(() => process.exit(EXIT_CODES.bind));
         return;
       }
       startupPhase('listening');
-      logger.lifecycle('info', `Takt lauscht auf ${BIND_ADDRESS}:${DEFAULT_PORT}.`);
+      logger.lifecycle('info', `Takt lauscht auf ${BIND_ADDRESS}:${apiPort}.`);
     },
   );
 
@@ -542,7 +575,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
   try {
     taskpane = await startTaskpaneServer({
       appDataDir: paths.dir,
-      port: TASKPANE_PORT,
+      port: taskpanePort,
       logger,
     });
   } catch (error) {

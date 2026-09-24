@@ -185,6 +185,13 @@ export interface ResolvedPoolRuleAxes extends PoolRuleAxes {
   readonly unresolvedRequired: boolean;
 }
 
+/**
+ * Why a rule matches nothing — one named reason instead of three booleans to combine (O-J).
+ * `unresolved_required` wins over `empty` for the explanation, same order as before. A third
+ * reason added here makes every consumer that switches over it fail to compile, not stay silent.
+ */
+export type PoolMatchesNothingReason = 'none' | 'empty' | 'unresolved_required';
+
 /** Die Oberfläche kennt Ordnerinhalte nicht und benötigt daher das Auflösungsergebnis vom Dienst. */
 export interface PoolResolution {
   /** Wie viele Tags die **erforderliche** Liste ergibt, Unterordner eingerechnet. */
@@ -217,6 +224,8 @@ export interface PoolResolution {
    * erneut zusammen.
    */
   readonly matchesNothing: boolean;
+  /** The named reason behind `matchesNothing` (O-J); `none` exactly when `matchesNothing` is false. */
+  readonly matchesNothingReason: PoolMatchesNothingReason;
 }
 
 /**
@@ -359,10 +368,15 @@ export const resolvePool: ResolvePool = ({
     }),
   };
 
+  const isEmpty = poolRuleIsEmpty(resolved);
+  let matchesNothingReason: PoolMatchesNothingReason = 'none';
+  if (resolved.unresolvedRequired) matchesNothingReason = 'unresolved_required';
+  else if (isEmpty) matchesNothingReason = 'empty';
+
   return {
     tagCount: ruleTagIds.length,
     excludedTagCount: excludedTagIds.length,
-    isEmpty: poolRuleIsEmpty(resolved),
+    isEmpty,
     unresolvedRequired: resolved.unresolvedRequired,
     unresolvedExcluded: tagAxisIsUnresolved({
       named: axes.excludedTags.length,
@@ -371,6 +385,7 @@ export const resolvePool: ResolvePool = ({
     }),
     emptyRuleFolderIds,
     matchesNothing: poolRuleMatchesNothing(resolved),
+    matchesNothingReason,
   };
 };
 

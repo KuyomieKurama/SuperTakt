@@ -161,6 +161,9 @@ const webSrcDir = requireDirectory(
 );
 const buildScriptFile = join(desktopDir, 'scripts', 'build-app.mjs');
 const cargoManifestFile = join(tauriDir, 'Cargo.toml');
+/** The browser tab icon and the shell icon it promises to equal (apps/web/index.html, T-377). */
+const webFaviconFile = resolve(repoRoot, 'apps', 'web', 'public', 'favicon-32.png');
+const shellIconFile = join(tauriDir, 'icons', '32x32.png');
 
 /* Die zugesagten Werte — hier und sonst nirgends                       */
 
@@ -1388,7 +1391,37 @@ export function checkReaderReach() {
   return findings;
 }
 
+/**
+ * `favicon-32.png` equals the shell icon byte for byte (T-390, apps/web/index.html).
+ *
+ * The web copy is a second file of the same image; nothing else keeps the two
+ * in step when someone redraws the shell icons.
+ *
+ * @param {Buffer} webIcon
+ * @param {Buffer} shellIcon
+ * @returns {string[]} findings
+ */
+function checkFaviconMatchesShellIcon(webIcon, shellIcon) {
+  if (webIcon.length === 0 || shellIcon.length === 0) {
+    return ['Eine Symboldatei ist leer; zwei leere Dateien wären gleich und bewiesen nichts.'];
+  }
+  if (!webIcon.equals(shellIcon)) {
+    return [
+      `${relative(repoRoot, webFaviconFile)} weicht von ${relative(repoRoot, shellIconFile)} ab ` +
+        `(${String(webIcon.length)} gegen ${String(shellIcon.length)} Bytes). Das Symbol der Hülle erneut kopieren.`,
+    ];
+  }
+  return [];
+}
+
+const webFaviconBytes = readFileSync(webFaviconFile);
+const shellIconBytes = readFileSync(shellIconFile);
+
 const runs = [
+  {
+    title: 'favicon-32.png ist byteweise das 32-px-Symbol der Hülle (T-377, T-390)',
+    findings: checkFaviconMatchesShellIcon(webFaviconBytes, shellIconBytes),
+  },
   {
     title: `Keine Shell-Berechtigung in ${relative(repoRoot, capabilitiesDir)} (A-V-17)`,
     findings: checkCapabilities(capabilityFiles),
@@ -1665,6 +1698,14 @@ function lexicalFormProbe(form) {
  * Ordnung ist.
  */
 const counterProbes = [
+  {
+    title: 'T-390: ein einziges geändertes Byte im favicon-32.png',
+    run: () => {
+      const changed = Buffer.from(webFaviconBytes);
+      changed[changed.length - 1] ^= 0xff;
+      return checkFaviconMatchesShellIcon(changed, shellIconBytes);
+    },
+  },
   {
     title: 'A-V-17: eine Zeile `shell:default` in der Fähigkeitenliste',
     run: () =>

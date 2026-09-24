@@ -76,11 +76,10 @@ import { CONNECTION_PRAGMAS, DATABASE_FILE_MODE, openConnection, openDatabase } 
 import { createAttachmentBlobPort } from '../src/access/attachment-store.ts';
 
 import { appDataDirIn, isolatedAppDataEnv } from './proof-appdata.mjs';
-import { dienstEinstieg } from './source-resolve.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
-const ENTRY = dienstEinstieg();
+/* The proof entry runs the same main() as src/index.ts, on TAKT_PROOF_PORT and without network (E-128). */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
 
 let passed = 0;
 let failed = 0;
@@ -246,10 +245,9 @@ try {
     const appDir = appDataDirIn(dataHome);
     const path = join(appDir, 'takt.db');
 
-    // Der Kindprozess erbt `0o000` und muss seine `umask` selbst setzen. Er
-    // wird den Port 17843 möglicherweise nicht bekommen — die Anwendung oder
-    // ein anderer Prüfpfad kann laufen. Das macht nichts: Verzeichnis,
-    // Datenbank und Migration entstehen im Start **vor** dem Binden.
+    // The child inherits `0o000` and must set its own umask. It may not get
+    // the proof port (TAKT_PROOF_PORT) if another run holds it; that does not
+    // matter, because directory, database and migration exist before binding.
     const child = spawn(process.execPath, [ENTRY], {
       stdio: ['pipe', 'ignore', 'pipe'],
       env: isolatedAppDataEnv(dataHome),

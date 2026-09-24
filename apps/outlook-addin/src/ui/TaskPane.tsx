@@ -36,6 +36,7 @@ import { ATTACHMENTS_TRAVEL_WITH_CREATE, type ApiClient, type ApiFailure } from 
 import type { AddinContextDto, CreatedAttachmentsDto } from '../api/types.ts';
 import { cutToCharacterBoundary } from '../text/cut.ts';
 import { createTodoGate } from './create-gate.ts';
+import { TEXTS } from './texts.ts';
 import {
   AttachedList,
   AttachmentPreview,
@@ -65,9 +66,6 @@ export interface TaskPaneProps {
 const ATTACHMENT_TIMEOUT_MS = 60_000;
 
 
-const CANCELLED_NOTE = 'Abgebrochen. Es ist kein Todo entstanden. Die Eingaben bleiben stehen.';
-
-
 const MAIL_SWITCHED_NOTE =
   'Die geöffnete E-Mail hat gewechselt. Das Sammeln wurde abgebrochen. Bereits gesendete Anfragen können gespeichert sein.';
 
@@ -75,6 +73,18 @@ type LoadState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly context: AddinContextDto }
   | { readonly kind: 'failed'; readonly failure: ApiFailure };
+
+interface ShownFailure {
+  readonly failure: ApiFailure;
+  /** Was the mail being appended to an existing todo (A-10.16)? */
+  readonly appending: boolean;
+  /** The request may have reached SuperTakt, so its outcome is unknown here. */
+  readonly maybeSaved: boolean;
+}
+
+// A timeout, an interrupted transfer or a lost connection may hit after SuperTakt stored the request.
+const mayHaveReachedService = (failure: ApiFailure): boolean =>
+  failure.kind === 'unreachable' || failure.code === 'request_timeout' || failure.code === 'transfer_interrupted';
 
 
 interface DoneAttachments {
@@ -132,12 +142,14 @@ export function TaskPane({
   const appending = typeof target === 'object';
 
   const [offers, setOffers] = useState<readonly OfferDescription[]>([]);
+  // A-10.11: several matches and no choice yet — neither creating nor appending may start.
+  const choosingTarget = offers.length > 1 && target === 'auto';
   const showCreateFields = target === 'new' || (!lookupBusy && offers.length === 0);
 
   const [checkedCallNumber, setCheckedCallNumber] = useState<string | null>(null);
   const [lookupNote, setLookupNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failure, setFailure] = useState<ShownFailure | null>(null);
   const [done, setDone] = useState<Done | null>(null);
   const [flow, setFlow] = useState<Flow>({ kind: 'form' });
   const [cancelNote, setCancelNote] = useState<string | null>(null);
@@ -146,7 +158,8 @@ export function TaskPane({
   const runRef = useRef<AbortController | null>(null);
   useEffect(() => () => { runRef.current?.abort(); lookupGeneration.current += 1; }, []);
 
-  const cancelReasonRef = useRef<string>(CANCELLED_NOTE);
+  // Set by whoever aborts the run: the cancel button or a mail switch.
+  const cancelReasonRef = useRef<'cancelled' | 'mail_switched'>('cancelled');
 
   useEffect(() => {
     if (!manualCallNumber.current) setCallNumber(detection?.kind === 'match' ? detection.value : '');
@@ -159,7 +172,7 @@ export function TaskPane({
     mailRef.current = mail;
 
     if (runRef.current !== null) {
-      cancelReasonRef.current = MAIL_SWITCHED_NOTE;
+      cancelReasonRef.current = 'mail_switched';
       runRef.current.abort();
     }
 
@@ -207,7 +220,7 @@ export function TaskPane({
       const ids = tagIdsInTree(result.value.tagTree);
       setSelectedTags(current => current.filter(id => ids.has(id)));
       setStatusId(current => result.value.statuses.some(status => status.id === current) ? current : result.value.defaultStatusId);
-    } else setFailure(result);
+    } else setFailure({ failure: result, appending: false, maybeSaved: false });
   }, [api]);
 
   const lookup = useCallback(
@@ -298,8 +311,9 @@ export function TaskPane({
         connection: load.kind,
         callNumberProblem,
         dueDateInvalid: !appending && dueEntry.kind === 'invalid',
+        targetChoiceMissing: choosingTarget,
       }),
-    [title, appending, load.kind, callNumberProblem, dueEntry.kind],
+    [title, appending, choosingTarget, load.kind, callNumberProblem, dueEntry.kind],
   );
 
 
@@ -336,6 +350,7 @@ export function TaskPane({
     submitting.current = true;
     setBusy(true);
     const submittedMail = mail;
+    const submittedAppending = appending;
     try {
       setFailure(null);
       setCancelNote(null);
@@ -346,7 +361,6 @@ export function TaskPane({
       if (plan !== null && limits !== null && attachments !== null) {
         const controller = new AbortController();
         runRef.current = controller;
-        cancelReasonRef.current = CANCELLED_NOTE;
 
         const collected = await collectAttachments(plan, limits, attachments.ports, {
           signal: controller.signal,
@@ -360,7 +374,11 @@ export function TaskPane({
 
         if (collected.cancelled) {
           setFlow({ kind: 'form' });
-          setCancelNote(cancelReasonRef.current);
+          setCancelNote(
+            cancelReasonRef.current === 'mail_switched'
+              ? MAIL_SWITCHED_NOTE
+              : submittedAppending ? TEXTS.cancelledAppend : TEXTS.cancelledCreate,
+          );
           return;
         }
 
@@ -392,7 +410,7 @@ export function TaskPane({
       setBusy(false);
       setFlow({ kind: 'form' });
       if (!result.ok) {
-        setFailure(result);
+        setFailure({ failure: result, appending: submittedAppending, maybeSaved: mayHaveReachedService(result) });
         return;
       }
 
@@ -414,7 +432,11 @@ export function TaskPane({
             : describeTakeover(payload, missing, limits, result.value.attachments ?? null),
       });
     } catch {
-      setFailure({ ok: false, kind: 'failed', code: null, message: 'Die Übernahme ist fehlgeschlagen. Eine gesendete Anfrage kann bereits gespeichert sein; erneutes Senden verwendet dieselbe Kennung.' });
+      setFailure({
+        failure: { ok: false, kind: 'failed', code: null, message: TEXTS.failureUnexpected },
+        appending: submittedAppending,
+        maybeSaved: true,
+      });
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -423,7 +445,7 @@ export function TaskPane({
   };
 
   const cancelRun = (): void => {
-    cancelReasonRef.current = CANCELLED_NOTE;
+    cancelReasonRef.current = 'cancelled';
     runRef.current?.abort();
   };
 
@@ -476,17 +498,24 @@ export function TaskPane({
 
       <DuplicateOffer offers={offers} checkedCallNumber={checkedCallNumber} target={target} onTarget={setTarget} />
 
-      {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
+      {failure !== null ? (
+        <Failure
+          failure={failure.failure}
+          appending={failure.appending}
+          maybeSaved={failure.maybeSaved}
+          onOpenSettings={onOpenSettings}
+        />
+      ) : null}
 
-      <Section title={showCreateFields ? 'Neue Aufgabe' : 'E-Mail anhängen'}>
-        {appending ? <p>Aufgabenfelder und vorhandene Notizen bleiben erhalten. Eigene Ergänzungen stehen bei dieser E-Mail.</p> : null}
+      <Section title={showCreateFields ? TEXTS.createSectionTitle : TEXTS.appendSectionTitle}>
+        {appending ? <p>{TEXTS.appendKeepsTodo}</p> : null}
         {showCreateFields ? <fieldset className="mail-create-fields">
         {load.kind === 'ready' ? <Field label="Ablagevorgabe: Status" htmlFor="status">
           {(aria) => <select {...aria} className="input" value={statusId ?? load.context.defaultStatusId} onChange={event => setStatusId(event.target.value)}>
             {load.context.statuses.map(status => <option key={status.id} value={status.id}>{status.name}</option>)}
           </select>}
         </Field> : null}
-        <p className="pane-note">Status und Tags bestimmen, in welchen regelbasierten Pools die Aufgabe erscheint.</p>
+        <p className="pane-note">{TEXTS.poolsNote}</p>
         <Field label="Titel" htmlFor="title">
           {(aria) => (
             <input
@@ -504,7 +533,7 @@ export function TaskPane({
         <Field
           label="Frist"
           htmlFor="due"
-          hint="SuperTakt sucht in der E-Mail nicht nach einer Frist — Sie tragen sie selbst ein. Uhrzeit optional; leer lassen heißt: keine Frist."
+          hint={`${TEXTS.deadlineHintAddinPrefix} ${TEXTS.deadlineHintCore}`}
           error={dueEntry.kind === 'invalid' ? dueEntry.message : undefined}
         >
           {(aria) => (
@@ -519,6 +548,9 @@ export function TaskPane({
               }}
             />
           )}
+        </Field>
+        <Field label={TEXTS.deadlineTimeLabel} htmlFor="due-time">
+          {(aria) => <input {...aria} className="input" type="time" disabled={!dueDate} value={dueTime} onChange={event => { edited(); setDueTime(event.target.value); }} />}
         </Field>
 
         {load.kind === 'ready' ? (
@@ -571,9 +603,6 @@ export function TaskPane({
           </div>
         )}
 
-        <Field label="Fälligkeitsuhrzeit (optional)" htmlFor="due-time">
-          {(aria) => <input {...aria} className="input" type="time" disabled={!dueDate} value={dueTime} onChange={event => setDueTime(event.target.value)} />}
-        </Field>
         </fieldset> : null}
         <Field
           label="Vermerk (bleibt in SuperTakt)"
@@ -617,12 +646,12 @@ export function TaskPane({
           variant="primary"
           full
           loading={busy}
-          disabled={gate.blocked || busy || lookupBusy || (detection === null && !manualCallNumber.current) || (load.kind === 'ready' && load.context.mailAssignment?.accepted !== true) || (offers.length > 1 && target === 'auto')}
+          disabled={gate.blocked || busy || lookupBusy || (detection === null && !manualCallNumber.current) || (load.kind === 'ready' && load.context.mailAssignment?.accepted !== true)}
           onClick={() => {
             void submitCreate();
           }}
         >
-          {appending ? 'E-Mail an Aufgabe anhängen' : 'Neue Aufgabe anlegen'}
+          {appending || choosingTarget ? TEXTS.appendButton : TEXTS.createButton}
         </Button>
       </div>
     </div>
@@ -710,7 +739,7 @@ function Announcements({
 const spokenResult = (done: Done): string => {
   const attachments = done.attachments;
   if (done.kind === 'already_present') return 'Bereits vorhanden.';
-  if (done.kind === 'appended') return 'E-Mail zur Aufgabe ergänzt.';
+  if (done.kind === 'appended') return TEXTS.appendedSpoken;
   if (attachments === null) return `${doneTitle(null)}. ${CREATED_SENTENCE}`;
   const core = attachedCore(attachments);
 
@@ -740,12 +769,18 @@ const fieldLabel = (field: string): string => {
 
 function Failure({
   failure,
+  appending,
+  maybeSaved,
   onOpenSettings,
 }: {
   readonly failure: ApiFailure;
+  readonly appending: boolean;
+  readonly maybeSaved: boolean;
   readonly onOpenSettings: () => void;
 }) {
   const needsSettings = failure.kind === 'unauthorized' || failure.kind === 'origin_rejected';
+  let outcome: string = appending ? TEXTS.failureNothingAppended : TEXTS.failureNothingCreated;
+  if (maybeSaved) outcome = appending ? TEXTS.failureAppendUnknown : TEXTS.failureCreateUnknown;
 
   return (
     <Callout
@@ -759,8 +794,7 @@ function Failure({
         ) : null
       }
     >
-      {}
-      <p className="pane-note">Es ist kein Todo entstanden.</p>
+      <p className="pane-note">{outcome}</p>
       {failure.details !== undefined && failure.details.length > 0 ? (
         <ul className="callout__list">
           {failure.details.map((detail) => (
@@ -770,7 +804,7 @@ function Failure({
           ))}
         </ul>
       ) : (
-        'Die Eingaben bleiben stehen. Ein neuer Versuch ist möglich.'
+        maybeSaved ? TEXTS.failureInputsKept : TEXTS.failureInputsKeptRetry
       )}
     </Callout>
   );
@@ -889,7 +923,7 @@ const REBUILD_REJECTED_NOT_YOUR_FAULT =
   'Das liegt an dieser Nachricht, nicht an Ihren Eingaben, und ein zweiter Versuch ändert daran nichts.';
 
 
-const NO_ATTACHMENT_ON_EXISTING =
+const REPEAT_ASSIGNMENT_NO_DUPLICATES =
   'Erneutes Zuordnen derselben E-Mail erzeugt keine doppelten Mail-Einträge oder Anhänge.';
 
 function DoneView({
@@ -935,7 +969,7 @@ function DoneView({
               </>
             ) : null}
             <p className="pane-note">{catchUpNote(catchUpSubject(attachments.missing))}</p>
-            <p className="pane-note">{NO_ATTACHMENT_ON_EXISTING}</p>
+            <p className="pane-note">{REPEAT_ASSIGNMENT_NO_DUPLICATES}</p>
           </>
         ) : null}
         {done.addedDefaults > 0

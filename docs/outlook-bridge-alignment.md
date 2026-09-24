@@ -33,7 +33,7 @@ nicht zum SuperTakt-Datenmodell und werden nicht übernommen.
 
 | Referenzfunktion | Vorgefundener SuperTakt-Code | Änderung |
 |---|---|---|
-| Funktionsbefehl ohne Seitenleiste | Aufgabenbereich, kein Funktionseinstieg | commands.html, commands.ts, gemeinsamer saveMail-Aufruf |
+| Funktionsbefehl ohne Seitenleiste | Aufgabenbereich, kein Funktionseinstieg | commands.html, commands.ts, gemeinsamer saveMail-Aufruf (removed 2026-09-24, E-134 item 2; see "Function command removed" below) |
 | Mail zu einem Call ergänzen | Nur Duplikathinweis | Enger POST /addin/todos/{todoId}/mails |
 | Mailverlauf | Übernommener Text im internen Vermerk | Separate todo_mail-Tabelle, persönliche Ergänzungen pro Mail |
 | Call-Basiserkennung | Standardmuster TCK, isolierter Worker | Eigenständige 5+-Ziffern, CALL bevorzugt, Rückfall bei ungültigem/trefferlosem Muster |
@@ -110,10 +110,10 @@ kompiliert nur die Syntax und untersucht die Musterzeichen, ohne sie auszuführe
 | Abnahmefälle des Auftrags | Automatisierter Nachweis |
 | --- | --- |
 | 1–8, 12: Neuanlage, Ergänzen, bewusste Neuanlage, Dubletten, gleiche Tage, Mehrdeutigkeit, unveränderte Aufgaben/Notizen/Zeitdaten | `apps/local-api/test/routes/addin/mail-assignment.test.ts`: echte SQLite-Transaktionen und echtes Dateiverzeichnis, einschließlich Parallelaufrufen und Rollback |
-| 9–10: Standardstatus, verschachtelte Tags, neue Tags, Neuladen | `quick-command.test.ts`, gebautes Formular in `outlook-addin-build.spec.ts`, Mail-Anwendungsfall sowie bestehende Tag-/Add-in-Nachweise |
-| 11: Anhangsfehler, Limits, Fähigkeiten, Abbruch, Nachrichtenwechsel | bestehende Anhangs-/Office-Nachweise; zusätzliche Link-Zeilenfehler und Schnellbefehlsfälle |
+| 9–10: default status, nested tags, new tags, reload | Built form in `outlook-addin-build.spec.ts` (includes the single-ribbon-command check), the mail use case, and existing tag/add-in proofs |
+| 11: attachment errors, limits, capabilities, cancel, mail switch | Existing attachment/Office proofs plus additional link-row errors. Cancel and mail-switch lost their dedicated case when `quick-command.test.ts` was slated for removal (E-134 item 2). Open item for e2e-tester/unit-tester. |
 | 13: Planung speichern, anzeigen und bearbeiten | `outlook-mail-detail.spec.ts`: echte lokale API und Hauptanwendung, Frist am Zeitumstellungstag, Bearbeiten und Neuladen; Archiv-Roundtrip im Mail-Anwendungsfall |
-| 14: Schnellbefehl wartet und beendet genau einmal | `apps/outlook-addin/test/office/quick-command.test.ts`: kontrolliert verzögerte Sammlung und Serverantwort, Fehler und Nachrichtenwechsel |
+| 14: quick command waits and finishes exactly once | Obsolete: the quick command was removed on 2026-09-24 (E-134 item 2). See "Function command removed" below. |
 | 15: Sicherheitsregeln | bestehende Zugriff-, Herkunft-, CSP-, Add-in-, OpenAPI- und Desktop-Prüfungen; strikter neuer Ergänzungsrumpf |
 
 Der Browsernachweis des gebauten Add-ins prüft auch das tatsächliche Laden des
@@ -179,3 +179,23 @@ bezeichnet; es wird kein Mail-Empfangsdatum aus alten Dateinamen geraten.
 Prüfung: 50 Einheiten-/Integrationsfälle (einschließlich Datensicherung),
 7 Browserfälle, Add-in-Nachweis mit 307 Prüfungen und betroffene Typprüfungen bestanden.
 Die Menübandwirkung ist am Manifest geprüft, nicht in einer echten Outlook-Sitzung.
+
+## Function command removed (E-134 item 2, 2026-09-24)
+
+The ribbon's function command still shipped as dead code after A-10.17
+(2026-09-15, above) dropped it from the manifest: `src/quick-command.ts`,
+`src/commands.ts`, `commands.html`, and the `FunctionFile`/`commandsUrl`
+entries stayed in the repository. It attached a mail without letting the
+user pick a target (T-409b-2), so all four are now deleted (T-398c). The
+only entry point left is the `ShowTaskpane` command "E-Mail anhängen". The
+task pane itself offers two sections, "Neues Todo" (create) and "E-Mail
+anhängen" (append to an existing todo, A-10.11 to A-10.13), and nothing
+else; there is no third, booking action. `apps/outlook-addin/dist/` now
+contains only `index.html` and `assets/`. A new Playwright case, `the
+single Outlook ribbon command opens the task pane for mail assignment`
+(`tests/e2e/outlook-addin-build.spec.ts`), parses the manifest and checks
+that it has exactly one `ShowTaskpane` action.
+
+`apps/outlook-addin/test/office/quick-command.test.ts` still imports the
+deleted `quick-command.ts`. It is pending deletion (unit-tester, E-134
+item 2).

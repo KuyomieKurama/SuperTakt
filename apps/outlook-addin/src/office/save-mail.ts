@@ -1,6 +1,16 @@
-import type { MailMetadata } from '@takt/domain';
+import {
+  MAIL_EXCERPT_MAX_LENGTH,
+  MAIL_MESSAGE_ID_MAX_LENGTH,
+  MAIL_SENDER_MAX_LENGTH,
+  MAIL_SUBJECT_MAX_LENGTH,
+  type MailMetadata,
+} from '@takt/domain';
 import type { ApiClient, CreateTodoRequest } from '../api/client.ts';
 import { suggestTitle, type MailFacts } from './mail.ts';
+
+// Cut on code points so no surrogate half survives; one code point is at most two UTF-16 units,
+// the unit the door counts, so half the cap always fits.
+const EXCERPT_MAX_CODE_POINTS = Math.floor(MAIL_EXCERPT_MAX_LENGTH / 2);
 
 export async function mailMetadata(mail: MailFacts, includeExcerpt: boolean): Promise<MailMetadata> {
   const source = mail.internetMessageId ? `internet:${mail.internetMessageId.trim()}`
@@ -10,16 +20,16 @@ export async function mailMetadata(mail: MailFacts, includeExcerpt: boolean): Pr
   const identity = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
   return {
     identity,
-    subject: mail.subject.slice(0, 4096),
-    sender: `${mail.senderName} <${mail.senderAddress}>`.slice(0, 2048),
+    subject: mail.subject.slice(0, MAIL_SUBJECT_MAX_LENGTH),
+    sender: `${mail.senderName} <${mail.senderAddress}>`.slice(0, MAIL_SENDER_MAX_LENGTH),
     receivedAt: mail.receivedAt,
-    internetMessageId: mail.internetMessageId?.slice(0, 2048) ?? null,
+    internetMessageId: mail.internetMessageId?.slice(0, MAIL_MESSAGE_ID_MAX_LENGTH) ?? null,
     outlookLink: mail.outlookLink ?? null,
-    excerpt: includeExcerpt ? Array.from(mail.body).slice(0, 2000).join('') : null,
+    excerpt: includeExcerpt ? Array.from(mail.body).slice(0, EXCERPT_MAX_CODE_POINTS).join('') : null,
   };
 }
 
-/** Both Outlook commands use this contract and the server's atomic assignment use case. */
+/** Sends the mail either to the chosen existing todo (narrow `/mails` door) or as a new todo; the server assigns atomically. */
 export async function saveMail(
   api: ApiClient,
   mail: MailFacts,
@@ -34,5 +44,5 @@ export async function saveMail(
     callNumber: input.callNumber ?? '', note: input.note, attachments: input.attachments,
   });
   return api.createTodo({ ...input, title: input.title || suggestTitle(mail.subject) || 'E-Mail bearbeiten',
-    requestId, mode: target, mail: metadata });
+    requestId, mode: 'new', mail: metadata });
 }

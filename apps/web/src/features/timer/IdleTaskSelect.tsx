@@ -7,6 +7,8 @@ import { useAsync } from '../../app/useAsync';
 import { foreignText } from '../../lib/foreign';
 import { Foreign } from '../../shared/ui/Foreign';
 import { Icon } from '../../shared/ui/Icon';
+import { labels } from '../../lib/labels';
+import { timerTexts } from './texts';
 
 export function IdleTaskSelect({ label, value, title, allowPause, disabled, onChange }: {
   readonly label: string; readonly value: string; readonly title: ForeignText;
@@ -25,7 +27,7 @@ export function IdleTaskSelect({ label, value, title, allowPause, disabled, onCh
   const items = useMemo(() => {
     if (search !== query || tasks.state.status !== 'ready') return [{ value, label: title }];
     const found = tasks.state.status === 'ready' ? tasks.state.value.items.map(todo => ({ value: todo.id, label: todo.title })) : [];
-    const options: { value: string; label: ForeignText }[] = allowPause && (!query || 'pause'.includes(query.toLocaleLowerCase())) ? [{ value: '', label: 'Pause — nicht buchen' }, ...found] : found;
+    const options: { value: string; label: ForeignText }[] = allowPause && (!query || 'pause'.includes(query.toLocaleLowerCase())) ? [{ value: '', label: timerTexts().pauseNotBooked }, ...found] : found;
     if (!options.some(item => item.value === value)) options.unshift({ value, label: title });
     return options;
   }, [tasks.state, allowPause, search, query, value, title]);
@@ -48,19 +50,19 @@ export function IdleTaskSelect({ label, value, title, allowPause, disabled, onCh
     className="field">
     <Ark.Label className="field__label">{label}</Ark.Label>
     <Ark.Control className="idle-task-select">
-      <Ark.Input className="field__input" placeholder="Aufgabe suchen …" onFocus={event => event.currentTarget.select()} />
-      <Ark.Trigger aria-label="Aufgaben anzeigen"><Icon name="chevron-down" size={14} /></Ark.Trigger>
+      <Ark.Input className="field__input" placeholder={timerTexts().searchTask} onFocus={event => event.currentTarget.select()} />
+      <Ark.Trigger aria-label={timerTexts().showTasks}><Icon name="chevron-down" size={14} /></Ark.Trigger>
     </Ark.Control>
     <Portal><Ark.Positioner className="popover-layer">
-      <Ark.Content className="combobox__content" onKeyDown={event => { if (event.key === 'Escape' || event.key === 'Tab') event.stopPropagation(); }}>
-        <div role="status">{search !== query || tasks.state.status === 'loading' ? <p className="combobox__empty">Suche …</p> :
-          tasks.state.status === 'ready' && items.length === 0 ? <p className="combobox__empty">Keine Aufgaben gefunden.</p> : null}</div>
-        <div role="alert">{tasks.state.status === 'error' ? <p className="combobox__empty">Suche fehlgeschlagen. <button type="button" onClick={tasks.reload}>Erneut versuchen</button></p> : null}</div>
+      <Ark.Content className="combobox__content">
+        <div role="status">{search !== query || tasks.state.status === 'loading' ? <p className="combobox__empty">{timerTexts().searching}</p> :
+          tasks.state.status === 'ready' && items.length === 0 ? <p className="combobox__empty">{timerTexts().noTasksFound}</p> : null}</div>
+        <div role="alert">{tasks.state.status === 'error' ? <p className="combobox__empty">{timerTexts().searchFailed} <button type="button" onClick={tasks.reload}>{labels().retry}</button></p> : null}</div>
         {search === query && tasks.state.status === 'ready' ? items.map(item => <Ark.Item key={item.value} item={item} className="combobox__option">
             <Ark.ItemText className="combobox__option-label"><Foreign value={item.label} /></Ark.ItemText>
             <Ark.ItemIndicator><Icon name="check" size={14} /></Ark.ItemIndicator>
           </Ark.Item>) : null}
-        {tasks.state.status === 'ready' && tasks.state.value.total > 100 ? <p className="combobox__more">Weitere Aufgaben: Suche nach Titel oder Call-Nummer eingrenzen.</p> : null}
+        {tasks.state.status === 'ready' && tasks.state.value.total > 100 ? <p className="combobox__more">{timerTexts().moreTasks}</p> : null}
       </Ark.Content>
     </Ark.Positioner></Portal>
   </Ark.Root>;

@@ -3696,6 +3696,14 @@ Oberfläche, Dienst und Speicherung gefahren. Zwei Stellen wichen dabei vom hier
   **beim Anlegen** des Anhangs abgewiesen (`checkAttachmentPath`,
   `packages/domain/src/attachment.ts`) und erreichen die Rückfrage nie.
 
+**Nachtrag T-399 (E-122 Punkt 4, T-393 CJ-01/CJ-03):** Beide Abweichungen oben stellten sich bei
+näherem Hinsehen als **Planfehler**, nicht nur als andere Bauart heraus. TP-FRIST-08 verlangte
+eine Frist-Marke im Dashboard, die A-19.4 nicht fordert (das Dashboard ist keine Todo-Ansicht in
+diesem Sinn); TP-ANH-20 erwartete eine Rückfrage, die für eine Umleitungsendung nie entstehen kann,
+weil die Abweisung bereits beim Anlegen greift. Beide Fälle sind unten entsprechend berichtigt
+(TP-FRIST-08/-08a, TP-ANH-20 mit neuer Zuordnung zu A-19.10a); die Zeilen hier bleiben als
+historischer Befund von T-150 stehen.
+
 Die laufenden Fälle liegen unter `tests/e2e/*.spec.ts` mit dem Präfix `deadline-*` bzw.
 `attachment-*`; jede Datei nennt in ihrem Kopf, welche `TP-FRIST-*`/`TP-ANH-*`-Fälle sie trägt.
 Zahlen und Einzelheiten stehen im Bericht `.claude/team/reports/T-150-e2e-tester.md`.
@@ -3767,27 +3775,45 @@ sie gibt — kein Netzwerk, keine Hülle, kein Datenbestand, dieselbe Lage wie `
 
 #### TP-FRIST-08 — Die Frist ist sichtbar, ohne dass man das Todo öffnet (A-19.4)
 
-**Gemessen (T-150), mit einer Abweichung vom Plan:** Gebaut ist die Dashboard-Kachel „Zuletzt
-bearbeitet" **ohne** Frist — dort steht ausdrücklich kein `DeadlineFlag`
-(`DashboardScreen.tsx`, Kommentar wörtlich: „es steht hier kein `DeadlineFlag`"). Statt dessen
-zeigt eine eigene Kachel „Überfällig" eine **Zahl**, nur wenn sie größer als null ist. A-19.4 ist
-damit erfüllt — Todo-Liste (S-02), Kanban-Karte (S-04) und Detailansicht (S-03) zeigen die Frist
-ohne zu öffnen —, aber die dritte Stelle unten (Dashboard) ist anders gebaut, als hier vorweggenommen.
-Geprüft in `tests/e2e/deadline-lifecycle.spec.ts`.
+**Berichtigt (T-399, E-122 Punkt 4, T-393 CJ-01): Das Dashboard ist keine Todo-Ansicht im Sinn
+von A-19.4, und der frühere Plan hatte darin unrecht, nicht der Bau.** Der bisherige Wortlaut
+zählte die Dashboard-Kachel als dritte Pflichtstelle und schloss daraus, eine Stelle ohne Frist
+im Dashboard verfehle A-19.4 „wörtlich". Das verwechselt zwei Dinge: A-19.4 verbietet, die Frist
+**nur** in der Detailansicht zu zeigen — es verlangt keine Marke an jeder Liste, die einen
+Todo-Namen nur nebenbei nennt. Das Dashboard beantwortet mit seiner Kachel „Zuletzt bearbeitet"
+eine andere Frage (woran war ich zuletzt) und trägt bewusst kein `DeadlineFlag`
+(`DashboardScreen.tsx`, Kommentar wörtlich: „es steht hier kein `DeadlineFlag`"); die eigene
+Kachel „Überfällig" mit einer Zahl ist ein zusätzliches Angebot, keine Pflicht aus A-19.4. **Bau
+und Fassung sind damit richtig; nur der hier stehende Plan war es nicht.** Geprüft in
+`tests/e2e/deadline-lifecycle.spec.ts`.
 
-**Ebene:** E2E, an **jeder** Stelle, an der ein Todo als Zeile oder Karte erscheint — dieselbe
-Breite, die dieses Dokument schon für den Exportstatus verlangt (`T-005-spec-ux-reviewer.md`
-Abschnitt 4, 19 Orte) und für die Wiederbelebung erledigter Todos (Abschnitt „Erledigtes Todo
-wiederbeleben", jede Stelle, an der ein Timer startbar ist). Mindestens: Todo-Liste (S-02),
-Kanban-Karte (S-05), Dashboard-Kachel „Zuletzt bearbeitet" (S-01) — eine Stelle, die die Frist
-nur in der Detailansicht zeigt, verfehlt A-19.4 wörtlich.
+**Ebene:** E2E, an **jeder** Stelle, die als Todo-**Ansicht** gilt — eine Zeile oder Karte, die
+das Todo selbst zum Gegenstand hat, nicht jede Liste, die seinen Namen nur beiläufig führt.
+Mindestens: Todo-Liste (S-02), Kanban-Karte (S-05), Pool-Ansicht, Detailansicht (S-03). Eine
+Stelle, die die Frist **nur** in der Detailansicht zeigt und in keiner der drei übrigen, verfehlt
+A-19.4 wörtlich; das Dashboard zählt zu diesen Stellen nicht mit (siehe oben).
 
-**Schritt:** Je Zustand aus TP-FRIST-04 bis -06 ein Todo anlegen, jede der drei Ansichten öffnen,
+**Schritt:** Je Zustand aus TP-FRIST-04 bis -06 ein Todo anlegen, jede der vier Ansichten öffnen,
 **ohne** das Todo zu öffnen.
 **Erwartung:** Frist und Zustand sind lesbar (Datum plus ein unterscheidbares Merkmal je Zustand —
 Text, Farbe oder Symbol, geprüft am Text und nicht allein an der Farbe, wegen SC 1.4.1). Ein Todo
 ohne Frist zeigt an derselben Stelle **nichts**, keinen leeren Platzhalter (dieselbe Falle wie
 A-18.5/`TP-VER-08`: eine Fläche, die für „nichts" trotzdem ein Element reserviert).
+
+#### TP-FRIST-08a — Dashboard-Kachel „Überfällig" (eigener Fall, keine Pflicht aus A-19.4)
+
+**Neu (T-399, aus dem Nebenhinweis in T-393 CJ-01).** Die Kachel ist ein zusätzliches Angebot, kein
+Bestandteil von A-19.4 (siehe TP-FRIST-08 oben) — sie bekommt trotzdem einen eigenen Fall, weil sie
+sonst ungeprüft bliebe.
+
+**Ebene:** E2E, `tests/e2e/deadline-lifecycle.spec.ts` oder eine eigene `dashboard-*.spec.ts`-Datei.
+**Vorbedingung:** einmal N ≥ 1 offene, überfällige Todos; einmal die Gegenprobe mit N = 0 (keines
+überfällig).
+**Schritt:** Dashboard öffnen.
+**Erwartung:** Bei N ≥ 1 zeigt die Kachel „Überfällig" die Zahl N, lesbar als Zahl **und** Wort
+(z. B. „3 überfällig"), nicht nur als rote Ziffer (WCAG 1.4.1, Nebenhinweis aus T-393, nicht
+blockierend, aber im selben Fall mitzuprüfen). Bei N = 0 erscheint die Kachel **nicht** — kein
+leerer Platzhalter, dieselbe Falle wie A-18.5/`TP-VER-08`.
 
 **Sichtbar ist nicht dasselbe wie unverdeckt** (Nachtrag T-282): Auf der Kanban-Karte trägt die
 Frist als dritte Marke neben Call-Nummer und Erledigt-Kennzeichen — bei schmaler Spalte legte sich
@@ -4098,15 +4124,10 @@ benennt.
 derselbe Rust-Einheitentest wie oben, mit `\\`-Präfix als eigenem Ausbruchsversuch in der Liste
 (vergleichbar mit der Ausbruchsliste aus 18.3/`release.rs`, hier um UNC-Pfade erweitert).
 
-#### TP-ANH-19 und TP-ANH-20 — Ein Pfad auf eine `.bat`- bzw. `.lnk`-Datei (R-21, E-072 Punkt 3)
+#### TP-ANH-19 — Ein Pfad auf eine `.bat`-Datei (R-21, E-072 Punkt 3)
 
-**Gemessen (T-150), TP-ANH-20 abweichend vom Plan.** `.bat` verhält sich wie hier beschrieben und
-ist als `tests/e2e/attachment-open-commands.spec.ts` gelaufen. `.lnk` erreicht die Rückfrage
-tatsächlich **nie**: `checkAttachmentPath` (`packages/domain/src/attachment.ts`) weist alle fünf
-Umleitungsendungen (`.lnk`, `.url`, `.pif`, `.scf`, `.desktop`) bereits **beim Anlegen** des
-Anhangs mit 422 ab — ein Anhang mit einer solchen Endung kommt nie in den Bestand. TP-ANH-20 ist
-deshalb als Türprüfung gelaufen (`tests/e2e/attachment-dangerous-input.spec.ts`), nicht als
-Rückfrage-Fall. In der Sache ist das die schärfere, nicht die schwächere Kontrolle.
+**Gemessen (T-150).** `.bat` verhält sich wie hier beschrieben und ist als
+`tests/e2e/attachment-open-commands.spec.ts` gelaufen.
 
 **Ebene:** E2E für die Rückfrage (in dieser Umgebung messbar: die Oberfläche fragt tatsächlich,
 bevor sie den Öffnen-Befehl ruft — das ist ein Verhalten der Web-Oberfläche, kein
@@ -4118,7 +4139,37 @@ Filter nach Endung, der sich umgehen ließe).
 | ID | Datei | Vorbedingung | Schritt | Erwartung |
 |---|---|---|---|---|
 | TP-ANH-19 | `starte.bat` (vom Testaufbau angelegt, keine echte Wirkung — Inhalt z. B. eine Kommentarzeile) | Anhang vom Typ Datei mit diesem Pfad | „Öffnen" klicken | Rückfrage erscheint, nennt den vollen Pfad **und** die Datei wird **nicht** geöffnet, solange nicht bestätigt wurde — Gegenprobe: kein Aufruf des Öffnen-Befehls vor der Bestätigung |
-| TP-ANH-20 | `verknüpfung.lnk` (leere Testdatei, kein echtes Verknüpfungsziel) | wie oben | wie oben | wie oben — dieselbe Rückfrage, keine Ausnahme für `.lnk`, obwohl der Windows-Explorer eine `.lnk` optisch anders als eine `.bat` behandelt (das ist kein Grund, hier zwei verschiedene Wege zu bauen: E-072 Punkt 3 nennt beide in einem Satz) |
+
+#### TP-ANH-20 — `.lnk` wird schon beim Anlegen abgewiesen, nicht erst bei der Rückfrage (A-19.10a)
+
+**Berichtigt (T-399, E-122 Punkt 4, T-393 CJ-03): kein Rückfrage-Fall, sondern eine Türprüfung.**
+Der frühere Plan nahm an, eine `.lnk`-Datei erreiche wie eine `.bat`-Datei die Rückfrage vor dem
+Öffnen — deshalb stand sie in derselben Tabelle wie TP-ANH-19, nur mit einer anderen Endung.
+Gemessen (T-150) ist das Gegenteil: `checkAttachmentPath` (`packages/domain/src/attachment.ts`)
+weist alle fünf Umleitungsendungen (`.lnk`, `.url`, `.pif`, `.scf`, `.desktop`) bereits **beim
+Anlegen** des Anhangs mit 422 ab — an **jeder** Schreibtür, nicht nur an einer (A-19.10a: von
+Hand, Fremdimport, Add-in). Ein Anhang mit einer solchen Endung kommt nie in den Bestand und
+erreicht die Rückfrage deshalb **nie**; es gibt keine Zeile mehr für `.lnk` in der
+Rückfrage-Tabelle oben, weil eine solche Rückfrage strukturell nicht entstehen kann. In der Sache
+ist das die schärfere, nicht die schwächere Kontrolle — der Bau war schon vor dieser Berichtigung
+richtig, nur der Plan beschrieb den falschen Mechanismus.
+
+**Ebene:** E2E als Türprüfung (an der Haupttür „von Hand"; Fremdimport und Add-in prüfen dieselbe
+Regel an ihrer jeweiligen Tür, siehe Abschnitt 20 bzw. die Add-in-Fälle), ergänzt um den
+Rust-Einheitentest an der Hülle für den Gleichlauf (`proof:shell-parity`, E-126) — beide Seiten
+müssen dieselben fünf Endungen kennen, sonst hielte die Oberfläche einen Anhang für gültig, den die
+Hülle beim Öffnen doch abwiese, oder umgekehrt.
+
+| ID | Datei | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|---|
+| TP-ANH-20 | `verknüpfung.lnk` (leere Testdatei, kein echtes Verknüpfungsziel) | Todo vorhanden, kein Anhang | Anhang mit diesem Pfad von Hand anlegen | Die Tür weist mit 422 und einem Grund ab, der die Endung nennt, nicht den abgewiesenen Pfad (A-19.10a); es entsteht kein Anhang, der Bestand bleibt unverändert (kein Datensatz in `todo_attachment`) — kein Öffnen-Knopf, keine Rückfrage, weil nichts angelegt wurde, das man öffnen könnte |
+
+**Gemessen (T-150), als Türprüfung:** `tests/e2e/attachment-dangerous-input.spec.ts`.
+
+**Nebenpunkt UX, nicht blockierend für diesen Fall, aber Teil der Abnahme (T-393):** Die Meldung
+an der Haupttür sollte sagen, was **stattdessen** möglich ist (z. B. „Verknüpfungen werden nicht
+angehängt. Hängen Sie die Zieldatei selbst an."), sonst steht der Benutzer vor einer Abweisung
+ohne Weg weiter. Der heutige Wortlaut der Meldung ist gegen diesen Maßstab noch nicht geprüft.
 
 ---
 
@@ -4195,7 +4246,8 @@ ein vollständiges.
 | `TP-ANH-13` | E2E-Spotcheck (echte HTTP-Tür) + Integration + struktureller Nachweis | Add-in-Anlegetür baut Anhänge, ohne ein Feld für ein vorhandenes Todo zu führen (E-108, T-304) | keine — **läuft** (siehe unten) |
 | `TP-ANH-14` | E2E | Ereigniswache über eine ganze Interaktionsfolge | keine |
 | `TP-ANH-15` bis `-18` | Integration (Tür) + Rust-Einheitentest (Öffnen-Befehl) | Formprüfung an beiden Stellen | die **tatsächliche** Ablehnung durch `open`/`ShellExecuteW` selbst (jenseits der Formprüfung) ist unter Linux nicht messbar |
-| `TP-ANH-19`, `-20` | E2E (Rückfrage) + Rust-Einheitentest | Rückfrage-Dialog, Formprüfung | die tatsächliche Ausführung einer `.bat`/`.lnk` durch das Betriebssystem ist unter Linux nicht messbar und wird hier nicht behauptet |
+| `TP-ANH-19` | E2E (Rückfrage) + Rust-Einheitentest | Rückfrage-Dialog, Formprüfung | die tatsächliche Ausführung einer `.bat` durch das Betriebssystem ist unter Linux nicht messbar und wird hier nicht behauptet |
+| `TP-ANH-20` | E2E (Türprüfung, kein Rückfrage-Dialog, berichtigt T-399) + Rust-Einheitentest (Gleichlauf, `proof:shell-parity`) | Formprüfung beim Anlegen (A-19.10a) | keine — die Abweisung ist vollständig serverseitig, kein Betriebssystemverhalten nötig |
 | `TP-ANH-23` | E2E (echte HTTP-Tür, kein Office.js-Host) | Anhänge aus einer E-Mail beim Anlegen (E-108, T-304) | die Naht Office.js → Nutzlast (T-308 Abschnitt 2 Punkt 1) — echter Windows-Rechner mit Outlook nötig |
 
 **Diese Zusammenfassung stammt aus der Planung vor dem Bau (T-142) und ist an dieser Stelle seit
@@ -5204,3 +5256,203 @@ Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert kein
 Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
 Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
 konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
+
+---
+
+## 36. Plan vor dem Bau — Welle 18b (T-399): Abschnitt 28, C-22, O-KH, Buchungslagen, Tastatur im Öffnen-Dialog
+
+**Anlaß.** E-120 (Board-Bereinigung vom 2026-09-23) hat Abschnitt 28 in `docs/spec.md` angelegt
+(A-28.1 bis A-28.11); `docs/design/welle-18-fluss.md` (T-391) legt Flüsse, Wortlaute und
+Akzeptanzkriterien (`AK-x.y`) für A-28.1, A-28.2, A-28.3, A-28.6, A-28.7, A-28.8 sowie O-Q (C-14,
+C-16, C-21, A-4.4) fest; `T-393-spec-ux-reviewer.md` gibt C-22 (Suche im Vermerk) mit den
+Kriterien K-1 bis K-17 frei. **Nichts davon ist gebaut** — dieser Abschnitt ist reine Planung vor
+dem Bau, in derselben Bauart wie Abschnitt 24 (Versionsprüfung) und Abschnitt 25 (Frist und
+Anhänge) vor ihrem jeweiligen Bau: Anforderungs-ID, Vorbedingung, Schritt, beobachtbare Erwartung,
+Ebene. Bezeichner und Feldnamen unten sind **Annahmen dieses Plans**, keine Zusagen aus einem
+Bau — sie übernehmen, wo vorhanden, die Wortlaute und `AK`-Nummern aus `welle-18-fluss.md`, damit
+sich die Fälle später eins zu eins übertragen lassen.
+
+**Namensvorrat:** `TP-A28-*` für Abschnitt 28, `TP-SUCHE-*` für C-22, `TP-KH-*` für O-KH,
+`TP-ANH-24` (nächste freie Nummer in der bestehenden Reihe) für die Tastatur im Öffnen-Dialog.
+
+### 36.1 A-28.1 — Versionsprüfung abschaltbar (`welle-18-fluss.md` §1)
+
+**Ebene:** E2E für die Oberfläche; die Abwesenheit jeder Verbindung nach außen bei
+ausgeschaltetem Schalter ist eine Dienstprüfung (T-397, AK-1.3 zweite Hälfte) und hier nicht
+wiederholt.
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-01 | Einstellungen → Arbeitsplatz, Schalter „Nach neuen Versionen suchen" an (Vorgabe) | Karte „Versionsprüfung" öffnen | Karte liegt zwischen „Arbeitsplatz" und „Sicherheitsmeldungen"; Beschriftung und Dauerhinweis wie AK-1.1, Hinweis über `aria-describedby` mit der Kontrollfläche verbunden |
+| TP-A28-02 | Update-Hinweis in der Navigationsfußzeile sichtbar (vorbereiteter Testzustand wie in `update-polling.spec.ts`) | Schalter ausschalten | Update-Hinweis und ein offener `UpdateNotice`-Dialog verschwinden **ohne Neuladen**, in demselben Rendering (AK-1.2); kein Bestätigungstoast |
+| TP-A28-03 | Schalter aus | Schalter wieder einschalten | Schalter zeigt an, kein Erfolgstoast, **keine** sofortige Prüfung wird versprochen oder angezeigt (AK-1.5 zweiter Satz) |
+| TP-A28-04 | `PATCH /settings` für diesen Wert wird zum Fehlschlag gebracht (Attrappe wie bei anderen Einstellungsfehlern) | Schalter umlegen | Schalter fällt auf den vorherigen Wert zurück, Fehlertoast „Die Einstellung wurde nicht gespeichert" samt Dienstmeldung, Fokus bleibt auf dem Schalter (AK-1.4) |
+| TP-A28-05 | Schalter aus, Neustart des Prozesses (Neustart-Vorrichtung aus `tests/e2e/support/**`) | Einstellungen erneut öffnen | Schalter ist weiterhin aus — der Wert kommt aus `GET /settings`, nicht aus Browserspeicher (AK-1.5 erster Satz) |
+
+### 36.2 A-28.2 — Sprache der Hauptoberfläche, Deutsch/Englisch (`welle-18-fluss.md` §2, E-123)
+
+**Ebene:** E2E. Formate nach E-123 Punkt 1: Englisch ist **en-GB** (Tag vor Monat, 24-Stunden-Uhr).
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-06 | Einstellungen → Darstellung, Sprache steht auf „Deutsch" (Vorgabe) | `RadioRow` „Sprache" öffnen | Zwei Optionen „Deutsch" (`lang="de"`) und „English" (`lang="en"`), als Endonym geschrieben (AK-2.1) |
+| TP-A28-07 | wie oben | „English" wählen | **Ohne Neuladen**: `<html lang>` wechselt im selben Rendering (WCAG 3.1.1), Fokus bleibt auf der gewählten Option, alle Haupttexte erscheinen englisch (AK-2.2) |
+| TP-A28-08 | Sprache Englisch, ein Todo mit Frist `2026-10-03` und einer Buchung von 45 Minuten | Todo-Liste, Exportvorschau und ein Toast mit Dauer ansehen | Datum `03/10/2026` (nicht `10/03/2026`), Uhrzeit 24-Stunden-Format, gerundeter Wert mit Punkt (`0.75` statt `0,75`), Dauer weiterhin `1:30 h` (AK-2.3, Tabelle in §2.3) |
+| TP-A28-09 | Sprache Englisch, ein absichtlich fehlgeschlagener Dienstaufruf (z. B. Exportordner ungültig) | Fehlermeldung des Dienstes ansehen | Die deutsche Dienstmeldung ist mit `lang="de"` ausgezeichnet, auch innerhalb der englischen Oberfläche (AK-2.4) |
+| TP-A28-10 | Sprache Englisch gesetzt, Neustart des Prozesses **und** eine Datensicherung/Wiederherstellung dazwischen | Einstellungen erneut öffnen | Sprache bleibt Englisch — Wert liegt im Bestand, überlebt Neustart und Archiv-Round-Trip (AK-2.5); ein **älteres** Archiv ohne den Wert stellt Deutsch wieder her (Zustandstabelle §2.4) |
+| TP-A28-11 | Sprache Englisch | Tag-Namen, Exportvorlagen-Namen und Farbmodus-Bezeichnungen ansehen | Keines davon wird übersetzt — nur Oberflächentext (AK-2.6) |
+| TP-A28-12 | Sprache Deutsch, Schalter „Sprache speichern" wird zum Fehlschlag gebracht | Auf „English" wechseln | Rückfall auf Deutsch, Fehlertoast **in der bisherigen Sprache** (Deutsch), nicht auf Englisch umgeschaltet (Zustandstabelle §2.4, „Save fails") |
+
+### 36.3 A-28.3 — Pool-Reihenfolge (`welle-18-fluss.md` §3)
+
+**Ebene:** E2E.
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-13 | Einstellungen → Regeln, mindestens drei Regeln, davon zwei Board-Spalten | Jede Zeile ansehen | Gruppe `role="group"` „Reihenfolge von „X"" mit „„X" nach oben"/„„X" nach unten", vor „Todos ansehen" (AK-3.1) |
+| TP-A28-14 | wie oben, zwei benachbarte **Board**-Spalten X, Y | X „nach unten" drücken | X und Y tauschen die relative Reihenfolge in der Regelliste **und** auf dem Board; Toast „Reihenfolge geändert.", Körper „„X" steht jetzt weiter unten." plus „Auf dem Board steht die Spalte jetzt weiter rechts." (AK-3.2, §3.3) |
+| TP-A28-15 | zwei benachbarte Regeln, von denen nur eine eine Board-Spalte ist | eine „nach oben" drücken | Regelliste tauscht, Board-Reihenfolge bleibt unverändert, Toast ohne den Board-Satz (§3.2 zweiter Punkt) |
+| TP-A28-16 | wie TP-A28-14 | Taste erneut drücken, während die erste Anfrage noch läuft (Attrappe mit Verzögerung) | Alle Auf/Ab-Knöpfe `aria-disabled`, der zweite Druck erzeugt **keine** zweite Anfrage (§3.3 „Busy") |
+| TP-A28-17 | erste Regel der Liste | „nach oben" ansehen | Knopf `aria-disabled` (Zustand „Idle", erste/letzte Zeile) |
+| TP-A28-18 | jede der in §3.4 gemessenen Stellen (`PoolAdministration`, `BoardSetupDialog`, `BoardEmptyState`, `TodoListFilters`-Auswahl, Board-Spalten) nach einer Umsortierung | jede Stelle einzeln aufrufen | Alle zeigen Pools/Regeln in der neuen `position`-Reihenfolge; keine Stelle sortiert nach Name (AK-3.5, O-LB-Regel: frontend-dev zählt die Stellen im eigenen Bericht nach, dieser Fall prüft die dort genannte Menge) |
+
+**A-28.4 und A-28.5 — kurz, kein eigener Fluß in `welle-18-fluss.md`:**
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-19 | Ein Windows-Anmeldename mit Domänenanteil (`ERFUNDEN\t.beispiel`, erfunden nach Testdaten-Konvention) an der Stelle, die `WindowsUser` im Export befüllt | Export laufen lassen | Das Feld `WindowsUser` trägt `t.beispiel`, nicht `ERFUNDEN\t.beispiel` (A-28.4) — Ebene: Integration am Exportlauf, `packages/export/test/**` wäre die naheliegende Unit-Ebene für die reine Trennfunktion |
+| TP-A28-20 | Ein erfundener Startfehler, der bis heute „Wenden Sie sich an Ihre Systembetreuung" zeigt (z. B. Migrationsfehler oder blockiertes Anwendungsdatenverzeichnis, `ShellStatus.tsx`) | Startbildschirm ansehen | Der Satz ist ersetzt durch konkrete Selbsthilfeschritte (Wortlaut aus A-28.10, `serviceExit`-Ursache); kein Verweis auf „Systembetreuung" mehr — E-087-Suche vor dem Bau: der heutige Satz „Wenden Sie sich an Ihre Systembetreuung" hat **keinen** Treffer in `tests/**`/`apps/*/test/**` (Stichprobe 2026-09-24), fällt also ohne fremde Zustimmung |
+
+### 36.4 A-28.6 — 24-Stunden-Grenze (`welle-18-fluss.md` §4)
+
+**Ebene:** E2E; die dienstseitige Autorität (`T-388`, Rundungsfehler bei Uhrdrift) ist bereits
+Sache von domain-dev/unit-tester und hier nur als Vorbedingung genannt.
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-21 | Timer läuft seit **> 24 h** (Systemzeit vorgestellt oder `startedAt` in der Vergangenheit gesetzt), Leistungsabfrage an | Stoppen | Dialog „Timer stoppen" bekommt vor dem Leistungsfeld den Abschnitt „Ende" mit Vorbelegung `Beginn + 24 h`, editierbar, Pflichtfeld (AK-4.2); Ablesung „Gebucht werden: 24:00 h" ändert sich mit dem Feld |
+| TP-A28-22 | wie oben, Leistungsabfrage **aus** | Stoppen | Dieselbe Ende-Frage öffnet trotzdem — kein stiller Stopp über 24 h (Zeile „Direct stop" in §4.1) |
+| TP-A28-23 | Ende-Dialog offen | „Weiterlaufen lassen" klicken | Nichts gebucht, kein Toast, Timer läuft im Hintergrund unverändert weiter (AK-4.3) |
+| TP-A28-24 | Ende-Dialog offen | Ende leer lassen **bzw.** vor den Beginn **bzw.** mehr als 24 h nach dem Beginn **bzw.** in der Zukunft setzen, je einzeln absenden | Feldfehler „Ende fehlt."/„Ende liegt vor dem Anfang."/„Ende liegt mehr als 24 Stunden nach dem Anfang."/„Ende liegt in der Zukunft.", Fokus auf „Ende", nichts gebucht (Tabelle §4.2) |
+| TP-A28-25 | zwei Timer, einer davon seit > 24 h aktiv, Wechsel auf den zweiten ausgelöst | Wechseldialog „Es läuft bereits ein Timer" ansehen | Trägt dieselbe Ende-Frage für den laufenden Timer (§4.3); „Abbrechen" lässt den alten weiterlaufen und startet den neuen **nicht** |
+| TP-A28-26 | „Zeit von Hand erfassen" bzw. „Buchung bearbeiten", Ende mehr als 24 h nach Beginn eingetragen | Absenden | Feldfehler „Ende liegt mehr als 24 Stunden nach dem Anfang." nach dem ersten Absendeversuch (AK-4.5); keine automatische Kürzung, keine Verknüpfung a la „stattdessen 24 h buchen" (§4.4 letzter Satz) |
+| TP-A28-27 | Verwaister Timer (E-036), Lebenszeichen liegt **> 24 h** nach dem Beginn | „Bis zum letzten Lebenszeichen buchen" wählen | Dasselbe Ende-Feld wie TP-A28-21, vorbelegt mit `min(Lebenszeichen, Beginn + 24 h)` (F-4, E-124 Punkt 3) |
+| TP-A28-28 | Inaktivität kehrt zurück (A-24), der Beginn der Abwesenheit liegt **> 24 h** zurück | Zuordnungsdialog ansehen | Jeder „Gearbeitet"-Abschnitt **und** der aktive Teil bekommen denselben Feldfehler wie TP-A28-24 bei Bedarf; die Summenregel A-24.5 bleibt (F-5, E-124 Punkt 3) — **Randlage, benannt in E-127:** eine vor A-28.6 begonnene Inaktivitätsphase prüft die 24-h-Grenze bei der Rückkehr **nicht** (`timer.separateIdle`); dieser Fall gilt für eine Phase, die **nach** der Umsetzung begonnen hat |
+| TP-A28-29 | Fremdimport-Datei mit zwei Buchungen über 24 h, Datensicherung mit einer Buchung über 24 h | Import bzw. Wiederherstellung laufen lassen | Fremdimport weist die zwei Buchungen ab und zählt sie „2 Buchungen über 24 Stunden abgewiesen." (nur wenn N > 0); die eigene Datensicherung übernimmt die eine Buchung unverändert und meldet „1 Buchung dauert länger als 24 Stunden. Sie wurde unverändert übernommen." (AK-4.7, §4.5) |
+| TP-A28-30 | genau 24 h (nicht darüber) | Timer stoppen bzw. von Hand buchen | Wird **angenommen** — „höchstens 24 Stunden" schließt die Grenze ein (§4.1 letzter Satz vor der Tabelle, Randlage) |
+
+### 36.5 A-28.7 — Rückmeldung nach einer Buchung von Hand, vier Lagen (`welle-18-fluss.md` §5)
+
+**Hintergrund.** `stopMessage` (`apps/web/src/features/timer/stopMessage.ts`) unterscheidet vier
+beobachtbare Lagen der Tagesgruppen-Einsicht (`DayGroupInsight`, `apps/web/src/app/dayGroup.ts`) —
+dieselbe Funktion bildet heute schon die Stopp-Meldung (`timer-stop-announcement.spec.ts`) und
+soll mit A-28.7 auch die Meldung nach „Zeit von Hand erfassen" bilden. Die vier Lagen, mit den
+Bezeichnungen aus der Tabelle in §5.1:
+
+- **L1 — Vorschau beantwortet, Wert bekannt:** Erfolgston, „Gebucht: <Dauer>. An diesem Tag sind
+  für dieses Todo <Summe> offen — das ergibt beim Export <Wert>."
+- **L2 — Gruppe hat keine Leistung (E-034):** Warnton, Titel endet auf „— aber noch nicht
+  abrechenbar.", Körper nennt die fehlende Leistung.
+- **L3 — Vorschau fehlgeschlagen** (Vorlage gelöscht, ungültig, Dienst antwortet nicht):
+  Warnton, „— der Exportwert ließ sich nicht abfragen.", die erfasste Zeit steht trotzdem fest.
+- **L4 — keine Einsicht** (an diesem Tag/Todo nichts offen, unmöglich bei der ersten Buchung
+  selbst, aber denkbar bei einer Randlage der Vorschau): Erfolgston, nur „Gebucht: <Dauer>.",
+  keine weitere Zahl.
+
+**Ebene:** E2E, über den echten Dialog „Zeit von Hand erfassen" (kein Aufbau an der Oberfläche
+vorbei).
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-31 | Todo mit einer bereits exportierten Buchung an diesem Tag, aktive Exportvorlage vorhanden, Todo trägt eine Leistung | Zeit von Hand buchen | Toast wie L1 — Erfolgston, Körper mit `formatDuration`/`formatQuarters`, plus Bewegungssatz falls vorhanden (AK-5.1, AK-5.2: Tagesgruppe = Kalendertag des **Beginns** der neuen Buchung) |
+| TP-A28-32 | Todo ohne jede Leistung an diesem Tag | Zeit von Hand buchen, Leistungsfeld leer lassen | Toast wie L2 — Warnton, „— aber noch nicht abrechenbar." |
+| TP-A28-33 | Aktive Exportvorlage wird zwischen Laden des Dialogs und dem Absenden gelöscht (Attrappe) | Zeit von Hand buchen | Toast wie L3 — Warnton, „— der Exportwert ließ sich nicht abfragen.", die Buchung ist trotzdem entstanden (Gegenprobe: `GET /time-entries` zeigt sie) |
+| TP-A28-34 | Randlage, in der die Einsicht `null` liefert (z. B. Buchung sofort wieder als exportiert markiert, bevor die Einsicht lädt — Attrappe) | Zeit von Hand buchen | Toast wie L4 — Erfolgston, nur „Gebucht: <Dauer>." |
+| TP-A28-35 | „Buchung ändern" (Bearbeiten einer bestehenden Buchung, nicht Neuanlage) | Speichern | Bestehender Toast **unverändert** — A-28.7 benennt ausdrücklich nur die Neuanlage von Hand, nicht das Bearbeiten (§5.1 letzter Satz); Gegenprobe gegen eine versehentliche Umstellung auf `stopMessage` auch hier |
+
+**E-087, vorab gemessen (T-399):** `tests/e2e/manual-booking-movement.spec.ts:149,211,277` legen
+den heutigen Körper „Gebucht: <Dauer>." exakt fest (`toHaveText`/`toBe`, kein `toContain`). A-28.7
+lässt den Körper **wachsen** (L1 hängt die Summensatz-Zeile an), verschmälert ihn nirgends — die
+drei Stellen sind deshalb **keine Streichung** im Sinn von E-087, sondern eine Erweiterung; sie
+brauchen trotzdem eine Anpassung der Erwartung (von `toBe('Gebucht: …')` auf den vollen L1/L4-Satz
+oder auf `toContain`), weil ein `toBe` auf den heutigen, kürzeren Wortlaut nach dem Bau **rot**
+würde. **Vorgemerkt für T-402** (`welle-18-fluss.md` AK-5.3), in derselben Welle wie der Bau
+(E-081 Punkt 4: Streichung/Anpassung und Ausgleich in einem Auftrag) — hier nicht angefasst, weil
+A-28.7 zum Zeitpunkt dieses Plans nicht gebaut ist.
+
+### 36.6 A-28.8 — Warnung bei zu offenen Dateirechten (`welle-18-fluss.md` §6)
+
+**Ebene:** E2E, mit einer Dienst-Attrappe für die Meldung `file_permissions_wide` (echte
+Unix-Rechte am Bestand ließen sich zwar unter Linux setzen, eine Windows-ACL-Lage aber nicht
+nachbilden — dieselbe Grenze wie beim Bedrohungsmodell zu diesem Befund).
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-A28-36 | Dienst meldet `file_permissions_wide` beim Start | Einstellungen → Arbeitsplatz öffnen | Warnung erscheint **innerhalb** des Fakts „Der Bestand liegt in", direkt unter dem Pfad — nicht als eigene Kachel, kein Pfad und kein Dateiname im Warntext selbst (AK-6.1, AK-6.3) |
+| TP-A28-37 | wie oben | Liste „Sicherheitsmeldungen" ansehen | Der Befund erscheint dort **nicht** mehr als eigene Zeile — genau eine Stelle zeigt ihn (AK-6.2) |
+| TP-A28-38 | Dienst meldet den Befund **nicht** | Einstellungen → Arbeitsplatz öffnen | Keine Warnung, kein leerer Platzhalter (A-28.8 wörtlich) |
+| TP-A28-39 | Windows-ACL-Lage, nicht meßbar (`main.ts` liefert keinen Befund, weil er dort nicht ermittelbar ist) | wie oben | Ebenfalls keine Warnung — „nicht meßbar" ist kein Befund, keine Behauptung ins Leere (Zustandstabelle §6.3) |
+| TP-A28-40 | Sicherheitsmeldungen lassen sich nicht laden (Dienstfehler) | Einstellungen → Arbeitsplatz öffnen | Der Fakt-Block zeigt weder Warnung noch Behauptung; die Karte „Sicherheitsmeldungen" zeigt ihren bestehenden Fehler mit Wiederholen-Knopf (§6.3 letzte Zeile) |
+
+### 36.7 C-22 — Globale Suche mit Herkunft, keine Textausschnitte (T-393, K-1 bis K-17)
+
+**Ebene:** E2E für die Oberflächenkriterien K-9 bis K-17; K-1 bis K-8 (Antworttyp, Dienst) sind
+Integrationssache und hier nur als Vorbedingung vorausgesetzt (`TodoSearchHit.origins`, siehe
+T-393-Bericht).
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-SUCHE-01 | Drei Todos: eines trifft im Titel, eines nur im Vermerk, eine Buchung trifft in ihrer Leistung — alle mit demselben eindeutigen Suchwort | `Strg`+`K`, Suchwort eingeben | Drei sichtbare Gruppen mit Überschrift: „Todos" (Titel-/Call-Treffer), „Im Vermerk (intern)" (nur Vermerkstreffer), „In Leistungen" (Buchungen) — jede Gruppe als `role="group"` mit `aria-labelledby` innerhalb der `listbox` (K-9, K-10) |
+| TP-SUCHE-02 | Ein Todo trifft **sowohl** im Titel **als auch** im Vermerk, mit demselben Suchwort | wie oben | Das Todo erscheint **genau einmal**, in der Gruppe „Todos" — nicht zusätzlich in „Im Vermerk" (K-9 letzter Satz) |
+| TP-SUCHE-03 | Todo mit Vermerkstreffer, Call-Nummer vorhanden | Trefferzeile lesen | Text nennt die Herkunft **als Wortlaut**, z. B. „Call 12345 · Treffer in: Titel, Vermerk" bzw. „Treffer im Vermerk" bei reinem Vermerkstreffer — nicht nur Symbol oder Farbe (K-11, WCAG 1.4.1) |
+| TP-SUCHE-04 | Vermerk enthält zwei eindeutige Wörter, gesucht wird nach dem ersten | Trefferzeile, `title`-Attribut, zugänglicher Name einzeln prüfen | Keines davon enthält das **zweite** Vermerkswort oder sonst einen Ausschnitt aus dem Vermerkstext (K-3, K-12) |
+| TP-SUCHE-05 | Buchungstreffer mit offenem und mit exportiertem Exportstatus | Leistungsgruppe ansehen | Jede Zeile trägt weiterhin ihren `ExportStatusMarker`; die Vermerksgruppe trägt **keinen** Exportstatus (K-13) |
+| TP-SUCHE-06 | Kein Todo und keine Buchung treffen das eingegebene Wort | Suche absenden | Leertext „Kein Treffer für „…". Gesucht wird in Titeln, Call-Nummern, Vermerken und Leistungstexten." (K-15, ersetzt SP-21) |
+| TP-SUCHE-07 | wie TP-SUCHE-01 | Klick auf den Vermerkstreffer bzw. `Enter` bei aktivem Vermerkstreffer | Öffnet das Todo wie ein gewöhnlicher Treffer; die Vermerkskarte ist dort ohne weiteren Klick sichtbar (K-16) |
+| TP-SUCHE-08 | Suchfeld fokussiert, unsichtbare Beschriftung gelesen (Vorleseprüfung) | `aria-label`/verbundenes Label des Suchfelds lesen | „Globale Suche über Todos, Vermerke und Leistungstexte" (K-15 zweiter Satz) |
+| TP-SUCHE-09 | `/api/v1/search` mit einem gültigen Add-in-Token statt eines Sitzungstokens aufrufen (Türprüfung, kein Browseraufbau nötig) | Anfrage senden | Zugriff verweigert — die Route bleibt eine reine Sitzungsroute, kein Add-in-Token erreicht sie (K-6); Ebene: Integration/Zugriffsschicht, hier als E2E-Spotcheck an der echten HTTP-Tür mitgeprüft |
+
+### 36.8 O-KH — Absendesperre und Hinweis teilen sich einen Kanal, beide Richtungen
+
+**Hintergrund.** `useSubmitRefusalShown`/`SubmitRefusalShownContext`
+(`apps/web/src/lib/submitAttempt.ts`) sorgt dafür, dass ein Feldhinweis zurücktritt, solange
+`FormDialog` seine `submitRefusal` zeigt — sonst stünde derselbe Satz zweimal gleichzeitig auf dem
+Bild (einmal als Hinweis unter dem Feld, einmal als Absage darüber). Heute die einzige bekannte
+Aufrufstelle: `PoolRenameDialog` (Regel/Pool umbenennen), Feld „Name", Fall „unverändert". Gebaut
+in T-220/T-228, **aber ohne eigenen Prüffall** — `form-dialog-submit-guard.spec.ts` (O-KC) misst
+den Riegel selbst am einfacheren Fall „Neuen Tag anlegen" (leeres Pflichtfeld), nicht den
+Kanalwechsel zwischen Hinweis und Absage.
+
+**Ebene:** E2E, am `PoolRenameDialog` als der heute einzigen Aufrufstelle mit `submitRefusal`.
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-KH-01 | Regel „E2E-Beispiel" existiert, Dialog „Umbenennen" offen, Namensfeld zeigt unverändert „E2E-Beispiel" (Dauerhinweis „Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog." sichtbar) | „Speichern" drücken, ohne den Namen zu ändern | Der Satz „Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog." steht **genau einmal** auf dem Bild — nicht gleichzeitig als Feldhinweis **und** als Absage darüber (Meßrichtung 1 aus O-KH); Dialog bleibt offen, nichts wird gespeichert |
+| TP-KH-02 | unmittelbar nach TP-KH-01 (Absage steht) | Ein Zeichen im Namensfeld ändern (z. B. anhängen) | Die Absage verschwindet, und der **Feldhinweis kehrt zurück** — hier „Der neue Name erscheint sofort überall, wo diese Regel genannt wird." (Meßrichtung 2 aus O-KH: nach dem ersten geänderten Zeichen steht der Hinweis wieder, nicht dauerhaft unterdrückt) |
+| TP-KH-03 | unmittelbar nach TP-KH-02 | Das Zeichen wieder entfernen, sodass der Name erneut exakt dem ursprünglichen Namen entspricht, dann erneut „Speichern" drücken | Dieselbe Absage wie in TP-KH-01 erscheint erneut, einmalig — kein Rest des vorherigen Zustands (Gegenprobe: der Riegel ist zustandslos gegenüber dem reinen Textwert, nicht nur beim ersten Versuch korrekt) |
+| TP-KH-04 | wie TP-KH-01, aber Feld komplett geleert statt unverändert gelassen | „Speichern" drücken | Anderer Kanal: Feldfehler „Name fehlt." (`aria-invalid="true"`), **nicht** die Absage aus TP-KH-01 — die beiden Sperrgründe desselben Dialogs dürfen sich nicht vermischen |
+
+### 36.9 Tastatur im Öffnen-Dialog (`AttachmentOpenDialog`, A-A-6 Eigenschaft 4)
+
+**Hintergrund.** Der Dialog vor dem Öffnen einer Datei hat bewusst **keine Vorauswahl**: kein
+Knopf ist vorbelegt, der Anfangsfokus liegt auf dem Dialog selbst (`tabIndex={-1}`), und `Enter`
+löst nichts aus — anders als bei jedem anderen Formulardialog dieses Bestands, wo `Enter` den
+Absendeknopf trifft. `tests/e2e/attachment-open-commands.spec.ts` prüft heute die Rückfrage
+selbst (TP-ANH-05/-06/-22), aber **keine** Tastaturmessung dieser bewussten Ausnahme.
+
+**Ebene:** E2E, `tests/e2e/attachment-open-commands.spec.ts` (Erweiterung).
+
+| ID | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|
+| TP-ANH-24 | Anhang vom Typ Datei, „Datei öffnen" geklickt, Rückfragedialog offen | Sofort `Enter` drücken, ohne vorher zu tabben | **Kein** Öffnen-Aufruf (Gegenprobe wie in TP-ANH-06: kein Aufruf des Öffnen-Befehls); der Dialog bleibt offen — der Anfangsfokus liegt auf dem Dialograhmen, nicht auf „Öffnen"/„Ausführen" (A-A-6 Eigenschaft 4) |
+| TP-ANH-24b | wie oben | `Tab` einmal drücken, `document.activeElement` lesen | Fokus wandert auf ein Element **innerhalb** des Dialogs (Tabulatorschleife, SC 2.4.3); keines der beiden Knöpfe trägt den Anfangsfokus |
+| TP-ANH-24c | wie oben, mit `Tab` bis zum „Öffnen"/„Ausführen"-Knopf navigiert | `Enter`/`Space` auf dem fokussierten Knopf | Öffnet wie ein Klick — die fehlende Vorauswahl ist kein zusätzlicher Riegel gegen die Tastatur, nur gegen das versehentliche `Enter` direkt nach dem Öffnen des Dialogs |
+| TP-ANH-24d | Rückfragedialog offen | `Escape` drücken | Dialog schließt wie „Abbrechen", kein Öffnen-Aufruf — dieselbe Erwartung wie beim Mausklick auf „Abbrechen" (TP-ANH-05 Gegenprobe) |
+
+### 36.10 Diese Läufe im Sinn von O-LJ/E-121 Punkt 11
+
+Jeder Fall oben braucht den lokalen Dienst und (außer TP-A28-19/-20, die Integrationsfälle sind)
+den Vite-Entwicklungsserver. Stirbt einer der beiden mitten im Lauf, gilt
+der betroffene Fall nach der Regel aus `CLAUDE.md` („Dienst stirbt im Lauf") als **nicht
+gelaufen** — weder rot noch grün —, und der Ausführungsbericht muss das ausdrücklich benennen,
+nicht stillschweigend als Fehlschlag zählen.

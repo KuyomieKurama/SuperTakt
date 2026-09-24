@@ -39,18 +39,3 @@ export const ADDIN_ORIGIN = 'https://localhost:17844';
  * Gültigkeit trifft ausschließlich der Dienst.
  */
 export const TOKEN_LENGTH = 48;
-
-/**
- * Voreingestellte Buchungsdauern für „auf vorhandenes Todo buchen" (A-10.9).
- *
- * Viertelstundenschritte, weil der Export in Viertelstunden rechnet (A-8.3).
- * **Gerundet wird trotzdem nicht hier**: Die Rundung steht genau einmal in
- * `packages/domain/src/rounding.ts` und geschieht beim Export über die
- * Tagessumme (E-008, E-020). Eine Rundung im Add-in wäre eine zweite Wahrheit
- * über einen Rechnungsbetrag — und noch dazu die falsche, weil sie je Buchung
- * statt je Tag rundete.
- */
-export const DURATION_PRESETS_MINUTES: readonly number[] = Object.freeze([15, 30, 45, 60, 90]);
-
-/** Obergrenze einer von Hand eingetragenen Dauer im Add-in, in Minuten. */
-export const MAX_DURATION_MINUTES = 12 * 60;

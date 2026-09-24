@@ -3,9 +3,10 @@ import { z } from 'zod';
 import type { AppContext } from '../../context.ts';
 import { listPriorities, savePriority, removePriority } from './priorities.ts';
 import type { TaktEnv } from '../../http/guards.ts';
+import { MAX_PRIORITY_NAME_CHARACTERS } from '@takt/domain';
 import { nameSchema, readJson, toFieldErrors } from '../../http/input.ts';
 import { data, fail, failValidation } from '../../http/problem.ts';
-const input = z.object({ name: nameSchema.max(120), weight: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).strict();
+const input = z.object({ name: nameSchema.max(MAX_PRIORITY_NAME_CHARACTERS), weight: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).strict();
 export const REQUEST_SCHEMAS = { createPriority: input, updatePriority: input };
 export function createPriorityRoutes(context: AppContext) {
   const routes = new Hono<TaktEnv>();

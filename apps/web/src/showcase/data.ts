@@ -195,6 +195,7 @@ const RESOLVED_FULL: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: [],
   matchesNothing: false,
+  matchesNothingReason: "none",
 };
 
 /** Eine Regel, die keine Tagbedingung nennt — es gibt nichts aufzulösen. */
@@ -206,6 +207,7 @@ const RESOLVED_NO_TAG_AXIS: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: [],
   matchesNothing: false,
+  matchesNothingReason: "none",
 };
 
 /**
@@ -274,6 +276,7 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
       unresolvedExcluded: false,
       emptyRuleFolderIds: [],
       matchesNothing: false,
+      matchesNothingReason: "none",
     },
   },
   {
@@ -295,6 +298,7 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
       unresolvedExcluded: false,
       emptyRuleFolderIds: ["folder-ost"],
       matchesNothing: true,
+      matchesNothingReason: "unresolved_required",
     },
   },
   {
@@ -322,6 +326,7 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
       unresolvedExcluded: false,
       emptyRuleFolderIds: ["folder-ost"],
       matchesNothing: true,
+      matchesNothingReason: "unresolved_required",
     },
   },
   {
@@ -336,6 +341,7 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
       unresolvedExcluded: false,
       emptyRuleFolderIds: [],
       matchesNothing: true,
+      matchesNothingReason: "empty",
     },
   },
 ];

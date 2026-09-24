@@ -1,47 +1,14 @@
 /**
- * Wert zu Beschriftung — die eine Stelle, an der aus einem Datenwert ein
- * Oberflaechentext wird.
+ * Shared UI texts: value-to-label maps and the sentences that more than one
+ * feature or a shared component (`shared/ui`, `lib`) needs.
  *
- * Datenbank, Domaene und API fuehren ausschliesslich den englischen Wert
- * (E-015). Auf dem Bildschirm steht die deutsche Beschriftung (`CLAUDE.md`).
- * Damit dieselbe Zuordnung nicht in vierzehn Ansichten neu getippt wird,
- * steht sie hier genau einmal.
+ * Database, domain and API carry only the English value (E-015); the screen
+ * shows the label from here. Where `@takt/domain` names an enumeration, it is
+ * imported (R-1, T-091) so a new domain value turns the missing label red here.
  *
- * Belege: `docs/glossar.md`, Abschnitt "Wert zu Beschriftung", ergaenzt um die
- * beiden Zuordnungen aus E-041, die dort offen geblieben waren.
- *
- * Regel fuer alle Eintraege: Der Schluessel ist der Wert aus dem Datenmodell,
- * niemals ein hier erfundener. Wer eine Beschriftung braucht, deren Wert es im
- * Datenmodell nicht gibt, hat einen Modellfehler und keine Uebersetzungsluecke.
- *
- * ## Der Wertebereich kommt aus der Domaene, nicht von hier (R-1, T-091)
- *
- * Wo `@takt/domain` eine Aufzaehlung bereits als benannten Typ fuehrt, wird er
- * hier **importiert und weitergereicht** — nicht ein zweites Mal getippt. Der
- * Grund ist die Richtung, die weh tut: Eine hier abgeschriebene Fassung bliebe
- * bei einem vierten Domaenenwert stillschweigend **enger**, jede Zuweisung
- * bliebe gueltig, nichts wuerde rot — und die `Record`-Tabelle darunter liefe
- * fuer den neuen Wert auf `undefined`, wo ihr Typ `string` verspricht. Mit dem
- * Import wird stattdessen genau die Tabelle rot, der eine Beschriftung fehlt.
- *
- * **Acht** Aufzaehlungen liegen deshalb in der Domaene und werden hier nur
- * beschriftet: {@link TimeEntrySource}, {@link RoundingMode},
- * {@link ExportAuditEvent}, {@link PoolPlacement}, {@link PoolCompletionFilter},
- * {@link PoolExportFilter}, {@link ThemeSetting} und {@link PoolMatchMode}.
- *
- * Die letzten beiden sind seit T-102 dabei. Bis dahin stand hier: „fuehrt die
- * Domaene bis heute nur als Inline-Vereinigung an ihrem Feld an; es gibt dort
- * keinen Namen zum Importieren. Sobald sie einen bekommen, gehoeren beide in
- * die Liste darueber." Sie haben ihn mit T-093 bekommen — `Theme` in
- * `packages/domain/src/settings.ts`, `PoolMatchMode` in `tag.ts`, beide ueber
- * den Einstiegspunkt des Pakets ausgefuehrt —, und die Bedingung, die der
- * Kommentar selbst genannt hat, ist damit eingetreten (R-1a, Befund 4).
- * `Theme` heisst hier weiter {@link ThemeSetting}: Der Name steht an neun
- * Stellen der Oberflaeche, und ein Alias beim Import kostet nichts.
- *
- * **Eine** bleibt hier definiert, aus einem genannten Grund:
- * {@link DoneFlagState} ist ein **Anzeige**zustand ohne Entsprechung im
- * Datenmodell — `reopened` steht in keiner Spalte.
+ * Two languages (A-28.2): `de` is binding, `en` has the same shape and is typed
+ * as `typeof de`, so a missing key is a type error. `labels()` returns the one
+ * for the current language. Feature texts live in `features/<feature>/texts.ts`.
  */
 
 import type { ForeignText } from "../api/types";
@@ -55,7 +22,10 @@ import type {
   Theme as ThemeSetting,
   TimeEntrySource,
 } from "@takt/domain";
+import { formatDuration } from "./format";
 import { quotedName } from "./foreign";
+import { pickTexts } from "./language";
+import type { BookingEndProblem } from "./bookingEnd";
 
 export type {
   ExportAuditEvent,
@@ -68,443 +38,560 @@ export type {
   TimeEntrySource,
 };
 
-/* Zeitbuchung — Herkunft (`time_entry.source`, E-041)                  */
-
 /**
- * Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`.
- * Der Wertebereich steht in `@takt/domain` (`time-entry.ts`).
+ * What the todo shows about "Erledigt" (A-2.5, E-023). `reopened` is a display
+ * state without a column: the timer start lifted "Erledigt" (I-05).
  */
-export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> = {
-  timer: "Timer",
-  manual: "Von Hand",
+export type DoneFlagState = "open" | "done" | "reopened";
+
+/** The export display state of a booking; `reopened` and `not_billed` are display states (E-050). */
+type ExportDisplayStateKey = "open" | "exported" | "reopened" | "not_billed";
+
+type IncompleteInputType = "time" | "number" | "date" | "datetime-local";
+
+const de = {
+  timeEntrySource: { timer: "Timer", manual: "Von Hand" } satisfies Record<TimeEntrySource, string>,
+  theme: { system: "Systemvorgabe", light: "Hell", dark: "Dunkel" } satisfies Record<ThemeSetting, string>,
+  roundingMode: { up: "aufwärts", nearest: "kaufmännisch" } satisfies Record<RoundingMode, string>,
+  // `not_billed` is never "als exportiert markiert": that time was never exported (E-047).
+  exportAuditEvent: {
+    exported: "exportiert",
+    reset: "zurückgesetzt",
+    not_billed: "nicht abgerechnet",
+  } satisfies Record<ExportAuditEvent, string>,
+
+  // Where a rule appears (E-054): surfaces, not types.
+  poolPlacement: {
+    pool: "Nur in den Pools",
+    board: "Nur auf dem Board",
+    both: "In den Pools und auf dem Board",
+  } satisfies Record<PoolPlacement, string>,
+  poolPlacementShort: {
+    pool: "Pool",
+    board: "Board-Spalte",
+    both: "Pool und Board",
+  } satisfies Record<PoolPlacement, string>,
+  // One wording for both surfaces (W-14); `board` and `both` share the title.
+  poolPlacementTitle: {
+    pool: "Spalte vom Board genommen.",
+    board: "Regel als Spalte aufgenommen.",
+    both: "Regel als Spalte aufgenommen.",
+  } satisfies Record<PoolPlacement, string>,
+  poolPlacementRestoredTitle: "Anzeigeort wiederhergestellt.",
+  poolPlacementBody: (quoted: string, short: string) =>
+    `${quoted} — ${short}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+
+  doneFlag: {
+    open: "Offen",
+    done: "Erledigt",
+    reopened: "Erledigt aufgehoben",
+  } satisfies Record<DoneFlagState, string>,
+  // Locked sentence SP-16: what the app did and what follows from it (A-2.5, I-05).
+  reactivationTitle: (quoted: string) => `Timer gestartet. ${quoted} ist wieder offen.`,
+
+  // "Alle" is not a word for the strictest mode (R-2, Sprache 2).
+  poolMatchMode: {
+    any: "Mindestens eines davon",
+    all: "Jedes der genannten",
+  } satisfies Record<PoolMatchMode, string>,
+  poolMatchModePrefix: {
+    any: "Mindestens eines von",
+    all: "Jedes von",
+  } satisfies Record<PoolMatchMode, string>,
+  poolMatchModeHint: {
+    any: "Ein Todo genügt schon mit einem der genannten Tags.",
+    all: "Ein Todo muss jeden genannten Tag tragen. Das trifft weniger als „mindestens eines davon“.",
+  } satisfies Record<PoolMatchMode, string>,
+  // Its own constant, equal in wording to `poolCompletion.any` (H-3 from R-2).
+  poolStatus: { any: "Alle" },
+  poolCompletion: {
+    any: "Alle",
+    done: "Erledigt",
+    open: "Unerledigt",
+  } satisfies Record<PoolCompletionFilter, string>,
+  // Words from E-059, not from the data model: "Offen" already means the opposite of "Erledigt".
+  poolExport: {
+    any: "Alle",
+    open: "Noch nicht abgerechnet",
+    exported: "Abgerechnet",
+  } satisfies Record<PoolExportFilter, string>,
+  // Locked sentences SP-15 (E-047, E-050, E-059).
+  poolExportNotBilledHint:
+    "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.",
+  poolExportExportedNote:
+    "„Abgerechnet“ meint den Exportstatus der Buchungen: Auch eine ausgebuchte Buchung, an der „Nicht abgerechnet“ steht, trägt ihn und zählt hier mit.",
+  poolAxisNeutralHint: "Schränkt nicht ein",
+
+  // Pool movement after a change, past tense (E-124 F-1). The German wording equals
+  // `poolMovementSentence(…, "past", …)` in @takt/domain, which the add-in still shows.
+  poolMovement: {
+    reopenNowhere: "Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte.",
+    reopenOnlyLeft: (leaves: string) => `Es ist aus ${leaves} verschwunden und erscheint sonst nirgends.`,
+    reopenBack: (appears: string) => `Es ist zurück in ${appears}.`,
+    reopenBackAndLeft: (appears: string, leaves: string) =>
+      `Es ist zurück in ${appears} und aus ${leaves} verschwunden.`,
+    entered: (enters: string) => `Es steht jetzt in ${enters}.`,
+    left: (leaves: string) => `Es ist aus ${leaves} verschwunden.`,
+    enteredAndLeft: (enters: string, leaves: string) =>
+      `Es steht jetzt in ${enters} und ist aus ${leaves} verschwunden.`,
+  },
+
+  // The definition (board setup) and the behaviour (board lead), T-181 ST-05.
+  ruleIsARule: "Eine Spalte ist eine Regel — über Tags, Status, „Erledigt“ und den Exportstatus.",
+  ruleWhatMovesACard:
+    "Welche Karte wo steht, entscheidet die Regel — nicht die Maus. Eine Karte wandert, wenn sich am Todo etwas ändert, das die Regel abfragt.",
+
+  // Locked sentence SP-08 (formerly `BILLING_NOTE_MAY_BE_EMPTY`), under the note field of both booking surfaces (E-034).
+  // End of a booking (A-28.6, welle-18-fluss.md 4.2); the first word is the field label (T-177 P-2).
+  bookingEndProblem: {
+    missing: "Ende fehlt.",
+    before_start: "Ende liegt vor dem Anfang.",
+    over_24h: "Ende liegt mehr als 24 Stunden nach dem Anfang.",
+    future: "Ende liegt in der Zukunft.",
+  } satisfies Record<BookingEndProblem, string>,
+  billingNoteMayBeEmpty:
+    "Die Leistung darf leer bleiben. Dann ist die Buchung erfasst, aber die Tagesgruppe dieses Todos geht ohne Text nicht in den Export — die Exportvorschau sagt es und bietet an, den Text nachzutragen.",
+  // Four dialogs share it (T-177 P-2/P-3).
+  nameMissing: "Name fehlt.",
+  // Names the state instead of asking for an action (rule G-1).
+  nothingSelected: "Nichts gewählt",
+  builtinTemplateOption: "Mitgelieferte Standardvorlage",
+  // Situation sentences for a day group, shared by timer stop and booking edit (textbestand.md 12.8).
+  dayGroupNotBillable: "noch nicht abrechenbar",
+  dayGroupPreviewFailedShort: "der Exportwert ließ sich nicht abfragen",
+  dayGroupMissingNote: (duration: string) =>
+    `Für diesen Tag steht auf diesem Todo noch keine Leistung. Ohne sie bleibt die Tagesgruppe (${duration}) beim Export stehen.`,
+  dayGroupPreviewFailed: (serviceMessage: string) =>
+    `Was diese Tagesgruppe beim Export ergibt, konnte SuperTakt gerade nicht ermitteln: ${serviceMessage}`,
+
+  // Shared controls
+  cancel: "Abbrechen",
+  close: "Schließen",
+  requiredField: " (Pflichtfeld)",
+  fieldMissing: (label: string) => `${label} fehlt.`,
+  loadFailed: "Das ließ sich nicht laden",
+  retry: "Erneut versuchen",
+  dismissMessage: "Meldung schließen",
+  refreshing: "Wird aktualisiert …",
+  selectEmpty: "Nichts zur Auswahl.",
+  contextMenu: "Kontextmenü",
+  dateField: {
+    pickDate: (label: string) => `${label}: Datum wählen`,
+    closeCalendar: "Kalender schließen",
+    openCalendar: (label: string) => `${label}: Kalender öffnen`,
+    previousMonth: "Vorheriger Monat",
+    nextMonth: "Nächster Monat",
+    clearDate: "Datum löschen",
+    placeholder: "TT.MM.JJJJ",
+    time: (label: string) => `${label}: Uhrzeit`,
+  },
+  timeField: {
+    pick: (label: string) => `${label} wählen`,
+    title: "Uhrzeit",
+    hour: "Stunde",
+    minute: "Minute",
+    apply: "Übernehmen",
+  },
+  deadline: {
+    overdue: "Überfällig",
+    dueToday: "Heute fällig",
+    name: (date: string) => `Frist: ${date}`,
+    nameWithState: (word: string, date: string) => `${word} — Frist: ${date}`,
+  },
+  exportStatus: { open: "Offen", exported: "Exportiert" },
+  exportStatePrefix: "Exportstatus: ",
+  exportState: {
+    open: { label: "Offen", description: "Noch nicht an das Abrechnungstool uebertragen." },
+    exported: {
+      label: "Exportiert",
+      description:
+        "Bereits an das Abrechnungstool uebertragen. Gesperrt, solange der Exportstatus nicht zurueckgesetzt wird.",
+    },
+    reopened: {
+      label: "Erneut offen",
+      description:
+        "Der Exportstatus wurde zurueckgesetzt. Fachlich ist die Buchung offen; sie war aber schon einmal im Export und geht beim naechsten Export erneut in die Abrechnung.",
+    },
+    not_billed: {
+      label: "Nicht abgerechnet",
+      description:
+        "Von Hand ausgebucht: Diese Zeit wird nicht abgerechnet. Eine Exportdatei hat sie nie enthalten. Fachlich ist die Buchung abgeschlossen und damit gesperrt; rueckgaengig geht das ueber das Zuruecksetzen des Exportstatus.",
+    },
+  } satisfies Record<ExportDisplayStateKey, { label: string; description: string }>,
+  summaryStrip: {
+    empty: "keine Buchung",
+    count: (count: number, label: string) => `${String(count)} Buchungen: ${label}`,
+  },
+  search: {
+    placeholder: "Suchen …",
+    busy: "Suche läuft",
+    clear: "Suche leeren",
+  },
+  filterBar: {
+    viewOptions: "Ansichtsoptionen",
+    removeFilter: (field: string, value: string) => `Filter ${field} ${value} entfernen`,
+    resetAll: "Alle Filter zurücksetzen",
+    noneActive: "Kein Filter aktiv",
+  },
+  formDialog: {
+    close: "Dialog schließen",
+    failed: "Das hat nicht geklappt",
+    incompleteInput: {
+      time: "Stunde und Minute gehören dazu.",
+      number: "Eine gültige Zahl ist erforderlich.",
+      date: "Tag, Monat und Jahr gehören dazu.",
+      "datetime-local": "Datum und Uhrzeit gehören dazu.",
+    } satisfies Record<IncompleteInputType, string>,
+  },
+  // Locked sentences SP-09: banner, mark and help of both note kinds.
+  noteField: {
+    billing: {
+      bannerLabel: "Verlässt SuperTakt · steht in der Abrechnung",
+      defaultLabel: "Leistung",
+      markLabel: "Wird exportiert",
+      help: "Wird beim Export an das Abrechnungstool übertragen und steht dort auf der Rechnung des Kunden. Standardvorlage: Feld „Notiz“.",
+      defaultPlaceholder: "Was wurde in diesem Zeitraum für den Kunden geleistet?",
+    },
+    internal: {
+      bannerLabel: "Bleibt in SuperTakt",
+      defaultLabel: "Vermerk",
+      markLabel: "Wird nicht exportiert",
+      help: "Bleibt in SuperTakt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage.",
+      // No address (T-181, ST-09): a placeholder carries an example, never an address.
+      defaultPlaceholder: "Gedanken, Zwischenstände, Ansprechpartner …",
+    },
+    locked: "gesperrt",
+    characters: "Zeichen: ",
+  },
+  tagChip: {
+    newHidden: "wird neu angelegt",
+    newMark: "neu",
+    defaultHidden: "Standard-Tag",
+    defaultMark: "S",
+    remove: (name: string) => `Tag ${name} entfernen`,
+    path: "Pfad: ",
+  },
+
+  // Failures the UI itself reports about the connection (api/client.ts)
+  client: {
+    unknownError: "Unbekannter Fehler. Bitte versuchen Sie es erneut.",
+    unexpectedResponse: (status: number) => `Der lokale Dienst hat unerwartet geantwortet (${String(status)}).`,
+    notConnected: "SuperTakt ist noch nicht mit dem lokalen Dienst verbunden.",
+    noAnswer: "Der lokale Dienst antwortet nicht. Läuft SuperTakt noch vollständig?",
+  },
+
+  // Rule descriptions (lib/poolRule.ts)
+  rule: {
+    completionText: { done: "Nur erledigte", open: "Nur unerledigte" },
+    unknownTag: "Unbekannter Tag",
+    unknownFolder: "Unbekannter Ordner",
+    unknownStatus: "Unbekannter Status",
+    requiredTags: "Erforderliche Tags",
+    excludedTags: "Ausgeschlossene Tags",
+    without: "Ohne",
+    status: "Status",
+    // "Einer von", not "alle von": a todo carries exactly one status (T-076).
+    statusOneOf: "Status — einer von",
+    completion: "Erledigt",
+    exportState: "Exportstatus",
+    // Dative, because all sentences using it need one: "ein Tag aus …", "kein Tag in …".
+    oneUnknownFolder: "einem unbekannten Ordner",
+    manyUnknownFolders: (count: string) => `${count} unbekannten Ordnern`,
+    spokenEmptyFolder: (folders: string) => ` Kein Tag in ${folders} — diese Regel trifft deshalb nichts.`,
+    spokenNoCondition: (fault: string) => `Diese Regel nennt keine Bedingung und trifft nichts.${fault}`,
+    spokenNeutral: (axes: string) => ` Ohne Einschränkung: ${axes}.`,
+    spokenMatches: (conditions: string, neutral: string, fault: string) =>
+      `Diese Regel trifft: ${conditions}.${neutral}${fault}`,
+  },
+
+  // Locked sentence SP-18 (lib/errorText.ts): which rules keep a tag or status in use.
+  affected: {
+    ruleOne: "ist die Regel",
+    ruleMany: "sind die Regeln",
+    one: "ist",
+    many: "sind",
+    sentence: (base: string, subject: string, items: string) => `${base} Betroffen ${subject} ${items}.`,
+  },
 };
 
-/* Darstellung (`app_setting.theme`, E-041)                             */
+const en: typeof de = {
+  timeEntrySource: { timer: "Timer", manual: "Manual" },
+  theme: { system: "System default", light: "Light", dark: "Dark" },
+  roundingMode: { up: "round up", nearest: "round half up" },
+  exportAuditEvent: {
+    exported: "exported",
+    reset: "reset",
+    not_billed: "not billed",
+  },
+
+  poolPlacement: {
+    pool: "Only in the pools",
+    board: "Only on the board",
+    both: "In the pools and on the board",
+  },
+  poolPlacementShort: {
+    pool: "Pool",
+    board: "Board column",
+    both: "Pool and board",
+  },
+  poolPlacementTitle: {
+    pool: "Column removed from the board.",
+    board: "Rule added as a column.",
+    both: "Rule added as a column.",
+  },
+  poolPlacementRestoredTitle: "Placement restored.",
+  poolPlacementBody: (quoted: string, short: string) =>
+    `${quoted} — ${short}. The rule stays complete; nothing is deleted, and nothing changes on the todos.`,
+
+  doneFlag: {
+    open: "Open",
+    done: "Done",
+    reopened: "Done lifted",
+  },
+  reactivationTitle: (quoted: string) => `Timer started. ${quoted} is open again.`,
+
+  poolMatchMode: {
+    any: "At least one of them",
+    all: "Each of the named",
+  },
+  poolMatchModePrefix: {
+    any: "At least one of",
+    all: "Each of",
+  },
+  poolMatchModeHint: {
+    any: "A todo matches with just one of the named tags.",
+    all: "A todo must carry every named tag. That matches fewer than “at least one of them”.",
+  },
+  poolStatus: { any: "All" },
+  poolCompletion: {
+    any: "All",
+    done: "Done",
+    open: "Not done",
+  },
+  poolExport: {
+    any: "All",
+    open: "Not yet billed",
+    exported: "Billed",
+  },
+  poolExportNotBilledHint:
+    "Written-off bookings count too: a booking shown as “Not billed” carries the same export status as an exported one and therefore appears in this column, although it was never in a file.",
+  poolExportExportedNote:
+    "“Billed” means the export status of the bookings: a written-off booking marked “Not billed” carries it too and counts here.",
+  poolAxisNeutralHint: "No restriction",
+
+  poolMovement: {
+    reopenNowhere: "No rule currently matches this todo, so it appears in no pool and no column.",
+    reopenOnlyLeft: (leaves: string) => `It has left ${leaves} and appears nowhere else.`,
+    reopenBack: (appears: string) => `It is back in ${appears}.`,
+    reopenBackAndLeft: (appears: string, leaves: string) => `It is back in ${appears} and has left ${leaves}.`,
+    entered: (enters: string) => `It is now in ${enters}.`,
+    left: (leaves: string) => `It has left ${leaves}.`,
+    enteredAndLeft: (enters: string, leaves: string) => `It is now in ${enters} and has left ${leaves}.`,
+  },
+
+  ruleIsARule: "A column is a rule — over tags, status, “Done” and the export status.",
+  ruleWhatMovesACard:
+    "The rule decides which card stands where — not the mouse. A card moves when something changes on the todo that the rule asks about.",
+
+  bookingEndProblem: {
+    missing: "End is missing.",
+    before_start: "End is before the start.",
+    over_24h: "End is more than 24 hours after the start.",
+    future: "End is in the future.",
+  } satisfies Record<BookingEndProblem, string>,
+  billingNoteMayBeEmpty:
+    "The work done may stay empty. The booking is then recorded, but this todo's day group does not go into the export without text — the export preview says so and offers to add the text.",
+  nameMissing: "Name is missing.",
+  nothingSelected: "Nothing selected",
+  builtinTemplateOption: "Built-in default template",
+  dayGroupNotBillable: "not billable yet",
+  dayGroupPreviewFailedShort: "the export value could not be retrieved",
+  dayGroupMissingNote: (duration: string) =>
+    `There is no work done on this todo for this day yet. Without it the day group (${duration}) stays behind at export.`,
+  dayGroupPreviewFailed: (serviceMessage: string) =>
+    `SuperTakt could not determine what this day group yields at export: ${serviceMessage}`,
+
+  cancel: "Cancel",
+  close: "Close",
+  requiredField: " (required)",
+  fieldMissing: (label: string) => `${label} is missing.`,
+  loadFailed: "This could not be loaded",
+  retry: "Try again",
+  dismissMessage: "Close message",
+  refreshing: "Updating …",
+  selectEmpty: "Nothing to choose.",
+  contextMenu: "Context menu",
+  dateField: {
+    pickDate: (label: string) => `${label}: choose date`,
+    closeCalendar: "Close calendar",
+    openCalendar: (label: string) => `${label}: open calendar`,
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    clearDate: "Clear date",
+    placeholder: "DD/MM/YYYY",
+    time: (label: string) => `${label}: time`,
+  },
+  timeField: {
+    pick: (label: string) => `Choose ${label}`,
+    title: "Time",
+    hour: "Hour",
+    minute: "Minute",
+    apply: "Apply",
+  },
+  deadline: {
+    overdue: "Overdue",
+    dueToday: "Due today",
+    name: (date: string) => `Due date: ${date}`,
+    nameWithState: (word: string, date: string) => `${word} — due date: ${date}`,
+  },
+  exportStatus: { open: "Open", exported: "Exported" },
+  exportStatePrefix: "Export status: ",
+  exportState: {
+    open: { label: "Open", description: "Not yet transferred to the billing tool." },
+    exported: {
+      label: "Exported",
+      description: "Already transferred to the billing tool. Locked until the export status is reset.",
+    },
+    reopened: {
+      label: "Open again",
+      description:
+        "The export status was reset. The booking is open, but it was in an export before and goes into billing again with the next export.",
+    },
+    not_billed: {
+      label: "Not billed",
+      description:
+        "Written off by hand: this time is not billed. No export file ever contained it. The booking is closed and therefore locked; resetting the export status undoes this.",
+    },
+  },
+  summaryStrip: {
+    empty: "no booking",
+    count: (count: number, label: string) => `${String(count)} bookings: ${label}`,
+  },
+  search: {
+    placeholder: "Search …",
+    busy: "Searching",
+    clear: "Clear search",
+  },
+  filterBar: {
+    viewOptions: "View options",
+    removeFilter: (field: string, value: string) => `Remove filter ${field} ${value}`,
+    resetAll: "Reset all filters",
+    noneActive: "No filter active",
+  },
+  formDialog: {
+    close: "Close dialog",
+    failed: "That did not work",
+    incompleteInput: {
+      time: "Hour and minute are needed.",
+      number: "A valid number is required.",
+      date: "Day, month and year are needed.",
+      "datetime-local": "Date and time are needed.",
+    },
+  },
+  noteField: {
+    billing: {
+      bannerLabel: "Leaves SuperTakt · appears in billing",
+      defaultLabel: "Work done",
+      markLabel: "Is exported",
+      help: "Transferred to the billing tool at export and shown there on the customer's invoice. Default template: field “Notiz”.",
+      defaultPlaceholder: "What was done for the customer in this period?",
+    },
+    internal: {
+      bannerLabel: "Stays in SuperTakt",
+      defaultLabel: "Internal note",
+      markLabel: "Is not exported",
+      help: "Stays in SuperTakt. Never exported — not even through a custom export template.",
+      defaultPlaceholder: "Thoughts, interim results, contacts …",
+    },
+    locked: "locked",
+    characters: "Characters: ",
+  },
+  tagChip: {
+    newHidden: "will be created",
+    newMark: "new",
+    defaultHidden: "Default tag",
+    defaultMark: "D",
+    remove: (name: string) => `Remove tag ${name}`,
+    path: "Path: ",
+  },
+
+  client: {
+    unknownError: "Unknown error. Please try again.",
+    unexpectedResponse: (status: number) => `The local service answered unexpectedly (${String(status)}).`,
+    notConnected: "SuperTakt is not yet connected to the local service.",
+    noAnswer: "The local service does not answer. Is SuperTakt still fully running?",
+  },
+
+  rule: {
+    completionText: { done: "Only done", open: "Only not done" },
+    unknownTag: "Unknown tag",
+    unknownFolder: "Unknown folder",
+    unknownStatus: "Unknown status",
+    requiredTags: "Required tags",
+    excludedTags: "Excluded tags",
+    without: "Without",
+    status: "Status",
+    statusOneOf: "Status — one of",
+    completion: "Done",
+    exportState: "Export status",
+    oneUnknownFolder: "an unknown folder",
+    manyUnknownFolders: (count: string) => `${count} unknown folders`,
+    spokenEmptyFolder: (folders: string) => ` No tag in ${folders} — so this rule matches nothing.`,
+    spokenNoCondition: (fault: string) => `This rule names no condition and matches nothing.${fault}`,
+    spokenNeutral: (axes: string) => ` Without restriction: ${axes}.`,
+    spokenMatches: (conditions: string, neutral: string, fault: string) =>
+      `This rule matches: ${conditions}.${neutral}${fault}`,
+  },
+
+  affected: {
+    ruleOne: "rule",
+    ruleMany: "rules",
+    one: "",
+    many: "",
+    sentence: (base: string, subject: string, items: string) =>
+      subject === "" ? `${base} Affected: ${items}.` : `${base} Affected ${subject}: ${items}.`,
+  },
+};
+
+/** The shared texts in the current UI language. */
+export function labels(): typeof de {
+  return pickTexts({ de, en });
+}
 
 /**
- * Farbmodus der Anwendung. Spalte `app_setting.theme`.
- *
- * Der Wertebereich steht seit T-093 als `Theme` in `@takt/domain`
- * (`settings.ts`) und wird oben unter dem hiesigen Namen importiert. Die zweite
- * Fassung, die bis T-102 hier stand, ist ersatzlos weg (R-1a, Befund 4):
- * Bekommt die Domaene ein viertes Erscheinungsbild, wird jetzt diese Tabelle
- * rot, statt still ein `undefined` zu liefern, wo ihr Typ `string` verspricht.
- */
-export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
-  system: "Systemvorgabe",
-  light: "Hell",
-  dark: "Dunkel",
-};
-
-/* Rundung (`app_setting.rounding_mode`, `export_run.rounding_mode`)    */
-
-/**
- * Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008).
- * Der Wertebereich steht in `@takt/domain` (`rounding.ts`).
- */
-export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
-  up: "aufwärts",
-  nearest: "kaufmännisch",
-};
-
-/* Exportprotokoll (`export_audit.event`)                               */
-
-/**
- * Ereignis im Exportprotokoll.
- *
- * `not_billed` ist seit E-047 der dritte Wert: Die Buchung wurde ausgebucht,
- * ohne dass eine Datei entstand. Er heisst in der Oberflaeche „nicht
- * abgerechnet" und nirgends „als exportiert markiert" — exportiert wurde diese
- * Zeit nie.
- */
-export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>> = {
-  exported: "exportiert",
-  reset: "zurückgesetzt",
-  not_billed: "nicht abgerechnet",
-};
-
-/* Anzeigeort einer Regel (`pool.placement`, E-054)                     */
-
-/**
- * Wo eine Regel erscheint. Spalte `pool.placement`.
- *
- * Seit E-054 ist eine Kanban-Spalte dieselbe Entitaet wie ein Pool; der
- * Anzeigeort ist der einzige Unterschied. Die Beschriftungen sagen deshalb
- * **Flaechen** und nicht Typen: Es gibt nicht „Pool" und „Spalte", es gibt eine
- * Regel, die im Pool-Bereich steht, auf dem Board oder an beiden Stellen.
- */
-export const POOL_PLACEMENT_LABEL: Readonly<Record<PoolPlacement, string>> = {
-  pool: "Nur in den Pools",
-  board: "Nur auf dem Board",
-  both: "In den Pools und auf dem Board",
-};
-
-/** Kurzform fuer Etiketten in Listen, wo der Zusammenhang schon klar ist. */
-export const POOL_PLACEMENT_SHORT: Readonly<Record<PoolPlacement, string>> = {
-  pool: "Pool",
-  board: "Board-Spalte",
-  both: "Pool und Board",
-};
-
-/**
- * Die Meldung nach einem Wechsel des Anzeigeorts — **eine** Fassung fuer beide
- * Flaechen (W-14 aus R-2a).
- *
- * ## Was hier zusammengelegt wird
- *
- * Dieselbe Handlung meldete sich bis T-108 zweimal verschieden. Auf dem Board
- * (S-04) hiess sie „Spalte vom Board genommen." mit der Kurzform darunter, in
- * der Regelliste (S-11) „Anzeigeort geaendert." mit der Langform — und der
- * Rueckweg quittierte dort ein zweites Mal mit demselben Titel wie die
- * Handlung selbst. Wer „Rueckgaengig" drueckte, las also, was er schon
- * gelesen hatte, und konnte nicht erkennen, ob etwas geschehen war.
- *
- * Uebernommen wird die **Board-Fassung**: Sie sagt die Handlung („vom Board
- * genommen") statt der Feldaenderung („Anzeigeort geaendert"), und der
- * Rueckweg hat mit „wiederhergestellt" ein eigenes Wort.
- *
- * ## Warum Titel und Zeile aus **einer** Funktion kommen
- *
- * Sie sind zwei Haelften einer Aussage: Der Titel nennt die Handlung, die
- * Zeile nennt Namen und neuen Ort. Lagen sie als zwei Konstanten nebeneinander,
- * liefen sie beim naechsten Mal wieder auseinander — genau so ist W-14
- * entstanden. Ein Aufruf, ein Paar.
- *
- * ## Warum `board` und `both` denselben Titel tragen
- *
- * Der Titel spricht ueber die Fläche, die die beiden Bedienstellen umschalten:
- * das Board. `board` und `both` heissen beide „steht ab jetzt auf dem Board";
- * **wo genau**, sagt die Zeile darunter mit {@link POOL_PLACEMENT_SHORT}. Ein
- * dritter Titel fuer einen Uebergang, den keine der beiden Flaechen anbietet,
- * waere ein Wortlaut ohne Bedienstelle.
- */
-const POOL_PLACEMENT_TITLE: Readonly<Record<PoolPlacement, string>> = {
-  pool: "Spalte vom Board genommen.",
-  board: "Regel als Spalte aufgenommen.",
-  both: "Regel als Spalte aufgenommen.",
-};
-
-/** Der Titel des Rueckwegs. Ein eigenes Wort, damit „Rueckgaengig" sichtbar wirkt. */
-const POOL_PLACEMENT_RESTORED_TITLE = "Anzeigeort wiederhergestellt.";
-
-/**
- * Titel und Zeile der Meldung nach `PATCH /pools/{id}` mit neuem `placement`.
- *
- * `restored` ist wahr, wenn der Aufruf der **Rueckweg** ist — also der zweite
- * Aufruf, den „Rueckgaengig" ausloest. Er bekommt einen eigenen Titel und
- * seinerseits keinen Rueckweg mehr (das entscheidet die Aufrufstelle).
- *
- * Die Zeile sagt in beiden Faellen dasselbe: was die Handlung **nicht** tut.
- * Das ist der Grund, aus dem E-059 den Bestaetigungsdialog davor gestrichen
- * hat — die Regel bleibt vollstaendig, an den Todos aendert sich nichts.
+ * Title and line of the message after changing a rule's placement. `restored`
+ * is the undo call: own title, same line (what the action does not do, E-059).
  */
 export function poolPlacementMessage(
   name: ForeignText,
   placement: PoolPlacement,
   restored: boolean,
 ): { readonly title: string; readonly body: string } {
+  const text = labels();
   return {
-    title: restored ? POOL_PLACEMENT_RESTORED_TITLE : POOL_PLACEMENT_TITLE[placement],
-    body: `${quotedName(name)} — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+    title: restored ? text.poolPlacementRestoredTitle : text.poolPlacementTitle[placement],
+    body: text.poolPlacementBody(quotedName(name), text.poolPlacementShort[placement]),
   };
 }
 
-/* Erledigt-Kennzeichen — die drei Anzeigezustaende (A-2.5, E-023)      */
-
-/**
- * Was am Todo ueber „Erledigt" steht.
- *
- * Zwei der drei Werte stehen im Datenmodell (`todo.completed_at` gesetzt oder
- * nicht). Der dritte, `reopened`, steht **nirgends** und ist trotzdem noetig:
- * Hebt ein Timerstart das Kennzeichen auf (A-2.5, I-05), sieht die Zeile ohne
- * ihn hinterher aus, als waere sie nie erledigt gewesen — der Wechsel bliebe
- * unerklaert (T-005n, Abschnitt 1, Regel 1). Er lebt in der Sitzung
- * (`TimerContext.reactivated`) und endet, sobald der Benutzer das Kennzeichen
- * selbst anfasst.
- *
- * Die Regel aus dem Datenmodell gilt hier nicht — `reopened` ist kein
- * erfundener Datenwert, sondern ein Anzeigezustand, und er ist als solcher
- * benannt.
- */
-export type DoneFlagState = "open" | "done" | "reopened";
-
-/**
- * Die drei Beschriftungen, an genau einer Stelle.
- *
- * Bis T-045 standen sie dreimal getippt in `Kanban.tsx`, `DashboardScreen.tsx`
- * und `TimeScreen.tsx` — und in S-02 und S-03 gar nicht (Befund C-23).
- * Uneinheitlichkeit wiegt hier schwerer als durchgaengiges Fehlen: Wer den
- * Timer aus der Todo-Liste startet und auf dem Dashboard ein Etikett sieht,
- * das neben der Liste fehlt, haelt den Unterschied fuer eine Bedeutung.
- */
-export const DONE_FLAG_LABEL: Readonly<Record<DoneFlagState, string>> = {
-  open: "Offen",
-  done: "Erledigt",
-  reopened: "Erledigt aufgehoben",
-};
-
-/** Aus den beiden Wahrheiten der Anzeigezustand. `done` schlaegt `reopened`. */
+/** From the two truths the display state. `done` beats `reopened`. */
 export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagState {
   if (done) return "done";
   return reactivated ? "reopened" : "open";
 }
 
 /**
- * Der Titel der Meldung, mit der die Anwendung A-2.5 ausspricht (I-05).
- *
- * Er sagt beides in einem Satz: **was** die Anwendung getan hat, ohne zu
- * fragen (der Timer laeuft), und **was daraus folgt** (das Todo ist wieder
- * offen). Was danach in den Rumpf gehoert, ist der Bewegungssatz aus
- * `@takt/domain` — hier steht kein Wort davon.
- *
- * **Warum als Funktion und nicht getippt an der Aufrufstelle** (T-108, W-9):
- * Seit die Musterseite den Toast zeigt statt einer eigenen Hinweisflaeche,
- * gibt es zwei Stellen, die diesen Titel brauchen — `TimerContext` in der
- * Anwendung und Abschnitt 6 der Musterseite. Eine Musterseite, die den
- * erwarteten Wortlaut abschreibt, prueft nur sich selbst.
+ * Locked sentence SP-16. A function because the app (`TimerContext`) and the
+ * showcase both need it; a copied wording would only test itself.
  */
 export function reactivationTitle(todoTitle: ForeignText): string {
-  return `Timer gestartet. ${quotedName(todoTitle)} ist wieder offen.`;
+  return labels().reactivationTitle(quotedName(todoTitle));
 }
 
-/*
- * Hier stand bis T-094 `CARD_STAYS`:
- *
- *     „Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht."
- *
- * Der Satz ist **ersatzlos** entfallen (E-058 Absatz 2), und diese Notiz steht
- * an seiner Stelle, damit ihn niemand aus bester Absicht neu erfindet.
- *
- * Er war falsch. Er stammte aus der Zeit, in der eine Spalte nur an Tags hing;
- * seit E-055 fragt eine Regel auch nach „Erledigt" und nach dem Exportstatus,
- * und **beides** ändert ein Timerstart — das Kennzeichen fällt (A-2.5), die
- * erste abgeschlossene Buchung setzt „hat offene Buchungen". Die Karte bleibt
- * also gerade nicht zwingend, wo sie ist.
- *
- * Ersetzt wird er nicht durch einen zweiten Kartensatz, sondern durch eine
- * **Auskunft**: `POST /timer/start` liefert `poolMovement`, und
- * `poolMovementSentence` aus `@takt/domain` macht daraus den Satz — denselben,
- * den der Aufgabenbereich des Add-ins zeigt. Bewegt sich nichts, steht dort
- * nichts; eine Fläche ohne Inhalt wird weggelassen und nicht mit einer
- * Beruhigung gefüllt.
- *
- * Keine Beschriftung für diesen Satz in dieser Datei: Was aus der Domäne
- * kommt, wird hier nicht noch einmal getippt.
- */
+export function dayGroupMissingNote(groupSeconds: number): string {
+  return labels().dayGroupMissingNote(formatDuration(groupSeconds));
+}
 
-/* Die Achsen einer Regel (T-076, T-079)                                */
-
-/**
- * Wie viele der **erforderlichen** Tags zutreffen muessen (`pool.match_mode`).
- *
- * Der Wert gilt ausschliesslich fuer die erforderlichen Tags. Ausgeschlossene
- * Tags sind immer „keines davon", Status ist immer „einer von diesen" — beides
- * folgt aus dem Feld und ist keine Einstellung (T-076, Abschnitt 2).
- *
- * **Die Vorgabe ist `any` und bleibt es.** Jede Regel, die es heute gibt,
- * bedeutet „mindestens eines davon"; `pool.match_mode` haelt das seit Migration
- * 0001 je Regel einzeln fest. Wer die Vorgabe hier auf `all` stellt, deutet
- * keinen Bestand um — aber er legt neue Regeln anders an, als der Benutzer es
- * aus dem Bestand kennt.
- *
- * Der Wertebereich steht seit T-093 als `PoolMatchMode` in `@takt/domain`
- * (`tag.ts`) und wird oben importiert; die zweite Fassung an dieser Stelle ist
- * mit T-102 entfallen (R-1a, Befund 4).
- *
- * **„Alle" ist hier kein Wort mehr** (R-2, Sprache 2).
- *
- * Bis T-091 hiess der strengste Modus „Alle davon" — drei Zeilen unter einem
- * Neutralwert, der ebenfalls „Alle" heisst und das **Gegenteil** bedeutet:
- * „schraenkt nicht ein". Dasselbe Wort fuer „engt am meisten ein" und „engt gar
- * nicht ein", untereinander im selben Formular. Der Modus heisst deshalb
- * „Jedes der genannten"; der Neutralwert behaelt „Alle", weil er der Wert des
- * Vorbilds ist und an drei Achsen gleich lautet.
- */
-export const POOL_MATCH_MODE_LABEL: Readonly<Record<PoolMatchMode, string>> = {
-  any: "Mindestens eines davon",
-  all: "Jedes der genannten",
-};
-
-/** Dieselbe Aussage als Satzanfang vor der Tagliste einer Regelzusammenfassung. */
-export const POOL_MATCH_MODE_PREFIX: Readonly<Record<PoolMatchMode, string>> = {
-  any: "Mindestens eines von",
-  all: "Jedes von",
-};
-
-export const POOL_MATCH_MODE_HINT: Readonly<Record<PoolMatchMode, string>> = {
-  any: "Ein Todo genügt schon mit einem der genannten Tags.",
-  all: "Ein Todo muss jeden genannten Tag tragen. Das trifft weniger als „mindestens eines davon“.",
-};
-
-/**
- * Der Neutralwert der **Status**achse (H-3 aus R-2).
- *
- * Wortgleich mit `POOL_COMPLETION_LABEL.any`, und trotzdem eine eigene
- * Konstante: Bis T-091 holte sich der Hilfssatz der Statusachse sein Wort aus
- * der **Erledigt**-Achse. Wer dort eines Tages „Beliebig" schreibt, aendert
- * stillschweigend eine Achse mit, die er gar nicht angefasst hat. Zwei Achsen,
- * zwei Konstanten — auch wenn heute dasselbe darin steht.
- */
-export const POOL_STATUS_LABEL: Readonly<Record<"any", string>> = {
-  any: "Alle",
-};
-
-/**
- * Die Erledigt-Achse einer Regel (`pool.completion`).
- *
- * Nicht zu verwechseln mit „Erledigte einblenden": Diese Achse entscheidet
- * ueber **Zugehoerigkeit**, jener Schalter ueber **Sichtbarkeit**. Steht die
- * Achse neutral, entscheidet wie bisher der Schalter; sagt sie etwas, hat sie
- * das letzte Wort — sonst waere eine Spalte „Erledigt" dauerhaft leer.
- */
-export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string>> = {
-  any: "Alle",
-  done: "Erledigt",
-  open: "Unerledigt",
-};
-
-/**
- * Der Exportstatus-Achse einer Regel (`pool.export_state`).
- *
- * ## Die Woerter kommen aus E-059, nicht aus dem Datenmodell
- *
- * Der Wert heisst in der Datenbank weiter `open` beziehungsweise `exported`;
- * in der Oberflaeche heisst er **„Noch nicht abgerechnet"** und
- * **„Abgerechnet"**. Der Grund ist kein Geschmack: „Offen" ist auf der Karte
- * bereits das Gegenteil von „Erledigt" ({@link DONE_FLAG_LABEL}), und
- * dasselbe Wort im selben Dialog ein zweites Mal als Gegenteil von
- * „Exportiert" zu verwenden ist ein Fehler, den der Benutzer ausbadet.
- *
- * Verworfen wurden in T-091 zwei naheliegende Ersatzwoerter: „Nicht
- * exportiert" waere **falsch** — die Achse fragt „hat mindestens eine offene
- * Buchung" und nicht „hat keine exportierte" —, und „Mit offener Buchung" war
- * bereits die zweite Fassung derselben Zeichenkette in `lib/poolRule.ts`. Die
- * gibt es seit T-094 nicht mehr: Die Regelvorschau nimmt genau diese
- * Beschriftung.
- *
- * **`exported` heisst „hat mindestens eine exportierte Buchung"** und nicht
- * „vollstaendig abgerechnet" — der Exportstatus gehoert der Buchung, nicht dem
- * Todo (E-032). Ein Todo mit einer offenen und einer exportierten Buchung
- * erfuellt beide Werte und steht in beiden Spalten. Ein Todo ohne jede Buchung
- * erfuellt keinen von beiden.
- *
- * **Und `exported` schliesst die Ausbuchungen nach E-047 mit ein** (S-1 aus
- * R-2). Eine Buchung, die der Benutzer ausdruecklich **nicht** abrechnen
- * wollte, traegt denselben Statuswert `exported` — zweiwertig bleibt
- * zweiwertig (E-032) —, und die Regelachse fragt genau diesen Wert ab. Eine
- * vierte Option waere deshalb falsch; gesagt werden muss es trotzdem, sonst
- * enthaelt eine Spalte „schon abgerechnet" genau die Zeit, die nie abgerechnet
- * wurde. Der Satz dazu steht in {@link POOL_EXPORT_NOT_BILLED_HINT} und an der
- * Stelle, an der gewaehlt wird.
- */
-export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
-  any: "Alle",
-  open: "Noch nicht abgerechnet",
-  exported: "Abgerechnet",
-};
-
-/**
- * Was „Abgerechnet" ausserdem mitnimmt (E-047, E-050, S-1 aus R-2).
- *
- * Steht an der Achse und nicht in einer Fussnote: Wer eine Spalte „schon
- * abgerechnet" baut, soll vor dem Speichern lesen, dass die ausgebuchten
- * Buchungen darin stehen — sie sind die einzige Auswertung, fuer die E-047
- * ueberhaupt eingefuehrt wurde.
- *
- * **Seit E-059 muss dieser Satz mehr leisten als vorher.** Solange die Achse
- * „Exportiert" hiess, war der Zusatz eine Praezisierung. Jetzt heisst sie
- * „Abgerechnet", und eine Buchung, die als **„Nicht abgerechnet"** ausgebucht
- * wurde, steht trotzdem darin — zwei Woerter, die sich zu widersprechen
- * scheinen und beide richtig sind, weil das eine den Anzeigezustand einer
- * Buchung meint (E-050) und das andere den Wert `export_state = 'exported'`,
- * den beide teilen (E-032, zweiwertig). Der Satz spricht den Widerspruch
- * deshalb aus, statt ihn zu ueberspielen.
- */
-export const POOL_EXPORT_NOT_BILLED_HINT =
-  "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
-
-/**
- * Derselbe Widerspruch, kurz — an der **Lese**flaeche (W-7 aus R-2a).
- *
- * {@link POOL_EXPORT_NOT_BILLED_HINT} steht dort, wo gewaehlt wird: im
- * Regelformular, neben dem Optionsknopf. Wer eine Spalte „Abgerechnet" erbt
- * oder sie nur ansieht, kommt an dieser Stelle nie vorbei — und liest am
- * Spaltenkopf „Abgerechnet", waehrend an einer Buchung darin „Nicht
- * abgerechnet" steht. Zwei fast gleiche Woerter mit entgegengesetzter Wirkung,
- * und beide richtig: Das eine ist der Anzeigezustand einer Buchung (E-050), das
- * andere der Wert `export_state = 'exported'`, den beide teilen (E-032).
- *
- * Deshalb ein zweiter, kuerzerer Satz und nicht derselbe: An der Leseflaeche
- * ist Platz fuer eine Zeile, nicht fuer drei, und die Frage lautet dort nicht
- * „was waehle ich", sondern „warum steht das hier". Umbenannt wird nichts —
- * E-059 ist entschieden.
- */
-export const POOL_EXPORT_EXPORTED_NOTE =
-  "„Abgerechnet“ meint den Exportstatus der Buchungen: Auch eine ausgebuchte Buchung, an der „Nicht abgerechnet“ steht, trägt ihn und zählt hier mit.";
-
-/**
- * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.
- *
- * „Alle" ist die haeufigste Fehllesart dieses Formulars: Es heisst **nicht**
- * „trifft alles", sondern „diese Achse laesst alles durch, was die anderen
- * uebrig lassen". Stehen alle Achsen neutral, bleibt nichts uebrig, das eine
- * andere Achse ausgewaehlt haette — und die Regel trifft nichts (A-3.4).
- */
-export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";
-
-/* Was eine Spalte ist — die eine Fassung (S-2 aus R-2, E-054, E-055)   */
-
-/**
- * Bis T-091 stand an elf Oberflaechenstellen „eine Regel **ueber Tags**", und
- * an mehreren daneben „welche Karte wo steht, entscheiden die Tags des Todos".
- *
- * Das war die richtige Erklaerung fuer E-054 und mit E-055 zur halben
- * geworden: Eine Regel hat seither **fuenf** Achsen, und drei davon — Status,
- * „Erledigt", Exportstatus — aendern sich, ohne dass jemand ein Tag anfasst.
- * Wer den alten Satz gelesen hat, sucht die nach einem Timerstart verschwundene
- * Karte bei den Tags. Dort ist sie nicht.
- *
- * Seit T-181 (ST-05) stehen es **zwei** Fassungen an **zwei** Stellen, und
- * das ist die ganze Aufklaerung im Produkt:
- *
- *  - {@link RULE_IS_A_RULE} — die **Definition**, im Einrichtungsdialog des
- *    Boards. Dort entsteht eine Spalte; dorthin gehoert, was eine ist.
- *  - {@link RULE_WHAT_MOVES_A_CARD} — das **Verhalten**, als `lead` des
- *    Boards. Dort wird beobachtet, dass sich nichts ziehen laesst.
- *
- * Die Kurzfassung `RULE_NOT_A_PLACE` ist mit T-181 ersatzlos entfallen: Sie
- * hatte keinen Aufrufer mehr, und eine Kurzfassung ist die Einladung, den
- * Satz wieder ueberall hinzuschreiben, wo der Platz fuer die lange fehlt
- * (Auflage Z-04 aus T-177). Wo der Platz fehlt, steht die Regelzeile —
- * `RuleSummary` zeigt unter jedem Spaltenkopf die Achsen **dieser** Spalte
- * und beantwortet damit die haeufigere Frage: nicht „was ist eine Spalte",
- * sondern „warum steht **diese** Karte **hier**".
- */
-export const RULE_IS_A_RULE =
-  "Eine Spalte ist eine Regel — über Tags, Status, „Erledigt“ und den Exportstatus.";
-
-/**
- * Was eine Karte bewegt — die Nachfolge von „das entscheiden die Tags".
- *
- * Sie nennt die Bewegung und ihren Ausloeser, ohne eine der fuenf Achsen
- * hervorzuheben: Was sich am Todo aendert, aendert seine Zugehoerigkeit.
- */
-export const RULE_WHAT_MOVES_A_CARD =
-  "Welche Karte wo steht, entscheidet die Regel — nicht die Maus. Eine Karte wandert, wenn sich am Todo etwas ändert, das die Regel abfragt.";
-
-/**
- * Der Hinweis unter dem Leistungsfeld — an **beiden** Buchungsflaechen (B-4
- * aus T-116, E-034).
- *
- * Eine Buchung ohne Leistung ist erfasst, aber ihre Tagesgruppe geht nach
- * E-034 nicht in den Export. Der Stoppdialog sagt das seit jeher; die Buchung
- * von Hand sagte es bis T-118 nicht — und sie ist der Weg, auf dem Zeit
- * **nachgetragen** wird, also der, auf dem eine Leistung am ehesten vergessen
- * wird.
- *
- * Der Satz steht hier und nicht zweimal in den Ansichten: Zwei Abschriften
- * desselben Hinweises laufen auseinander, sobald einer von beiden gepflegt
- * wird (Regel 8 des Designsystems, Befund C-24).
- */
-export const BILLING_NOTE_MAY_BE_EMPTY =
-  "Die Leistung darf leer bleiben. Dann ist die Buchung erfasst, aber die Tagesgruppe dieses Todos geht ohne Text nicht in den Export — die Exportvorschau sagt es und bietet an, den Text nachzutragen.";
+export function dayGroupPreviewFailed(serviceMessage: string): string {
+  return labels().dayGroupPreviewFailed(serviceMessage);
+}

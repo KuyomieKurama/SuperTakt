@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "../../lib/cx";
+import { labels } from "../../lib/labels";
 
 /**
  * Takt — die Kopfzeile, die jede Ansicht trägt.
@@ -70,7 +71,7 @@ export function ScreenHeader({ title, lead, actions, refreshing, children }: Scr
 export function RefreshHint({ active }: { readonly active: boolean }) {
   return (
     <span className={cx("refresh-hint", active && "refresh-hint--active")} aria-hidden={!active}>
-      {active ? "Wird aktualisiert …" : ""}
+      {active ? labels().refreshing : ""}
     </span>
   );
 }

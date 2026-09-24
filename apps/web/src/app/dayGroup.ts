@@ -1,4 +1,4 @@
-import { errorMessage } from "../api/client";
+import { errorCode, errorMessage, isServiceError } from "../api/client";
 import { listTimeEntries } from "../features/bookings/api";
 import { previewExport } from "../features/export/api";
 import type { CalendarDay, ExportNotExportableReason, ExportPreview, Id } from "../api/types";
@@ -36,6 +36,12 @@ export interface DayGroupInsight {
    * Anwendung nicht wusste.
    */
   readonly previewProblem: string | null;
+  /**
+   * The service's error key next to `previewProblem`, or `null` without one
+   * (transport failure, or no problem at all). Kept for branching (O-JT); the
+   * message alone would force callers to guess the case from wording.
+   */
+  readonly previewProblemCode: string | null;
 }
 
 /**
@@ -67,6 +73,7 @@ export async function loadDayGroupInsight(
         quarters: null,
         blockedReason: skipped.reason,
         previewProblem: null,
+        previewProblemCode: null,
       };
     }
     return {
@@ -75,11 +82,15 @@ export async function loadDayGroupInsight(
       quarters: preview.totalQuarters,
       blockedReason: null,
       previewProblem: null,
+      previewProblemCode: null,
     };
   } catch (cause) {
     /*
-     * Ohne Vorlage oder ohne Exportordner gibt es keine Vorschau. Die erfasste
-     * Zeit stimmt trotzdem — nur der gerundete Wert fehlt.
+     * The preview uses the saved active template, or the built-in one when none
+     * is chosen (`resolveTemplate` in the service, A-8.7); the export folder is
+     * not involved. It fails when the saved template no longer exists
+     * (`not_found`), its definition is invalid, or the service does not answer.
+     * The recorded time is still right — only the rounded value is missing.
      *
      * Bis T-045 wurde der Grund hier verschluckt und das Ergebnis sah aus wie
      * die Antwort „diese Gruppe hat keinen Exportwert". Der Aufrufer konnte
@@ -93,6 +104,7 @@ export async function loadDayGroupInsight(
       quarters: null,
       blockedReason: null,
       previewProblem: errorMessage(cause),
+      previewProblemCode: errorCode(cause),
     };
   }
 }
@@ -112,7 +124,7 @@ export async function loadDayGroupInsight(
 export type OpenPreviewOutcome =
   | { readonly kind: "none" }
   | { readonly kind: "ready"; readonly preview: ExportPreview }
-  | { readonly kind: "failed"; readonly message: string };
+  | { readonly kind: "failed"; readonly message: string; readonly fromService: boolean; readonly code: string | null };
 
 /**
  * Eine Vorschau ueber genau die uebergebenen Buchungen — mit demselben Plan,
@@ -127,6 +139,6 @@ export async function previewOpenEntries(ids: readonly Id[]): Promise<OpenPrevie
   try {
     return { kind: "ready", preview: await previewExport(null, ids) };
   } catch (cause) {
-    return { kind: "failed", message: errorMessage(cause) };
+    return { kind: "failed", message: errorMessage(cause), fromService: isServiceError(cause), code: errorCode(cause) };
   }
 }

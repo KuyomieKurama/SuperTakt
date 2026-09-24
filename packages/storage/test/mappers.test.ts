@@ -193,7 +193,7 @@ describe('toTimeEntry — wirft auf eine laufende Buchung (kein stiller Rückfal
     updated_at: 'b',
   };
 
-  it('übersetzt eine abgeschlossene Buchung vollständig', () => {
+  it('übersetzt eine abgeschlossene Buchung vollständig, inklusive todoNoExport (F-8, E-124 Punkt 6)', () => {
     expect(toTimeEntry(base)).toEqual({
       id: 'te-1',
       todoId: 'todo-1',
@@ -204,6 +204,7 @@ describe('toTimeEntry — wirft auf eine laufende Buchung (kein stiller Rückfal
       exportStatus: 'open',
       exportCount: 0,
       source: 'timer',
+      todoNoExport: false,
       createdAt: 'a',
       updatedAt: 'b',
     });
@@ -221,6 +222,12 @@ describe('toTimeEntry — wirft auf eine laufende Buchung (kein stiller Rückfal
   it('source "manual" bleibt "manual", jeder andere Wert wird zu "timer"', () => {
     expect(toTimeEntry({ ...base, source: 'manual' }).source).toBe('manual');
     expect(toTimeEntry({ ...base, source: 'irgendwas' }).source).toBe('timer');
+  });
+
+  it('todo_no_export: 1 wird todoNoExport: true; fehlend oder 0 bleibt false (F-8)', () => {
+    expect(toTimeEntry({ ...base, todo_no_export: 1 }).todoNoExport).toBe(true);
+    expect(toTimeEntry({ ...base, todo_no_export: 0 }).todoNoExport).toBe(false);
+    expect(toTimeEntry(base).todoNoExport).toBe(false);
   });
 });
 
@@ -341,6 +348,22 @@ describe('toAppSettings', () => {
     });
     expect(settings.activeExportTemplateId).toBeNull();
     expect(settings.exportDirectory).toBe('/exporte');
+  });
+
+  it('liest die Bewegungsstärke und fällt bei alten oder fehlerhaften Zeilen auf subtil zurück', () => {
+    const base: SqlRow = {
+      export_directory: null,
+      active_export_template_id: null,
+      rounding_mode: 'up',
+      locale: 'de-DE',
+      idle_detection_enabled: 1,
+      idle_threshold_minutes: 5,
+      theme: 'system',
+      updated_at: 'a',
+    };
+    expect(toAppSettings({ ...base, motion_intensity: 'expressive' }).motionIntensity).toBe('expressive');
+    expect(toAppSettings(base).motionIntensity).toBe('subtle');
+    expect(toAppSettings({ ...base, motion_intensity: 'unbekannt' }).motionIntensity).toBe('subtle');
   });
 });
 

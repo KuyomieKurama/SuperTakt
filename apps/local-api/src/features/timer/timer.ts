@@ -28,7 +28,7 @@ import type {
   Timestamp,
   TodoId,
 } from '@takt/domain';
-import { decideOrphanedTimer, err, ok, taktError } from '@takt/domain';
+import { decideOrphanedTimer, err, exceedsMaximumDuration, isExactTimestamp, ok, taktError, type TaktError } from '@takt/domain';
 import type { UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
@@ -157,8 +157,53 @@ import { movementOfBooking, movementOfStart, presenceBeforeBooking } from './mov
  */
 export async function captureTimerRecovery(context: AppContext): Promise<void> {
   if (context.timerRecovery !== undefined) {
-    context.timerRecovery.entryId = await context.transactions.inTransaction(async (unit) => (await unit.timer.running())?.id ?? null);
+    const observed = await context.transactions.inTransaction(observeRecovery);
+    context.timerRecovery.entryId = observed.entryId;
+    context.timerRecovery.idleSessionId = observed.idleSessionId;
   }
+}
+
+/**
+ * What counts as "found" right now: the open entry and the open idle phase (E-036, B-5).
+ *
+ * Asked at service start and, inside the same transaction as `replaceAll`, after an archive
+ * import — the two ways an open entry or phase can arrive without this run having written it.
+ */
+export async function observeRecovery(
+  unit: UnitOfWork,
+): Promise<{ entryId: TimeEntryId | null; idleSessionId: TimeEntryId | null }> {
+  const running = await unit.timer.running();
+  const idle = await unit.idle.pending();
+  return {
+    entryId: running?.id ?? null,
+    idleSessionId: idle !== null && idle.returnedAt === null ? idle.id : null,
+  };
+}
+
+/**
+ * Checks an end the user named for an open entry (A-28.6): exact, after the start, not after
+ * now, and at most 24 hours long. `null` when it passes.
+ */
+function namedEndProblem(running: RunningTimeEntry, endedAt: Timestamp, wallClock: Timestamp): TaktError | null {
+  if (
+    !isExactTimestamp(endedAt) ||
+    Date.parse(endedAt) <= Date.parse(running.startedAt) ||
+    Date.parse(endedAt) > Date.parse(wallClock)
+  ) {
+    return {
+      code: 'validation_error',
+      message: 'Das Ende muss nach dem Beginn und spätestens jetzt liegen.',
+      details: [{ field: 'endedAt', code: 'invalid_end', message: 'Das Ende muss nach dem Beginn und spätestens jetzt liegen.' }],
+    };
+  }
+  if (exceedsMaximumDuration(running.startedAt, endedAt)) {
+    return {
+      code: 'time_entry_too_long',
+      message: 'Eine Zeitbuchung dauert höchstens 24 Stunden.',
+      details: [{ field: 'endedAt', code: 'time_entry_too_long', message: 'Eine Zeitbuchung dauert höchstens 24 Stunden.' }],
+    };
+  }
+  return null;
 }
 
 /**
@@ -471,7 +516,10 @@ export async function startTimer(
     const result = await unit.timer.start(todoId, closedBeforeStart ? false : stopRunning, timestamp);
     if (!result.ok) {
       if (closedBeforeStart) {
-        throw new Error(`Der Timerstart schlug fehl, nachdem die vorgefundene Buchung geschlossen war (${result.error.code}).`);
+        // The key travels as `code`, never in the message: `app.onError` logs only the code (T-394).
+        throw Object.assign(new Error('Timer start failed after the found entry was closed.'), {
+          code: result.error.code.toUpperCase(),
+        });
       }
       return err(result.error);
     }
@@ -611,11 +659,13 @@ export type ResolveOrphanedTimerResult = StopOutcome<'timer_too_short' | 'orphan
 export async function stopTimer(
   context: AppContext,
   note: string,
+  /** A-28.6: the real end, named by the user when the timer ran for more than 24 hours. */
+  endedAt?: Timestamp,
 ): Promise<UseCaseResult<StopTimerResult>> {
   const timestamp = now(context);
   return context.transactions.inTransaction(async (unit) => {
     const idle = await unit.idle.pending();
-    if (idle !== null && idle.returnedAt === null) return err(taktError('conflict', 'Bestätigen Sie zuerst Ihre Rückkehr. Der Timer läuft weiter.'));
+    if (idle !== null) return err(taktError('conflict', 'Ordnen Sie zuerst die inaktive Zeit zu. Der Timer ist bis dahin angehalten.'));
 
     /*
      * Der Bestand **vor** dem Stopp (E-058 Punkt 6).
@@ -628,6 +678,10 @@ export async function stopTimer(
      * bildet `timer.stop` gleich darunter, an genau einer Stelle.
      */
     const running = await unit.timer.running();
+    if (running !== null && endedAt !== undefined) {
+      const problem = namedEndProblem(running, endedAt, timestamp);
+      if (problem !== null) return err(problem);
+    }
     // Todo und Buchungslage in **einem** Wert: Getrennt gehalten müßte die
     // Aufrufstelle unten zweimal auf `null` prüfen, und `tsc` könnte den
     // Zusammenhang zwischen beiden Prüfungen nicht sehen.
@@ -654,7 +708,7 @@ export async function stopTimer(
      * Schreibstelle, nicht die Umgebung; was hier steht, muß dort sichtbar
      * sein.
      */
-    const result = await unit.timer.stop(note, running === null ? timestamp : await bookingEndOf(context, unit, running, timestamp));
+    const result = await unit.timer.stop(note, running === null ? timestamp : await bookingEndOf(context, unit, running, endedAt ?? timestamp));
     if (!result.ok) return err(result.error);
     if (result.value.kind === 'discarded') {
       return ok({
@@ -781,6 +835,8 @@ export type OrphanResolution = 'book_until_heartbeat' | 'discard';
 export async function resolveOrphanedTimer(
   context: AppContext,
   resolution: OrphanResolution,
+  /** A-28.6, E-124 point 3: an earlier end when the heartbeat lies more than 24 hours after the start. */
+  endedAt?: Timestamp,
 ): Promise<UseCaseResult<ResolveOrphanedTimerResult>> {
   const timestamp = now(context);
 
@@ -797,11 +853,15 @@ export async function resolveOrphanedTimer(
     // ein Lebenszeichen aus der Zukunft ungeprüft in ein `ended_at` schreiben —
     // gemessen 251 613 021 599 s aus einem Archiv mit `9999-12-31`. Der Deckel
     // liegt in `decideOrphanedTimer`; hier steht nur, wer die Uhr liest.
+    if (endedAt !== undefined) {
+      const problem = namedEndProblem(orphan.running, endedAt, timestamp);
+      if (problem !== null) return err(problem);
+    }
     const decision = decideOrphanedTimer({
       running: orphan.running,
       heartbeatAt: orphan.heartbeatAt,
       resolution,
-      now: timestamp,
+      now: endedAt ?? timestamp,
     });
 
     if (decision.kind === 'discarded') {

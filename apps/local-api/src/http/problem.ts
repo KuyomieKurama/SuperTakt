@@ -23,9 +23,13 @@ const STATUS: Readonly<Record<TaktErrorCode, ContentfulStatusCode>> = Object.fre
   name_conflict: 409,
   timer_already_running: 409,
   timer_not_running: 409,
+  // A-28.6: the request was well-formed, but the running entry needs a named end.
+  timer_stop_end_required: 409,
   time_entry_locked: 409,
   export_status_unchanged: 409,
   export_status_not_settable: 409,
+  // A-26.3: switching NoExport off makes the booking billable again, so this is a state conflict.
+  time_entry_no_export: 409,
   export_nothing_to_do: 409,
   builtin_template_immutable: 409,
   status_in_use: 409,
@@ -38,6 +42,7 @@ const STATUS: Readonly<Record<TaktErrorCode, ContentfulStatusCode>> = Object.fre
 
   // Gelesen, aber fachlich unzulässig (422).
   timer_too_short: 422,
+  time_entry_too_long: 422,
   export_template_invalid: 422,
   export_source_forbidden: 422,
   export_directory_missing: 422,

@@ -137,7 +137,7 @@ export function createExportTemplatePort(conn: SqlConnection, ids: IdSource): Ex
  */
 export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
   const COLUMNS =
-    'export_directory, active_export_template_id, rounding_mode, locale, theme, design_theme, density, prompt_on_timer_stop, idle_detection_enabled, idle_keep_timer_running, idle_threshold_minutes, skipped_version, updated_at';
+    'export_directory, active_export_template_id, rounding_mode, locale, theme, design_theme, density, motion_intensity, prompt_on_timer_stop, idle_detection_enabled, idle_keep_timer_running, idle_threshold_minutes, skipped_version, version_check_enabled, ui_language, updated_at';
 
   const read = (): AppSettings => {
     const row = conn.prepare(`SELECT ${COLUMNS} FROM app_setting WHERE id = 1`).get();
@@ -196,6 +196,10 @@ export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
           sets.push('density = ?');
           params.push(input.density);
         }
+        if (input.motionIntensity !== undefined) {
+          sets.push('motion_intensity = ?');
+          params.push(input.motionIntensity);
+        }
         if (input.theme !== undefined) {
           sets.push('theme = ?');
           params.push(input.theme);
@@ -212,6 +216,14 @@ export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
         if (input.skippedVersion !== undefined) {
           sets.push('skipped_version = ?');
           params.push(input.skippedVersion);
+        }
+        if (input.versionCheckEnabled !== undefined) {
+          sets.push('version_check_enabled = ?');
+          params.push(input.versionCheckEnabled ? 1 : 0);
+        }
+        if (input.uiLanguage !== undefined) {
+          sets.push('ui_language = ?');
+          params.push(input.uiLanguage);
         }
         sets.push('updated_at = ?');
         params.push(input.now);

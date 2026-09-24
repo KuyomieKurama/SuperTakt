@@ -74,6 +74,15 @@ function verifyStage(dir) {
     );
   }
 
+  // A-28.11: the copy filter below is the only thing keeping source maps out, so check its result.
+  const sourceMaps = readdirSync(dir, { recursive: true }).filter((name) => String(name).endsWith('.map'));
+  if (sourceMaps.length > 0) {
+    fail(
+      `Im bereitgestellten Aufgabenbereich liegen Quellkarten (A-28.11):\n` +
+        sourceMaps.map((name) => `  - ${name}`).join('\n'),
+    );
+  }
+
   return { files: countFiles(dir), referenced: referenced.length };
 }
 
@@ -109,7 +118,9 @@ export function stageTaskpane({ target, build = true }) {
 
   rmSync(target, { recursive: true, force: true });
   mkdirSync(dirname(target), { recursive: true });
-  cpSync(addinDist, target, { recursive: true });
+  // Source maps stay out of the package (A-28.11, E-125 point 2); `sourcemap: 'hidden'`
+  // still writes them next to the bundle.
+  cpSync(addinDist, target, { recursive: true, filter: (source) => !source.endsWith('.map') });
 
   const { files, referenced } = verifyStage(target);
   note(

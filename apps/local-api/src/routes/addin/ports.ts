@@ -21,7 +21,8 @@ import type { EmailAttachmentIntake } from '../../features/todos/email-attachmen
  * diesen Typ ohne Zutun.
  */
 export interface AddinUnit {
-  readonly todos: Pick<TodoPort, 'load' | 'findByCallNumber' | 'create' | 'clearDone'>;
+  // No `clearDone` and no time-entry `create`: the add-in token changes no done flag and books no time (A-10.12, E-120).
+  readonly todos: Pick<TodoPort, 'load' | 'findByCallNumber' | 'create'>;
   readonly folders: Pick<TagFolderPort, 'loadTree'>;
   /**
    * `findByKey` und `create` kamen mit T-061 dazu.
@@ -38,14 +39,11 @@ export interface AddinUnit {
    * `listInFolder` oder `setOnTodo` für fremde Todos.
    */
   readonly tags: Pick<TagPort, 'findByKey' | 'create'>;
-  /**
-   * Die Auflösung der Pool-Regeln braucht die Buchungsroute, und die
-   * Trefferbeschreibung des Duplikatfalls liest sie mit.
-   */
-  readonly pools: Pick<PoolPort, 'list' | 'resolveAxes'>;
+  // Only the list for the task pane context; a match carries no pool movement (E-125 point 1).
+  readonly pools: Pick<PoolPort, 'list'>;
   readonly statuses: Pick<TodoStatusPort, 'list' | 'defaultStatus'>;
   readonly defaultTags: Pick<DefaultTagPort, 'list'>;
-  readonly timeEntries: Pick<TimeEntryPort, 'create' | 'sumSeconds'>;
+  readonly timeEntries: Pick<TimeEntryPort, 'sumSeconds'>;
 }
 
 /**

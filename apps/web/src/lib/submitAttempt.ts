@@ -59,3 +59,17 @@ export const SubmitAttemptContext = createContext(0);
 export function useSubmitAttempt(): number {
   return useContext(SubmitAttemptContext);
 }
+
+/**
+ * Whether the form dialog currently shows its `submitRefusal`.
+ *
+ * A field hint that repeats the refusal must yield while it stands
+ * (docs/design/textbestand.md 13.7, O-KH). The condition combines the lock
+ * and the attempt counter, and only `FormDialog` knows both, so it hands the
+ * result down instead of letting each caller rebuild a second condition.
+ */
+export const SubmitRefusalShownContext = createContext(false);
+
+export function useSubmitRefusalShown(): boolean {
+  return useContext(SubmitRefusalShownContext);
+}

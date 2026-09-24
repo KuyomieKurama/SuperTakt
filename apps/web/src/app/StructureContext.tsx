@@ -17,6 +17,7 @@ import type {
 import { flatFolders } from "../lib/folderPaths";
 import type { RuleLookup } from "../lib/poolRule";
 import { useAsync, type AsyncState } from "./useAsync";
+import { appTexts } from "./texts";
 
 /**
  * Takt — der Aufbau, den fast jede Ansicht braucht.
@@ -86,6 +87,8 @@ export interface Structure {
   readonly windowsUser: ForeignText;
   /** Wo der Bestand liegt (E-018, R-13). `null` im Arbeitsspeicher. */
   readonly databasePath: string | null;
+  /** A-28.8: data files more open than `0600`; `null` is "not measurable", not a finding. */
+  readonly databaseFilesTooPermissive: number | null;
 }
 
 export interface StructureApi {
@@ -124,7 +127,7 @@ const StructureContext = createContext<StructureApi | null>(null);
 export function useStructure(): StructureApi {
   const api = useContext(StructureContext);
   if (api === null) {
-    throw new Error("useStructure steht nur innerhalb von StructureProvider zur Verfügung.");
+    throw new Error("useStructure is only available inside StructureProvider.");
   }
   return api;
 }
@@ -172,6 +175,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
       // Dienst nennt keinen Namen" ist ein eigener Zustand und keine Lücke.
       windowsUser: view.windowsUser ?? "",
       databasePath: view.databasePath ?? null,
+      databaseFilesTooPermissive: view.databaseFilesTooPermissive ?? null,
     };
   }, []);
 
@@ -205,7 +209,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   const ruleName = useCallback((id: Id) => ruleIndex.get(id), [ruleIndex]);
 
   const statusName = useCallback(
-    (id: Id) => statusIndex.get(id) ?? "Unbekannter Status",
+    (id: Id) => statusIndex.get(id) ?? appTexts().unknownStatus,
     [statusIndex],
   );
 

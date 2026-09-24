@@ -10,13 +10,14 @@ import { formatDuration } from "../../lib/format";
 import {
   axesOf,
   describeRule,
-  describeRuleReach,
+  describeStoredRuleReach,
   emptyFolderNames,
   type RuleLookup,
   type RuleReach,
 } from "../../lib/poolRule";
 import type { BoardColumnView } from "./api";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "./Kanban";
+import { boardTexts } from "./texts";
 
 /**
  * Takt — **eine** Spalte des Boards und die Karten darin (A-5.1, A-5.3 bis
@@ -38,6 +39,13 @@ import { KanbanCard, KanbanColumn, type KanbanCardData } from "./Kanban";
 
 interface BoardColumnProps {
   readonly priorities?: readonly { id: string; name: string; weight: number }[];
+  /**
+   * A priority filter is active (A-27.3). An empty column then does not mean "no todo meets
+   * the rule" — the filter may hide them — and the empty state says so (E-133 point 4).
+   */
+  readonly priorityFiltered?: boolean;
+  /** Clears the priority filter; offered by the filtered empty state. */
+  readonly onClearPriorityFilter?: () => void;
   readonly view: BoardColumnView;
   /**
    * Spaltenname je Kennung — **fremder Text** (O-AT, T-133). Bis dahin
@@ -71,6 +79,8 @@ interface BoardColumnProps {
 
 export function BoardColumn({
   priorities = [],
+  priorityFiltered = false,
+  onClearPriorityFilter,
   view,
   columnName,
   appearances,
@@ -107,7 +117,7 @@ export function BoardColumn({
    * den der Leerzustand nennt, muss derselbe sein, den der Spaltenkopf als
    * leer markiert.
    */
-  const reach = describeRuleReach(description, column.resolved);
+  const reach = describeStoredRuleReach(description, column.resolved);
 
   return (
     <KanbanColumn
@@ -119,7 +129,7 @@ export function BoardColumn({
         <RuleSummary
           description={description}
           reach={reach}
-          emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+          emptyText={boardTexts().ruleEmpty}
         />
       }
       entries={entries}
@@ -127,11 +137,16 @@ export function BoardColumn({
         ? {}
         : {
             onAdd,
-            addLabel: `Todo in ${quotedName(column.name)} anlegen — mit den Tags dieser Regel`,
+            addLabel: boardTexts().addInNamedColumn(quotedName(column.name)),
           })}
     >
       {view.todos.length === 0 ? (
-        <BoardColumnEmpty reach={reach} onEditRule={onEditRule} onOpenTags={() => navigate("settings", undefined, { bereich: "tags" })} />
+        <BoardColumnEmpty
+          reach={reach}
+          onEditRule={onEditRule}
+          onOpenTags={() => navigate("settings", undefined, { bereich: "tags" })}
+          {...(priorityFiltered && onClearPriorityFilter !== undefined ? { onClearPriorityFilter } : {})}
+        />
       ) : (
         view.todos.map((todo) => {
           const others = (appearances.get(todo.id) ?? [])
@@ -150,7 +165,7 @@ export function BoardColumn({
                 isTimerRunning(todo),
                 isReactivated(todo),
                 others,
-                priorities.find(priority => priority.id === todo.priorityId)?.name,
+                priorities.find(priority => priority.id === todo.priorityId),
               )}
               entries={cardMenu(todo, others.length > 0, highlighted === todo.id, {
                 open: () => onOpenTodo(todo),
@@ -216,25 +231,29 @@ export function BoardColumnEmpty({
   reach,
   onEditRule,
   onOpenTags,
+  onClearPriorityFilter,
 }: {
   readonly reach: RuleReach;
   readonly onEditRule: () => void;
+  /** Set while a priority filter is active: the empty column is then the filter's doing. */
+  readonly onClearPriorityFilter?: () => void;
   /**
    * Zu den Tags — der Ort, an dem der leere Ordner gefüllt wird. Freiwillig,
    * weil die Musterseite keine Navigation hat.
    */
   readonly onOpenTags?: () => void;
 }) {
+  const text = boardTexts();
   if (reach.kind === "no-condition") {
     return (
       <EmptyState
         compact
         icon="alert-triangle"
-        title="Diese Spalte hat noch keine Bedingung"
-        description="Sie bleibt leer, bis eine dazukommt — eine Regel ohne Bedingung trifft nichts, nicht alles. Nennen Sie einen Tag, einen Ordner, einen Status, „Erledigt“ oder den Exportstatus, dann füllt sie sich von selbst."
+        title={text.noConditionTitle}
+        description={text.noConditionBody}
         action={
           <Button size="sm" variant="primary" iconStart="pencil" onClick={onEditRule}>
-            Bedingung ergänzen
+            {text.addCondition}
           </Button>
         }
       />
@@ -248,22 +267,36 @@ export function BoardColumnEmpty({
         compact
         icon="folder-open"
         title={
-          reach.folders.length === 1
-            ? "Der geforderte Ordner enthält kein Tag"
-            : "Die geforderten Ordner enthalten kein Tag"
+          reach.folders.length === 1 ? text.emptyFolderTitleOne : text.emptyFolderTitleMany
         }
-        description={`Die Regel verlangt ein Tag aus ${folders} — dort liegt keines. Eine Bedingung, die auf keinen Tag zeigt, kann kein Todo erfüllen; daran ändert auch ein zweiter Tag oder Ordner daneben nichts. Legen Sie ein Tag in ${reach.folders.length === 1 ? "diesem Ordner" : "diesen Ordnern"} an oder nennen Sie in der Regel einen anderen.`}
+        description={text.emptyFolderBody(folders, reach.folders.length === 1)}
         action={
           <>
             {onOpenTags === undefined ? null : (
               <Button size="sm" variant="primary" iconStart="tag" onClick={onOpenTags}>
-                Tag anlegen
+                {text.createTag}
               </Button>
             )}
             <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
-              Regel bearbeiten
+              {text.editRule}
             </Button>
           </>
+        }
+      />
+    );
+  }
+
+  if (onClearPriorityFilter !== undefined) {
+    return (
+      <EmptyState
+        compact
+        icon="filter"
+        title={text.filteredTitle}
+        description={text.filteredBody}
+        action={
+          <Button size="sm" variant="secondary" onClick={onClearPriorityFilter}>
+            {text.showAllPriorities}
+          </Button>
         }
       />
     );
@@ -273,11 +306,11 @@ export function BoardColumnEmpty({
     <EmptyState
       compact
       icon="inbox"
-      title="Keine Karte trifft diese Regel"
-      description="Die Bedingungen stehen — im Augenblick erfüllt sie kein Todo. Sobald eines dazu passt, erscheint es hier von selbst."
+      title={text.noCardTitle}
+      description={text.noCardBody}
       action={
         <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
-          Regel bearbeiten
+          {text.editRule}
         </Button>
       }
     />
@@ -301,19 +334,20 @@ function cardMenu(
     readonly highlight: () => void;
   },
 ): readonly MenuEntry[] {
+  const text = boardTexts();
   return [
-    { id: "open", label: "Todo öffnen", icon: "arrow-up-right", onSelect: on.open },
+    { id: "open", label: text.openTodo, icon: "arrow-up-right", onSelect: on.open },
     {
       id: "tags",
-      label: "Tags ändern — sie entscheiden die Spalte",
+      label: text.changeTags,
       icon: "tag",
       onSelect: on.edit,
     },
-    { id: "status", label: "Status ändern", icon: "pencil", onSelect: on.edit },
+    { id: "status", label: text.changeStatus, icon: "pencil", onSelect: on.edit },
     { kind: "separator", id: "sep-done" },
     {
       id: "done",
-      label: todo.completedAt === null ? "Als erledigt markieren" : "Erledigt zurücknehmen",
+      label: todo.completedAt === null ? text.markDone : text.undoDone,
       icon: todo.completedAt === null ? "check" : "rotate-ccw",
       onSelect: on.done,
     },
@@ -322,7 +356,7 @@ function cardMenu(
           { kind: "separator", id: "sep-also" },
           {
             id: "highlight",
-            label: highlighted ? "Hervorhebung aufheben" : "Alle Vorkommen hervorheben",
+            label: highlighted ? text.clearHighlight : text.highlightAll,
             icon: "copy",
             onSelect: on.highlight,
           },
@@ -342,12 +376,12 @@ function toCard(
   timerRunning: boolean,
   reactivated: boolean,
   otherColumns: readonly ForeignText[],
-  priorityName?: string,
+  priority?: { readonly name: string; readonly weight: number },
 ): KanbanCardData {
   return {
     id: todo.id,
     tagCount: todo.tagIds.length,
-    ...(priorityName ? { priorityName } : {}),
+    ...(priority === undefined ? {} : { priority: { name: priority.name, weight: priority.weight } }),
     title: todo.title,
     callNumber: todo.callNumber,
     tags: todo.tagIds

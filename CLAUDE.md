@@ -85,8 +85,8 @@ Vier Regeln, die dabei gemessen und nicht geraten wurden:
   Antworttypen wandern mit; `Todo`, `Tag`, `TimeEntry` bleiben, weil sie mehrere Merkmale tragen.
 **Kein `features/<merkmal>/types.ts`.**
 
-- **`shared/ui/` nimmt auf, was mehr als ein Merkmal wirklich braucht** — jede der neunzehn
-  Dateien wird aus mindestens drei Bereichen gelesen. `lib/` trägt die Nicht-JSX-Fachhelfer;
+- **`shared/ui/` nimmt auf, was mehr als ein Merkmal wirklich braucht** — die Dateien dort (am 2026-09-23 vierundzwanzig,
+  zuletzt `TableShell` aus T-390) werden aus mehr als einem Merkmal gelesen. `lib/` trägt die Nicht-JSX-Fachhelfer;
   `labels.ts` hat 8 Merkmale und 30 Leser.
 
 - **Zwei Dateien liegen flach unter `apps/local-api/src/`** und nicht in einem Merkmal:
@@ -127,7 +127,7 @@ Festgelegt am 2026-09-23 durch den Auftraggeber (E-118):
 | Kommunikation mit dem Auftraggeber, Agentenberichte, `board.md`, `decisions.md`, `risks.md` | Deutsch |
 | Bezeichner, Dateinamen, Codekommentare, Docstrings, technische Schlüssel | Englisch |
 | Commit-Nachrichten und Pull-Request-Texte | Englisch |
-| Projektdokumentation (`docs/**` außer Spezifikation, `README.md`) | Englisch |
+| Projektdokumentation (`docs/**` außer Spezifikation, `README.md`) | Englisch — ausgenommen die Teampapiere `docs/bedrohungsmodell.md` und `docs/testplan.md`, die deutsch bleiben (E-124) |
 | Oberflächentexte und Fehlermeldungen | **Per Einstellung umschaltbar** (Ziel, siehe unten) |
 
 **Oberflächensprache.** Die Oberfläche soll ihre Sprache über eine Einstellung wechseln. Dafür
@@ -259,6 +259,9 @@ Nächster Schritt: konkreter Vorschlag
 ```
 
 Bei einer Blockade rät ein Agent nicht. Er meldet zurück und beendet seine Aufgabe.
+Die Annahmeliste eines Berichts wird **gegen die Behauptungen** des Berichts geprüft: Jeder Satz,
+der am Code gelesen und nicht laufen gesehen wurde, gehört hinein (O-LD, E-121). Berichte (`.md`)
+unter `.claude/team/reports/` werden versioniert (E-121 Punkt 12).
 
 ## Qualitätstor
 
@@ -383,7 +386,7 @@ R-22. Bei jeder Freigabe zu prüfen:
 
 ## Verlauf — der Widerspruch an A-19.19 (2026-09-10, überholt)
 
-**Überholt am 2026-09-15** durch den Auftrag zur Outlook-Angleichung (Spezifikation Abschnitt 25,
+**Überholt am 2026-09-15** durch den Auftrag zur Outlook-Angleichung (Spezifikation Abschnitt 25a,
 A-10.11 bis A-10.17): Das Add-in ergänzt vorhandene Aufgaben wieder um E-Mails und deren Anhänge,
 über genau einen strikten Endpunkt. Der Abschnitt bleibt stehen, weil die drei Regeln am Ende
 über den Fall hinaus gelten — die Sachlage darin ist Geschichte, nicht Bestand.
@@ -422,9 +425,9 @@ prüfen:
 
 - **Datensicherung (A-20).** Ein eigenes Archiv, JSON, mit Formatkennung
   `de.supertakt.data-archive`, ganzzahliger Schemafassung, Zeitpunkt und Erzeuger. **Der Code
-  steht am 2026-09-23 auf Fassung 10** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
-  liest 1 bis 10 und weist alles andere ab; was jede Fassung ergänzt (7 Mail-Zuordnung, 8 NoExport,
-  9 abgeschlossene Inaktivitätsphasen, 10 Prioritäten), steht in `docs/datenarchiv.md` und bei
+  steht am 2026-09-24 auf Fassung 11** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
+  liest 1 bis 11 und weist alles andere ab; was jede Fassung ergänzt (7 Mail-Zuordnung, 8 NoExport,
+  9 abgeschlossene Inaktivitätsphasen, 10 Prioritäten, 11 Versionsschalter und Sprache), steht in `docs/datenarchiv.md` und bei
   `parseArchive`. Fassung 6 trägt die **Bytes** der übernommenen
   E-Mail-Dateien (A-19.34); Fassung 5 kannte sie nicht, und ein Archiv der Fassung 5 sagt beim
   Einspielen auf einem fremden Rechner ausdrücklich, wie viele Dateien fehlen — es schweigt
@@ -501,8 +504,8 @@ prüfen:
 
 ## Fensterfeste Flächen, Outlook-Angleichung, NoExport und Prioritäten
 
-Spezifikation Abschnitte 25 (zweimal vergeben: „Fensterfeste Flächen“ und
-„Outlook-Angleichung“), 26 und 27, beauftragt vom 2026-09-12 bis 2026-09-16. Bei jeder Freigabe
+Spezifikation Abschnitte 25 („Fensterfeste Flächen“), 25a („Outlook-Angleichung“), 26, 27 und
+28 (Nachträge vom 2026-09-23, E-120), beauftragt vom 2026-09-12 bis 2026-09-23. Bei jeder Freigabe
 zu prüfen:
 
 - **Fensterfeste Flächen (A-25.1–A-25.9, E-112, E-115, E-116).** Jede Ansicht passt sich dem
@@ -521,6 +524,11 @@ zu prüfen:
 - **Prioritäten (A-27).** Benannte Prioritäten mit ganzzahliger Gewichtung (auch 0 und negativ),
   höchstens eine je Todo. Kanban filtert und sortiert danach **vor** der Seitenbegrenzung, stabil
   bei gleichem Gewicht. Löschen entfernt nur die Zuordnung. Archiv ab Fassung 10.
+- **Nachträge vom 2026-09-23 (A-28.1–A-28.11, E-120).** Versionsprüfung abschaltbar (Vorgabe an,
+  ausgeschaltet keine Verbindung); Oberflächensprache Deutsch/Englisch für die Hauptoberfläche;
+  Pool-Liste sortierbar; `WindowsUser` ohne Domäne; **eine Buchung dauert höchstens 24 Stunden**
+  (Stopp danach fragt nach dem Ende, Fremdimport weist ab); eigene Beendigungscodes je
+  Startursache; keine Quellkarten im Add-in. Das Add-in hat **keine** Buchungsroute mehr.
 
 ## Text streichen und umbenennen
 
@@ -584,12 +592,15 @@ behalten aus Kompatibilitätsgründen ihre bisherigen Namen. Die Layoutänderung
 sind in `docs/design/supertakt-layout.md` beschrieben.
 Das Tor heißt `pnpm check` und fährt in dieser Reihenfolge: `typecheck`, `boundaries`,
 `contrast`, `proof:all`, `verify:bundle`, `test:coverage`, `test:rust`, `build`, `audit`.
-`proof:all` sind **zweiundzwanzig** Nachweisläufe. Einer steht ausdrücklich **nicht** darin
+`proof:all` sind **dreiundzwanzig** Nachweisläufe (seit E-126 mit `proof:shell-parity`, braucht `rustc`). Einer steht ausdrücklich **nicht** darin
 und läuft einzeln: `proof:engines` (braucht WebKitGTK und seit PR #9 auch `python3-gi-cairo`).
 `proof:followup` gibt es seit T-247 nicht mehr — es prüfte ausschließlich die Anhangsroute des
 Add-ins und ist mit ihr gefallen (E-100).
 `pnpm test:e2e` fährt drei Playwright-Konfigurationen nacheinander.
-Drei GitHub-Abläufe: `pruefung.yml` bei Push und Pull Request, `release.yml` am Etikett,
+Nachweisläufe, die einen Port binden, nehmen `TAKT_PROOF_PORT` (Vorgabe 17843; Aufgabenbereich
+des Prüfeinstiegs +1, `proof:taskpane` +101; E-121, E-128, E-131) — nur für parallele Läufe setzen; das Erzeugnis bleibt fest auf 17843/17844.
+Fünf GitHub-Abläufe: `pruefung.yml` bei Push und Pull Request, `release.yml` am Etikett,
+`service-startup.yml` (Dienststart Linux/Windows), `windows-installer.yml` (NSIS-Installation, T-396),
 `addin-build.yml` baut den Aufgabenbereich und prüft die Add-in-Aufrufe gegen den Dienst.
 `rust:test` legt vor `cargo test --lib` über `prepare-rust-test.mjs` leere, nie ausgeführte
 Platzhalter für Sidecar, Aufgabenbereich und Lizenzbeilage an — ohne sie bricht Tauri im

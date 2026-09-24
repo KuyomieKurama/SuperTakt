@@ -28,7 +28,7 @@ const RefreshContext = createContext<RefreshApi | null>(null);
 export function useRefresh(): RefreshApi {
   const api = useContext(RefreshContext);
   if (api === null) {
-    throw new Error("useRefresh steht nur innerhalb von RefreshProvider zur Verfügung.");
+    throw new Error("useRefresh is only available inside RefreshProvider.");
   }
   return api;
 }

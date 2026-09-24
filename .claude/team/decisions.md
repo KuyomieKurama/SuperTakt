@@ -3282,3 +3282,322 @@ Sitzung nicht abrufen.
 
 Klärt der Auftraggeber die Lizenzen später, hebt eine neue Entscheidung Punkt 1 auf, und T-385
 wird aus dem Bericht wiederhergestellt.
+
+## E-120 — Entscheidungen des Auftraggebers vom 2026-09-23 (Board-Bereinigung)
+
+Nach der Triage aller offenen Boardpunkte (142 Zeilen, rund 80 davon erledigt oder überholt) hat
+der Auftraggeber die Empfehlungen des Orchestrators **vollständig übernommen**:
+
+| Nr | Entscheidung | Deckung |
+|---|---|---|
+| F-14 | `WindowsUser` im Export ist der Benutzername **ohne** Domäne | A-28.4 |
+| F-15 | Der Satz „Wenden Sie sich an Ihre Systembetreuung" wird durch konkrete Selbsthilfeschritte ersetzt | A-28.5 |
+| F-17 / O-B | Die Pool-Liste ist sortierbar (Hoch/Runter wie die Board-Spalten) | A-28.3 |
+| F-18 | Die Versionsprüfung ist abschaltbar, Vorgabe an | A-28.1 |
+| F-23 | Oberflächensprache umschaltbar: Hauptoberfläche Deutsch/Englisch samt Datumsformat; Add-in und Dienstmeldungen folgen später | A-28.2 |
+| O-E | Kein Ziehen in reinen Status-Spalten; A-5.2 ist aufgehoben (E-054) | A-5.2 |
+| O-N | Quellkarten des Add-ins werden nicht ausgeliefert (`sourcemap: 'hidden'`) | A-28.11 |
+| O-X | Das Umhängen einer Buchung per `PATCH` meldet keine Bewegung; so festgeschrieben | OpenAPI |
+| O-Y | Der Toast nach einer Buchung von Hand nennt Tagesgruppe und gerundeten Wert wie beim Stopp | A-28.7 |
+| O-Z | Keine Obergrenze für die Zahl der Pool-Regeln; erst messen, wenn Bedarf entsteht | — |
+| O-BA | Die Einstellungen warnen, wenn die Datenbankdateien zu offene Rechte haben | A-28.8 |
+| OF-1 | Das Exportprotokoll bleibt eine Liste, keine Tabelle | — |
+| A-A-127 | Eine Zeitbuchung dauert höchstens 24 Stunden | A-28.6 |
+| O-CF | Eine Frist in der Vergangenheit ist auch aus dem Add-in erlaubt, wie in der Hauptanwendung | A-28.9 |
+| Add-in | `POST /addin/todos/{todoId}/time-entries` fällt samt Aufrufer — A-10.9 (E-100), A-10.12 und A-10.16 schließen sie aus | A-10.16 |
+| T-B02 | gestrichen: A-10.10 regelt die fehlenden Referenzbilder | A-10.10 |
+| T-B06 | als bewusste Grenze geschlossen: ein 42Crunch-Audit lädt die Beschreibung zu einem fremden Dienst (E-001); es bleiben `proof:openapi` und Semgrep | E-001 |
+| T-B08 | als Grenze geschlossen: der Engine-Vergleich WebKitGTK/Chromium in der CI genügt | — |
+| T-B05 / T-B09 / O-KN | Ein Windows-CI-Job prüft die stille NSIS-Installation samt Aufgabenbereich-Pfad; NVDA-Messung und macOS-Abzug bleiben als dokumentierte Lücke für den nächsten Test des Auftraggebers | — |
+
+Der Auftraggeber hat den Orchestrator ermächtigt, `docs/spec.md` für diese Entscheidungen wörtlich
+zu ergänzen (Abschnitt 28, A-5.2, Abschnittsnummer 25a). Die Frage-Nummer F-22 ist doppelt
+vergeben (E-102 meint eine andere Frage); die offene Auslieferungsfrage heißt ab jetzt **F-24** und
+ist mit der Zeile T-B05/T-B09 oben beantwortet.
+
+## E-121 — Entscheidungen des Orchestrators aus derselben Bereinigung
+
+1. **R-10 / A-25.9:** kein Halbsatz; die Deckung als Folge der Tabellenform genügt.
+2. **O-AO:** Die Prüfung des Windows-Namens bleibt in `apps/web/src/app/connection.ts`; geschlossen.
+3. **O-AR (b), Homoglyphen:** bewusst nicht erfasst (blinder Fleck, benannt in `proof-codepoints.mjs`).
+4. **O-BE, O-KV, O-IQ, O-LI, O-LA:** nicht bauen — ohne Fläche, ohne Deckung bzw. ohne Ertrag; geschlossen.
+5. **O-BR:** kein Linter (Lieferkette, E-079); `proof-foreign` lernt `==` und `<T>x`.
+6. **O-L:** `checkJs` für die Nachweisskripte kommt nicht; zu großer Umbau für den Ertrag. Geschlossen.
+7. **O-AW:** gegenstandslos, die Buchungsroute des Add-ins fällt (E-120).
+8. **O-KJ / O-LF / O-EO (E-083 Punkt 4):** Die Prüfläufe nehmen ihren Port aus einer Umgebungsvariable
+   mit dem heutigen Wert als Vorgabe; das Erzeugnis bleibt auf 17843/17844 (B-1.5).
+9. **O-GX (E-045):** Oberflächentexte gehören nicht in die Domäne; mit A-28.2 wandern die drei Sätze
+   (`due-date.ts`, `call-number.ts`, `attachment.ts`) als Schlüssel an die Oberfläche.
+10. **O-JK (E-092), die Weigerungsregel:** Ein Nachweislauf, der eine Zusicherung nicht messen kann,
+    **weigert sich** (rot mit Grund) statt grün zu melden. Gilt für alle `proof:*`; security-checker
+    prüft `proof:export`, `proof:export-api` und `proof:access` dagegen.
+11. **O-LB / O-LD / O-LJ:** als Arbeitsregeln in die Agentendateien (Aufzählungen gegen den Bestand
+    prüfen; Annahmelisten gegen die Behauptungen prüfen; e2e erkennt einen mitten im Lauf
+    gestorbenen Dienst).
+12. **Berichte:** `.claude/team/reports/*` ist seit PR #19 ausgeschlossen und die alten Berichte sind
+    aus Git gelöscht. Damit ist „ein Bericht ist erst sicher, wenn er versioniert ist" aufgehoben.
+    Ab jetzt werden **Berichte (`.md`) wieder versioniert**, nur Bildschirmabzüge bleiben draußen.
+
+## E-122 — Klarstellungen aus T-393 (Orchestrator, 2026-09-23)
+
+1. **C-22 ist geleistet** (E-075 Punkt 2): Die globale Suche trifft den Vermerk und zeigt nur die
+   **Herkunft** des Treffers, nie Vermerkstext; eigenes Filterfeld statt Erweiterung von
+   `filter.search` (C22-03); Leistungstexte werden im Port gefiltert, nicht aus den 200 jüngsten
+   Buchungen (C22-04). Kriterien K-1…K-17 im Bericht T-393.
+2. **GF-04:** A-19.6 („keine Uhrzeit") war seit A-10.14/A-27.7 überholt; in der Spezifikation
+   klargestellt, nicht neu entschieden.
+3. **GF-05:** Die Anlage aus dem Add-in setzt **keine** 00:00; sie schickt ohne Eingabe keine Uhrzeit,
+   und der Hinweissatz „Ohne eigene Uhrzeit gilt 00:00" steht nur in der Hauptanwendung. Kein Bau.
+4. **CJ-02:** neue **A-19.10a** dokumentiert das gebaute Verhalten (Umleitungsarten auch von Hand und
+   beim Fremdimport abgewiesen). TP-FRIST-08 und TP-ANH-20 berichtigt e2e-tester im Testplan.
+
+## E-123 — Sprachumschaltung: Festlegungen aus T-392 (Orchestrator, 2026-09-23)
+
+1. **Q-1 Englisches Format:** `en-GB` (Tag vor Monat, 24-Stunden-Uhr) — nächster zum deutschen
+   Tagesbegriff, keine Verwechslung von Tag und Monat für einen deutschsprachigen Nutzer. Umstellbar
+   ohne Datenfolge, weil nur die Anzeige betroffen ist. **Dem Auftraggeber in der Schlußmeldung
+   vorgelegt.**
+2. **Q-2:** Die Sortierung von Benutzerdaten folgt **nicht** der Sprache; sie bleibt fest.
+3. **Q-3:** Die gemeinsame Datumskomponente aus A-27.5 wird genutzt; wo noch native Felder stehen,
+   bleibt die Grenze (Gebietsschema des Systems) dokumentiert.
+4. **Geldpfad:** Die Sprachwahl erreicht **nie** die Exportdatei — `Zeit` bleibt im Format des
+   Abrechnungstools (A-8), gleich welche Sprache. Jede Aufrufstelle von `formatQuarters` wird in T-400
+   als Anzeige oder Dateiinhalt eingeordnet; `proof:export` sichert das.
+5. Meldungen des lokalen Dienstes bleiben deutsch und tragen in englischer Oberfläche `lang="de"`.
+
+## E-124 — Festlegungen aus T-391 und T-394 (Orchestrator, 2026-09-23)
+
+**Aus T-391 (`docs/design/welle-18-fluss.md` §14):**
+1. **F-1:** Der Pool-Bewegungssatz bleibt im Add-in deutsch aus der Domäne; die Hauptoberfläche
+   setzt ihn aus der **Struktur** (Poolnamen, Richtung) über Textschlüssel zusammen (E-121 Punkt 9).
+2. **F-3:** ja, auch der Board-Dialog ersetzt seine vorige Rückmeldung.
+3. **F-4 / F-5 (Klarstellung A-28.6):** Die 24-h-Grenze gilt für **jede** entstehende Buchung —
+   auch „bis zum letzten Lebenszeichen" bei verwaistem Timer und jeden „Gearbeitet"-Abschnitt nach
+   der Rückkehr aus der Inaktivität. Dort erscheint dasselbe Ende-Feld bzw. derselbe Feldfehler
+   (Vorgabe `min(Lebenszeichen, Beginn + 24 h)`); die Summenregel aus A-24.5 bleibt.
+4. **F-6:** keine Markierung in der Bereichsschiene (E-078, weniger Text). **F-10:** der Hinweis
+   „Arbeitsplatz" bleibt unverändert.
+5. **F-7:** C-14 bekommt Filter im Dienst (`tagId`, `poolId`, `hasNote`) vor der Seitenbegrenzung und
+   in der Exportauswahl — in T-397.
+6. **F-8:** NoExport zählt nicht als „offen": `TimeEntry` trägt ein nur lesbares
+   `todoNoExport` (T-397), die Zeiterfassung wertet es aus (T-400, A-26.2/A-6.6).
+7. **F-9:** Die Deutung von C-21 im Papier gilt. `TimeScreen.tsx:191-194` nennt die
+   Leistungsabfrage nur, wenn sie eingeschaltet ist (A-22).
+
+**Aus T-394:**
+8. **W-1…W-14** (Weigerungsregel): Auftrag an domain-dev (T-397a). **W-10/W-14:** Wo eine Plattform eine
+   Zusage nicht messen kann, meldet der Lauf die Zeile sichtbar als **„ungemessen: <Plattform>"** in
+   der Zusammenfassung; auf dem Läufer, der sie messen kann (Linux-CI), ist ein Überspringen rot.
+9. **N-1:** Der Exportordner aus einem Archiv wird nur übernommen, wenn er lokal, absolut,
+   vorhanden und ohne UNC/Netzanteil ist; sonst `null` plus Warnung (Round-Trip am selben Rechner
+   bleibt). Risiko R-37.
+10. **Sprache der Teamdokumente:** `docs/bedrohungsmodell.md` und `docs/testplan.md` sind
+    Arbeitspapiere des Teams wie Board und Entscheidungen und bleiben **deutsch**; E-118 „Doku
+    englisch" gilt für Benutzer- und Entwicklerdokumentation, Designpapiere und `architektur.md`,
+    `datenmodell.md` (beim Berühren).
+
+## E-125 — Reste des Add-in-Rückbaus (Orchestrator, 2026-09-23, aus T-389)
+
+1. `poolMovement` in `GET /addin/todo-matches` beschreibt eine Buchung, die das Add-in nicht mehr
+   anbietet: **fällt** (OpenAPI in T-397, Schema und DTO in T-398). Ein Feld ohne Leser ist eine Zusage
+   ohne Gegenstand.
+2. A-28.11 ist erst erfüllt, wenn keine `.map` ausgeliefert wird: `taskpane/server.ts` liefert keine
+   `.map` (T-397), und `build-taskpane.mjs` kopiert sie nicht (T-400).
+3. Die Streichung der Sätze aus `apps/outlook-addin/src/duplicate/reopen.ts` (seit PR #15 unsichtbar)
+   legt der spec-ux-reviewer in T-404 zur Zustimmung nach E-078 Punkt 3 vor.
+
+## E-126 — Gleichlauf Hülle/Domäne und Reste aus T-390 (Orchestrator, 2026-09-23)
+
+1. **E-085 Punkt 2, Richtung:** Beide Richtungen sind ein Befund. **Hülle nimmt an, was die Domäne
+   abweist** ist ein Sicherheitsfehler (die Hülle ist die letzte Prüfung vor dem Öffnen);
+   **Domäne nimmt an, was die Hülle abweist** ist eine Sackgasse (ein gespeicherter Anhang, der sich
+   nie öffnen läßt). Der Lauf `proof:shell-parity` meldet beides rot; bewußte Abweichungen stehen als
+   benannte Ausnahme mit Grund im Lauf. Der Name `proof:shell-parity` ersetzt `proof:attachment-parity`
+   aus E-085; er trägt beide Gleichläufe (Anhänge und Versionsform).
+2. **`\temp\datei.pdf`:** `isAbsoluteAttachmentPath` in `packages/domain/src/attachment.ts` läßt einen
+   Pfad ohne Laufwerk gelten — Fehler der Domäne (T-397).
+3. **U+202E:** Die Hülle (`attachment.rs`) weist Richtungszeichen im Pfad **ebenfalls** ab (T-400,
+   `#[cfg(test)]`-Fall durch unit-tester).
+4. `proof:shell-parity` wird vom Orchestrator in `package.json` und `proof:all` eingehängt, sobald
+   T-397 den Domänenfehler behoben hat.
+5. Der wirkungslose Escape-Stopper fällt auch in `IdleTaskSelect.tsx` und `TagInput.tsx` (T-400).
+
+## E-127 — Rest aus T-388 (Orchestrator, 2026-09-24)
+
+`timer.separateIdle` prüft die 24-h-Grenze bei der Rückkehr nicht. Erreichbar nur für eine
+Inaktivitätsphase, die vor A-28.6 begonnen wurde (neue Phasen weist `beginIdle` ab). Eine Abweisung
+dort erzeugte eine Sackgasse; die Lücke bleibt **benannt und zeitlich begrenzt** (sie stirbt mit der
+letzten Altphase). Bis T-400 kann die Oberfläche einen Timer über 24 h nicht stoppen (409
+`timer_stop_end_required`) — T-400 muß vor jeder Auslieferung stehen.
+
+## E-128 — Prüfport und Reste aus T-397a (Orchestrator, 2026-09-24)
+
+1. Die additive Naht `MainOptions.port`/`taskpanePort` in `apps/local-api/src/main.ts` ist
+   **genehmigt** (derselbe Rolle, nötig für E-121 Punkt 8); das Erzeugnis bleibt auf 17843/17844.
+2. CI setzt `TAKT_PROOF_PORT` im Normallauf **nicht**; die Variable ist für parallele Läufe da.
+   Regel in `CLAUDE.md` unter „Befehle".
+3. Die übrigen portgebundenen Läufe (`proof-tags`, `-conflicts`, `-addin-wiring`, `-template-fields`,
+   `-db-permissions`, `-route-policy`, `-openapi`, `service-scenario`) bekommen dieselbe Naht in
+   T-397b (Welle 18c).
+4. `export_run.template_id` ist nicht durch einen durchgesetzten Fremdschlüssel gebunden; heute
+   unschädlich, weil `runExport` die Vorlage vorher auflöst. Prüfen und, falls billig, durchsetzen in
+   T-397b.
+
+## E-129 — Aus T-397 (Orchestrator, 2026-09-24)
+
+1. Migration **0029_interface_preferences** ist in der Reihenfolge bestätigt (nach 0028).
+2. `proof:shell-parity` ist eingehängt (Wurzel und `@takt/desktop`, in `proof:all` nach
+   `proof:shell-surface`); 23 Läufe.
+3. **O-D** läuft in zwei Schritten: JSON-Alias `requiredTags` neben `rule` jetzt; die Umbenennung in
+   TypeScript und das Streichen des Alias nach T-400 (T-411).
+4. Beendigungscodes (A-28.10): 78 Sitzung, 73 Anwendungsdatenverzeichnis, 66 Bestand öffnen,
+   65 Migration, 74 Port. `proof-access` erwartet bei Migrationsfehlern 65 (T-397b).
+5. `docs/outlook-bridge-alignment.md` nennt vermutlich noch fünf Add-in-Routen — documenter (T-410).
+
+## E-130 — A-19.2-Wächter und Schlüsselnamen (Orchestrator, 2026-09-24, aus T-398b)
+
+Bezeichner und Textschlüssel sind englisch (E-118); `deadlineHint*` bleibt. A-19.2 („in der
+Oberfläche heißt sie ausschließlich Frist") betrifft **sichtbaren Text**, nicht Bezeichner. Der
+Wächter in `proof-addin.mjs` misst künftig die Werte der Textbündel und das gerenderte JSX, nicht
+Schlüsselnamen (T-398c, nach T-400a; GF-03 dann gegen den Schlüssel aus T-400a nachziehen).
+
+## E-131 — Berichtigung zu E-128 (Orchestrator, 2026-09-24, aus T-397b)
+
+1. **E-128 Punkt 4 war ein Fehlalarm:** `export_run.template_id` trägt einen durchgesetzten
+   Fremdschlüssel (`RESTRICT`, `foreign_keys = ON`); T-397a hatte die Kennung der Standardvorlage als
+   „unbekannt" benutzt. Geschlossen.
+2. **E-128 Punkt 3 berichtigt:** Nur Läufe, die einen Socket binden oder den Dienst als Prozeß
+   starten, nehmen `TAKT_PROOF_PORT`. `proof-template-fields`, `-route-policy`, `-openapi`,
+   `service-scenario` und `proof-addin` arbeiten über `compose()`/`app.request` und binden nichts.
+3. `proof:taskpane` nutzt `TAKT_PROOF_PORT + 101` (Vorgabe 17944), damit es nie auf 17844 liegt.
+
+## E-132 — Nacharbeit aus T-405a (Orchestrator, 2026-09-24)
+
+1. **Titel im Archiv:** Die eigene Datensicherung nimmt Titel bis zur **Altgrenze 512** an
+   (benannte Konstante in `packages/domain/src/text-length.ts`, gültig vor T-114); neue Titel bleiben
+   bei 500. Round-Trip A-20.4 geht vor.
+2. **Suche im Leistungstext** muß Groß-/Kleinschreibung auch jenseits von ASCII ignorieren
+   („Ärger" findet „ärger") — deutsche Oberfläche; nicht akzeptiert, wird behoben.
+3. `PUT /pools/order` hat keine eigene Obergrenze von 200 (O-Z: keine Obergrenze); die Liste muß
+   genau die vorhandenen Pools enthalten.
+4. Der Vorgabewert des Versionsprüfungs-Schalters bei fehlender Zeile ist überall **an** (A-28.1).
+5. Die 24-h-Regel steht nur in der Domäne; `idle.ts:258` nutzt eine Domänenfunktion.
+6. **Prozeß:** Ein Prüfer ändert Produktivcode auch nicht vorübergehend; Rot-vor-Grün über eine Kopie
+   im Scratchpad (wie T-395/T-401c es dann getan haben).
+
+## E-133 — Aus T-409c (Orchestrator, 2026-09-24)
+
+1. A-10.9 und A-19.19 tragen in der Spezifikation jetzt den Hinweis, daß Abschnitt 25a sie für die
+   Mail-Zuordnung ersetzt (Klarstellung, keine neue Entscheidung). `CLAUDE.md` war bereits
+   nachgezogen (2026-09-23).
+2. **Leitbegriff bleibt „Todo" (E-029).** Neue Oberflächentexte aus PR #19 mit „Aufgabe" werden in
+   T-400 (Hauptanwendung) und T-398c (Add-in) auf „Todo" gebracht; der Wortlaut der Spezifikation
+   25a/26 bleibt, das Glossar bildet ab.
+3. `MailEntry.kind` bleibt als gespeicherter Wert (keine Migration, keine Archivfolge); die
+   Oberfläche zeigt ihn über einen Textschlüssel (A-28.2).
+4. **Blockierend für PR #19**, verteilt: Add-in — Fehlschlag beim Ergänzen nennt, ob die E-Mail
+   angehängt wurde (A-10.16), und der gesperrte Knopf bei mehreren Treffern heißt passend und nennt
+   den Grund (A-10.11) → T-398c. Kanban — Leerzustand bei aktivem Prioritätsfilter sagt die Wahrheit
+   (A-27.3) → T-400.
+5. **„Nicht abrechnen" auf NoExport-Zeilen** (A-26.3, Geldpfad): Die Oberfläche bietet es dort nicht
+   an (T-400), und der Dienst weist es für NoExport-Todos ab (T-411).
+6. PR #20 freigegeben; PR #18 wird über die Dateiliste nachgereicht.
+
+## E-134 — Qualitätstor PR #18–#20 (Orchestrator, 2026-09-24, aus T-409a/b/c)
+
+**Urteile:** PR #18 freigegeben (Code, Sicherheit, Spezifikation); PR #20 freigegeben; **PR #19
+Nacharbeit** — gebündelt in T-398c (Add-in), T-400 (Oberfläche, Hülle), T-411 (Dienst, Speicherung).
+
+1. **Berichte wieder versioniert (T-409a H-1, T-409b-5):** `.gitignore` nimmt nur noch Bildschirmabzüge
+   aus; die 395 in #19 gelöschten Berichte sind aus `7eeb073` zurückgeholt.
+2. **`mode: 'auto'` fällt** samt totem Schnellbefehl (`quick-command.ts`, `commands.ts`, `commands.html`,
+   `FunctionFile`/`commandsUrl`): Er hängt eine fremde Mail ohne Auswahl des Benutzers an (T-409b-2) → T-398c.
+3. Kommentare und Wächter, die „kein Anhang an vorhandenem Todo" behaupten (A-A-82), auf A-10.11–A-10.13
+   umstellen, mit Gegenprobe (`/mails` mit fremder Call-Nummer → 422) → T-398c (Add-in, `proof-addin` 18),
+   T-411 (`email-attachments.ts`).
+4. **Spezifikation:** A-27.4 klargestellt (Fokus allein öffnet nicht, Tabulatorfalle); A-10.16-Wortlaut
+   „Stattdessen neues Todo anlegen" (E-029).
+5. Zertifikat (R-23): beim bestätigten Vertrauen Einträge mit anderem Fingerabdruck entfernen (NSS/Schlüsselbund,
+   T-409b-4) und ein macOS-Prüffall mit temporärem Schlüsselbund (T-409b-3) → T-400 (`outlook_certificate_unix.rs`),
+   Prüffall unit-tester. Verweiszeilen A-A-5′/A-A-28 in `attachment.rs` (T-409b-6) → T-400.
+6. Rückwege 0025/0026/0028 benennen ihren Datenverlust im Kommentar; importierbares JSON wird geprüft statt mit
+   `as` gelesen (`repo-mail.ts`, `mail-assignment.ts`); dichte Einzeiler auflösen → T-411 und T-398c.
+7. `service-startup.yml`: alter Arbeitszweig aus dem Auslöser, `persist-credentials: false` (auch im
+   neuen `windows-installer.yml`) — erledigt vom Orchestrator.
+
+## E-135 — Aus T-412 (Orchestrator, 2026-09-24)
+
+1. `engines.node` steigt auf **>=22.13.0** (`DatabaseSync.function` für `takt_fold`); gebündelt und in
+   CI läuft 22.23.2.
+2. `proof:callers` (`request-scan.mjs`) sucht den **Aufruf** `request(`, nicht das Wort in
+   Zeichenkettenliteralen — englische Oberflächentexte dürfen „request" enthalten. Umbau in T-411,
+   nach T-400a, mit Gegenprobe (ein echter Aufruf außerhalb der erlaubten Orte bleibt rot).
+3. Die Todo-Suche (Titel, Call-Nummer, Notiz) bekommt dieselbe Faltung wie die Leistungstextsuche
+   (T-411), damit sich beide Suchen gleich verhalten.
+4. Der Vorgabewert „an" bei fehlender Schalterzeile ist A-28.1 gemäß; security-checker bestätigt in T-406.
+
+## E-136 — Aus T-406a (Orchestrator, 2026-09-24)
+
+1. R-34 bis R-37 geschlossen (Sicherheitssicht), R-38 neu (N-5).
+2. **N-2:** Namen im Archiv werden auf dem **ungetrimmten** Wert geprüft; Rand-Leerraum/BOM wird abgewiesen.
+3. **N-3:** `timestampSchema` prüft `isExactTimestamp` (unmögliche Kalenderdaten → 422 statt 500);
+   ein CHECK `ended_at IS NULL OR duration_seconds IS NOT NULL` nur, wenn ohne Datenfolge (Migration 0030,
+   Reihenfolge bestätigt der Orchestrator).
+4. **N-1 Rest:** Ordner mit `sync_folder`/`system_dir` bleiben übernehmbar (lokal, vom Benutzer gewählt);
+   kein Bau.
+5. A-A-71 zählt vier Add-in-Routen (context, todo-matches, todos, todos/:todoId/mails) — so richtig.
+
+## E-137 — Aus T-411a (Orchestrator, 2026-09-24)
+
+1. **Migration 0030 `time_entry_duration_guard`** als zwei BEFORE-Trigger (`RAISE(ABORT)`, wenn
+   `ended_at` gesetzt ist und `unixepoch(ended_at)` NULL liefert) — kein Neubau von `time_entry`,
+   vorhandene Zeilen bleiben. Reihenfolge nach 0029 bestätigt; gebaut in T-411 (zusammen mit O-D).
+2. `parseArchive` prüft Zeitstempel in `time_entry` **nicht** mit `isExactTimestamp` (Round-Trip
+   A-20.4 für Altzeilen).
+3. Die Add-in-Tür trimmt Anhangs-Anzeigenamen und prüft dieselbe Zeichenklasse wie Namen (sonst
+   scheitert die eigene Datensicherung, A-20.4) → T-398c.
+4. `time_entry_no_export` (409) fängt die Oberfläche in T-400 ab.
+
+## E-138 — Aus T-400a (Orchestrator, 2026-09-24)
+
+1. **SP-04 gegen GF-03:** Der Fristhinweis steht im Textbestand als **zwei Satzteile** (Kern und
+   Zusatz), damit der Kern ein eigenes Literal bleibt (GF-03 mißt ihn zeichengleich gegen das
+   Add-in) → T-391c (ux-designer), danach `proof:locked` nachziehen.
+2. **SP-21** gehört zu T-400: Der neue Wortlaut kommt mit der Suche nach Herkunft (C-22) in
+   derselben Aufgabe; vorher bleibt der alte Satz gesperrt.
+3. **Wort-Wächter (`proof:surface` Abschnitt D, `proof:callers`) lesen künftig nur die deutschen
+   Textwerte**; englische Werte sind ausgenommen, weil ihre Wörter zufällig deutsche Muster treffen
+   („lies", „request"). Umbau in T-400 mit Gegenprobe, damit ein deutscher Verstoß weiter rot wird.
+4. Gemischtsprachige Sätze (deutsche Dienstmeldung in englischem Satz) bekommen das `lang`-Attribut
+   am eingebetteten Teilstück → T-400.
+5. A-19.2 „Deadline" im Aufgabenbereich → T-398c.
+
+## E-139 — `motionIntensity`: außerhalb des Ablaufs entstanden, vom Auftraggeber gehalten (2026-09-24)
+
+Während T-400/T-398c/T-391c/T-401b/T-413 am API-Ausgabenlimit hingen, hat der Auftraggeber
+ChatGPT/Codex parallel und außerhalb dieser Sitzung auf demselben Arbeitsbaum weiterarbeiten
+lassen. Dabei ist unter anderem eine vollständige neue Fläche entstanden: `motionIntensity`
+(`reduced`/`subtle`/`expressive`) — Spalte in `app_setting`, Migration `0030_motion_intensity`,
+Datenarchiv-Fassung auf **12**, Domäne, Dienst, OpenAPI, Einstellungsoberfläche.
+
+**Es gab dafür keine Anforderungs-ID, keinen Board-Eintrag, keine Entscheidung.** Nach `CLAUDE.md`
+(„Keine Umsetzung ohne Deckung durch eine Anforderungs-ID") ist das ein offener Verstoß, gemeldet
+statt stillschweigend hingenommen. Der Name deckt sich mit dem `MOTION_INTENSITY`-Regler der am
+23.09. installierten Frontend-Design-Skills — vermutlich Vermischung, keine bewusste Wahl.
+
+**Der Auftraggeber hat entschieden: Die Fläche bleibt**, er liefert die Anforderung nachträglich
+nach. Bis dahin gilt sie als **gebaut, aber ungedeckt** — das Qualitätstor kann sie nicht als
+„fertig" freigeben, bevor eine A-ID in `docs/spec.md` steht. Zwei Prüffälle waren durch die
+Änderung zerbrochen (`apps/web/test/public/startupAppearance.test.ts`); der Nachbau fehlte.
+
+**Weitere offene Sicherheitsauflage nicht umgesetzt:** T-409b-2 (`mode: 'auto'`, toter
+Schnellbefehl „Schnell in Inbox", `quick-command.ts`/`commands.ts`/`commands.html`,
+`FunctionFile`/`commandsUrl` im Manifest) — weiterhin vollständig vorhanden und verdrahtet.
+
+## E-140 — Aus T-400 (Orchestrator, 2026-09-24)
+
+1. `request-scan.mjs`/`proof-callers.mjs` (E-135 Punkt 2) sind mit T-400 bereits umgestellt; **T-411
+   führt das als erledigt**, baut nur noch die O-D-Umbenennung in TypeScript und streicht dabei den
+   Alias `createPool`/`updatePool: ['rule']`.
+2. `file_permissions_wide` bleibt ein Dienstvorfall unabhängig davon, ob die Oberfläche ihn einzeln
+   auflistet — die Warnung ist bewusst zusammengefasst (A-28.8), keine Klärung nötig.

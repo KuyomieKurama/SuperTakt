@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { searchEverything } from "../api/endpoints";
-import type { SearchResult } from "../api/types";
+import type { ForeignText, SearchResult, TodoSearchHit } from "../api/types";
 import {
   ExportStatusMarker,
   exportDisplayState,
@@ -13,75 +13,80 @@ import { formatDate, formatDuration } from "../lib/format";
 import { navigate } from "./router";
 import { foreignText, quotedName } from "../lib/foreign";
 import { Foreign } from "../shared/ui/Foreign";
+import { appTexts } from "./texts";
 
 /**
- * Takt — globale Suche (A-13.7, E-038).
+ * Takt — globale Suche (A-13.7, E-038, C-22).
  *
- * Sie trifft Todos über Titel und Call-Nummer und Zeitbuchungen über ihren
- * **Leistungstext**.
+ * Todos match by title, call number and — here only — their internal note; bookings match by
+ * their billing note (A-7.3). The service decides where a todo matched (`origins`, T-393 K-5).
  *
- * ## Der Vermerk: was hier bis T-156 stand, war falsch (Befund O-CM)
+ * The internal note is searched on this machine, never exported (A-7.2): E-075 point 2 and
+ * E-122 point 1 decided that a note the own computer cannot search is a note written twice.
+ * The earlier comment here claimed the opposite ("nicht im Vermerk", A-7.1) and was wrong.
  *
- * An dieser Stelle stand der Satz, die Suche dürfe den internen Vermerk „nicht
- * treffen (A-7.1)". **A-7.1 sagt darüber nichts.** Verboten ist der Vermerk im
- * **Export** (A-7.2) — nicht sein Wiederfinden auf dem eigenen Rechner. E-038
- * verlangt sogar das Gegenteil, und E-075 Punkt 2 hat es nach der Messung
- * ausdrücklich bestätigt: „Ein Vermerk, den der eigene Rechner nicht
- * durchsuchen kann, ist eine Notiz, die man zweimal schreibt."
+ * The list is grouped by kind of hit (K-9): "Todos" (title or call number), "Im Vermerk
+ * (intern)" (todos that matched **only** in the note) and "In Leistungen" (bookings). A todo
+ * matching in title and note appears once, in the first group. The origin stands in the row
+ * as text (K-11, SC 1.4.1); no excerpt of the note appears anywhere — not in the row, not in a
+ * `title`, not in an accessible name (K-12). The note group carries no export status: a note
+ * is never exported (K-13).
  *
- * Der Satz war damit keine Beschreibung, sondern eine Anweisung an den
- * nächsten Agenten, gegen die Entscheidung zu bauen. Er ist gestrichen.
- *
- * **Was heute wirklich gilt:** `repo-todos.ts` sucht in `title` und
- * `call_number`; der Vermerk ist im Dienst nicht dabei, und deshalb steht er
- * auch in keiner Antwort. Das ist der **Stand**, nicht die Regel. Die
- * Erweiterung ist eine eigene Aufgabe — sie braucht zuerst die Herkunft des
- * Treffers aus dem Dienst, damit die Trefferzeile sagen kann, **wo** sie
- * getroffen hat, und sie legt zugleich Befund C-22 erneut vor (E-075 Punkt 2,
- * Bedingung).
- *
- * ## Bedienung
- *
- * Ohne Maus, nach dem Muster für Kombinationsfelder: `Strg`+`K` oder `/` setzt
- * den Fokus, Pfeiltasten wählen, Eingabe öffnet, `Esc` schließt. Der aktive
- * Eintrag wird über `aria-activedescendant` angesagt, ohne dass der Fokus das
- * Feld verlässt.
+ * Keyboard: `Strg`+`K` or `/` focuses the field, arrow keys run linearly over all options
+ * across the groups, Enter opens, Esc closes; the active option is announced through
+ * `aria-activedescendant` while focus stays in the field.
  */
+
+type EntryGroup = "todo" | "note" | "entry";
 
 interface Entry {
   readonly key: string;
-  readonly kind: "todo" | "entry";
+  readonly group: EntryGroup;
   readonly id: string;
-  readonly title: string;
+  /** A todo title or a billing note — foreign text, shown through `Foreign`. */
+  readonly title: ForeignText;
   readonly detail: string;
   readonly marker: ExportDisplayState | null;
 }
 
-function toEntries(result: SearchResult): readonly Entry[] {
-  const todos: Entry[] = result.todos.items.slice(0, 8).map((todo) => ({
+const GROUP_ORDER: readonly EntryGroup[] = ["todo", "note", "entry"];
+
+function todoEntry(todo: TodoSearchHit): Entry {
+  const texts = appTexts().search;
+  const noteOnly = todo.origins.length > 0 && todo.origins.every((origin) => origin === "todo_note");
+  const where = noteOnly
+    ? texts.hitInNoteOnly
+    : texts.hitIn(todo.origins.map((origin) => texts.origin[origin]).join(", "));
+  const parts = [
+    ...(todo.callNumber === null ? [] : [texts.call(foreignText(todo.callNumber))]),
+    where,
+  ];
+  return {
     key: `todo-${todo.id}`,
-    kind: "todo",
+    group: noteOnly ? "note" : "todo",
     id: todo.id,
     title: todo.title,
-    detail:
-      todo.callNumber === null
-        ? todo.completedAt === null
-          ? "Todo"
-          : "Todo · erledigt"
-        : `Call ${foreignText(todo.callNumber)}${todo.completedAt === null ? "" : " · erledigt"}`,
+    detail: `${parts.join(" · ")}${todo.completedAt === null ? "" : texts.doneSuffix}`,
     marker: null,
-  }));
+  };
+}
+
+function toEntries(result: SearchResult): readonly Entry[] {
+  const texts = appTexts().search;
+  const todos = result.todos.items.slice(0, 8).map(todoEntry);
 
   const entries: Entry[] = result.timeEntries.slice(0, 8).map((entry) => ({
     key: `entry-${entry.id}`,
-    kind: "entry",
+    group: "entry",
     id: entry.todoId,
-    title: entry.note.length === 0 ? "(ohne Leistung)" : entry.note,
+    title: entry.note.length === 0 ? texts.withoutNote : entry.note,
     detail: `${formatDate(entry.startedAt)} · ${formatDuration(entry.durationSeconds)}`,
     marker: exportDisplayState(entry.exportStatus, entry.exportCount),
   }));
 
-  return [...todos, ...entries];
+  // Flat and in group order, so the arrow keys follow what the eye sees.
+  const all = [...todos, ...entries];
+  return GROUP_ORDER.flatMap((group) => all.filter((entry) => entry.group === group));
 }
 
 export function GlobalSearch() {
@@ -176,10 +181,11 @@ export function GlobalSearch() {
   const expanded = open && term.trim().length > 0;
   const activeId = activeIndex >= 0 ? `${listId}-${String(activeIndex)}` : undefined;
 
+  const texts = appTexts().search;
   return (
     <div className="gsearch">
       <label className="visually-hidden" htmlFor={inputId}>
-        Globale Suche über Todos und Leistungstexte
+        {texts.label}
       </label>
       <div className="gsearch__field">
         <span className="gsearch__icon">
@@ -192,7 +198,7 @@ export function GlobalSearch() {
           type="search"
           role="combobox"
           autoComplete="off"
-          placeholder="Suchen … (Strg + K)"
+          placeholder={texts.placeholder}
           value={term}
           aria-expanded={expanded}
           aria-controls={listId}
@@ -211,37 +217,54 @@ export function GlobalSearch() {
 
       {expanded ? (
         <div className="gsearch__panel">
-          <ul className="gsearch__list" id={listId} role="listbox" aria-label="Suchergebnisse">
-            {entries.map((entry, index) => (
-              <li
-                key={entry.key}
-                id={`${listId}-${String(index)}`}
-                role="option"
-                aria-selected={index === activeIndex}
-                className={cx("gsearch__option", index === activeIndex && "gsearch__option--active")}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  choose(entry);
-                }}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <span className="gsearch__option-icon">
-                  <Icon name={entry.kind === "todo" ? "inbox" : "clock"} size={14} />
-                </span>
-                <span className="grow">
-                  <Foreign className="gsearch__option-title truncate" value={entry.title} />
-                  <Foreign className="gsearch__option-detail" value={entry.detail} />
-                </span>
-                {entry.marker === null ? null : <ExportStatusMarker state={entry.marker} />}
-              </li>
-            ))}
+          <ul className="gsearch__list" id={listId} role="listbox" aria-label={texts.results}>
+            {GROUP_ORDER.map((group) => {
+              const members = entries.filter((entry) => entry.group === group);
+              if (members.length === 0) return null;
+              const headingId = `${listId}-${group}`;
+              return (
+                <li key={group} role="group" aria-labelledby={headingId} className="gsearch__group">
+                  <span id={headingId} role="presentation" className="gsearch__group-label overline">
+                    {group === "todo" ? texts.groupTodos : group === "note" ? texts.groupNote : texts.groupEntries}
+                  </span>
+                  <ul role="presentation" className="gsearch__group-list">
+                    {members.map((entry) => {
+                      const index = entries.indexOf(entry);
+                      return (
+                        <li
+                          key={entry.key}
+                          id={`${listId}-${String(index)}`}
+                          role="option"
+                          aria-selected={index === activeIndex}
+                          className={cx("gsearch__option", index === activeIndex && "gsearch__option--active")}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            choose(entry);
+                          }}
+                          onMouseEnter={() => setActiveIndex(index)}
+                        >
+                          <span className="gsearch__option-icon">
+                            <Icon name={entry.group === "entry" ? "clock" : entry.group === "note" ? "lock" : "inbox"} size={14} />
+                          </span>
+                          <span className="grow">
+                            <Foreign className="gsearch__option-title truncate" value={entry.title} />
+                            <Foreign className="gsearch__option-detail" value={entry.detail} />
+                          </span>
+                          {entry.marker === null ? null : <ExportStatusMarker state={entry.marker} />}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
 
           {entries.length === 0 && !busy ? (
             <p className="gsearch__empty">
               {failed
-                ? "Die Suche ist fehlgeschlagen. Läuft der lokale Dienst noch?"
-                : `Kein Treffer für ${quotedName(term.trim())}. Gesucht wird in Titeln, Call-Nummern und Leistungstexten — nicht im Vermerk.`}
+                ? texts.failed
+                : texts.noHit(quotedName(term.trim()))}
             </p>
           ) : null}
         </div>

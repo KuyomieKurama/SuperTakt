@@ -1,78 +1,74 @@
 /**
- * Takt — Darstellung von Werten, die woanders gerechnet wurden.
+ * Display of values that were computed elsewhere. The only place where the UI
+ * turns numbers and timestamps into text.
  *
- * ## Was hier steht und was ausdrücklich nicht
+ * No business logic here: nothing is rounded (E-008, `packages/domain/src/rounding.ts`),
+ * no day group is formed (`planExportRun` in `packages/export`), no duration is
+ * computed (the service sends `durationSeconds`), nothing is encoded.
  *
- * Hier steht **Formatierung**: aus einer Zahl wird ein lesbarer Text, aus einem
- * Zeitstempel eine Uhrzeit in der Anzeigesprache. Hier steht **keine
- * Fachlogik**:
+ * Formats follow the UI language (A-28.2, E-123): `de-DE` or `en-GB`. The export
+ * file never passes through this file (E-123 point 4); `formatQuarters` is
+ * display only.
  *
- *  - Es wird **nicht gerundet**. Die Rundung auf Viertelstunden ist E-008 und
- *    liegt in `packages/domain/src/rounding.ts`; sie geschieht über die
- *    Tagesgruppe (E-020) und kommt als `quarters` fertig über den Dienst.
- *  - Es wird **keine Tagesgruppe gebildet**. Welche Buchungen zu einer
- *    Exportzeile gehören, entscheidet `planExportRun` in `packages/export`.
- *  - Es wird **keine Dauer berechnet**. `durationSeconds` und `elapsedSeconds`
- *    kommen vom Dienst.
- *  - Es wird **nichts kodiert**. Base64 ist A-8.4 und liegt in der Domäne.
- *
- * Was bleibt, ist der Rand: Sekunden in `1:07 h`, ein Zeitstempel in
- * `12.08.2026, 09:12`, ein Kalendertag für einen Filter. Das muss die
- * Oberfläche tun — der Dienst liefert Rohwerte, kein Bildschirmtext. Diese
- * Datei ist die einzige Stelle, an der es geschieht.
- *
- * `calendarDayOf` und `todayCalendarDay` sind die Entsprechung zu
- * `toCalendarDay` aus `packages/domain/src/kernel.ts`. Sie erzeugen **keinen**
- * Abrechnungswert: Sie bilden den Filterwert `fromDay`/`toDay`, nach dem der
- * Dienst sucht; die Zuordnung einer Buchung zu ihrem Tag trifft er selbst
- * (E-025, Tag des Timerstarts).
- *
- * **Seit T-031 ist das nicht mehr die Gliederung des Exports.** S-07 und S-14
- * bekommen ihre Tagesgruppen aus `POST /export/preview` (Feld `groups`, T-030)
- * und bilden keine mehr. Übrig bleiben drei Verwendungen, die keine
- * Entsprechung im Dienst haben, weil sie **exportierte** Buchungen betreffen —
- * und die kommen in keiner Vorschau vor:
- *
- *   1. der Kalendertag in einem Dialogtext („Die Buchung vom …"),
- *   2. `fromDay`/`toDay` in `app/dayGroup.ts`, wo nach dem Tag einer bereits
- *      exportierten Buchung gefragt wird,
- *   3. die Bündelung der Buchungsliste eines Todos in S-03, die offene **und**
- *      abgerechnete Zeiten zeigt.
+ * `calendarDayOf` and `todayCalendarDay` build filter values (`fromDay`/`toDay`),
+ * not billing values; the service assigns a booking to its day (E-025).
  */
 
-const LOCALE = "de-DE";
+import { currentLocale, pickTexts } from "./language";
 
-const DATE_FORMAT = new Intl.DateTimeFormat(LOCALE, {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
+const WORDS = {
+  de: {
+    timeRangeSuffix: " Uhr",
+    zeroMinutes: "0 Minuten",
+    seconds: (count: number) => (count === 1 ? "1 Sekunde" : `${String(count)} Sekunden`),
+    hours: (count: number) => (count === 1 ? "1 Stunde" : `${String(count)} Stunden`),
+    minutes: (count: number) => (count === 1 ? "1 Minute" : `${String(count)} Minuten`),
+    and: "und",
+  },
+  en: {
+    timeRangeSuffix: "",
+    zeroMinutes: "0 minutes",
+    seconds: (count: number) => (count === 1 ? "1 second" : `${String(count)} seconds`),
+    hours: (count: number) => (count === 1 ? "1 hour" : `${String(count)} hours`),
+    minutes: (count: number) => (count === 1 ? "1 minute" : `${String(count)} minutes`),
+    and: "and",
+  },
+};
 
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat(LOCALE, {
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
+function dateFormat(): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(currentLocale(), {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
-const TIME_FORMAT = new Intl.DateTimeFormat(LOCALE, {
-  hour: "2-digit",
-  minute: "2-digit",
-});
+function weekdayFormat(): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(currentLocale(), {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
-/** `YYYY-MM-DD` in der Zeitzone des Rechners. `sv-SE` liefert genau diese Form. */
+/** 24-hour clock in both languages (welle-18.md 2.2). */
+function timeFormat(): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(currentLocale(), {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
+
+/** `YYYY-MM-DD` in the computer's time zone. `sv-SE` yields exactly this form. */
 const DAY_FORMAT = new Intl.DateTimeFormat("sv-SE", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
 });
 
-const NUMBER_2 = new Intl.NumberFormat(LOCALE, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-/* Dauer                                                                */
+/* Durations                                                            */
 
 function splitSeconds(seconds: number): { hours: number; minutes: number; rest: number } {
   const total = Math.max(0, Math.trunc(seconds));
@@ -88,27 +84,12 @@ function pad(value: number): string {
 }
 
 /**
- * Erfasste Dauer, zum Beispiel `1:07 h`.
+ * Recorded duration, for example `1:07 h`. Unrounded; a single booking has no
+ * export value (E-020).
  *
- * Das ist die **ungerundete** Wirklichkeit. Neben einer einzelnen Buchung
- * steht bewusst kein Exportwert: Seit E-020 hat eine einzelne Buchung keinen
- * (Befund B-20). Der gerundete Wert erscheint an der Tagesgruppe.
- *
- * ## Unter einer Minute wird in Sekunden gemessen (T-059)
- *
- * Bis T-058 lief jede Buchung unter 60 Sekunden als `0:00 h` über den Schirm.
- * Der Auftraggeber hatte genau das vor sich: `01:07–01:08 Uhr` und daneben
- * `0:00 h`. Der Dienst war nie ungenau — `durationSeconds` war 40 —, die
- * Anzeige hat die Sekunden weggeschnitten.
- *
- * Das ist keine Kosmetik. Wer seine Buchung als null liest, hält sie für nicht
- * zustande gekommen und legt eine zweite an; danach stehen zwei Buchungen da,
- * wo eine gemeint war.
- *
- * Deshalb: **null Sekunden bleiben `0:00 h`** — da ist wirklich nichts —, und
- * alles darunter bis 59 Sekunden erscheint als `40 s`. Aufrunden auf `0:01 h`
- * wäre die falsche Rettung: Das wären 60 Sekunden, und so viele sind es nicht.
- * Die Einheit wechselt sichtbar mit, damit niemand `40` für Minuten hält.
+ * Under one minute the unit switches to seconds (`40 s`, T-059): a booking shown
+ * as `0:00 h` looks like it never happened and gets entered twice. Zero stays
+ * `0:00 h`.
  */
 export function formatDuration(seconds: number): string {
   const { hours, minutes, rest } = splitSeconds(seconds);
@@ -116,117 +97,97 @@ export function formatDuration(seconds: number): string {
   return `${String(hours)}:${pad(minutes)} h`;
 }
 
-/** Laufende Anzeige des Timers, zum Beispiel `00:42:17`. */
+/** Running timer display, for example `00:42:17`. */
 export function formatStopwatch(seconds: number): string {
   const { hours, minutes, rest } = splitSeconds(seconds);
   return `${pad(hours)}:${pad(minutes)}:${pad(rest)}`;
 }
 
 /**
- * Vorgelesene Fassung derselben Dauer, für `aria-label`.
- *
- * Dieselbe Genauigkeit wie `formatDuration` (T-059): unter einer Minute werden
- * Sekunden gesagt, sonst Stunden und Minuten. Zwei zusätzliche Regeln, damit
- * der Satz gesprochen trägt:
- *
- *  - **Volle Stunde ohne Anhängsel.** „1 Stunde und 0 Minuten" ist kein Satz,
- *    den jemand sagen würde. Sind es null Minuten, endet die Ansage nach der
- *    Stunde.
- *  - **Einzahl richtig.** „1 Stunde", nicht „1 Stunden" — auch dann, wenn
- *    keine Minuten folgen.
+ * Spoken form of the same duration, for `aria-label`. Same precision as
+ * `formatDuration`; a full hour ends without "and 0 minutes", singular forms
+ * are correct.
  */
 export function spokenDuration(seconds: number): string {
+  const words = pickTexts(WORDS);
   const { hours, minutes, rest } = splitSeconds(seconds);
   if (hours === 0 && minutes === 0) {
-    if (rest === 0) return "0 Minuten";
-    return rest === 1 ? "1 Sekunde" : `${String(rest)} Sekunden`;
+    if (rest === 0) return words.zeroMinutes;
+    return words.seconds(rest);
   }
-  const h = hours === 1 ? "1 Stunde" : `${String(hours)} Stunden`;
-  const m = minutes === 1 ? "1 Minute" : `${String(minutes)} Minuten`;
-  if (hours === 0) return m;
-  if (minutes === 0) return h;
-  return `${h} und ${m}`;
+  if (hours === 0) return words.minutes(minutes);
+  if (minutes === 0) return words.hours(hours);
+  return `${words.hours(hours)} ${words.and} ${words.minutes(minutes)}`;
 }
 
-/* Viertelstunden                                                       */
+/* Quarter hours                                                        */
 
 /**
- * Der gerundete Wert einer **Tagesgruppe** als Text, zum Beispiel `0,75`.
- *
- * `quarters` ist die Anzahl Viertelstunden und kommt bereits gerundet aus der
- * Domäne (E-008 über die Tagessumme, E-020). Die Umrechnung in Stunden ist
- * `quarterHoursToExportNumber` aus `packages/domain/src/rounding.ts` — dieselbe
- * Division durch vier, hier nur zur Anzeige. Gerundet wird an dieser Stelle
- * nichts; wer hier rundet, ändert eine Rechnung.
+ * The rounded value of a **day group** for display, for example `0,75` or
+ * `0.75`. `quarters` arrives rounded from the domain (E-008, E-020); this only
+ * divides by four like `quarterHoursToExportNumber`. Display only — the export
+ * file takes its number from the template, never from here (E-123 point 4).
  */
 export function formatQuarters(quarters: number): string {
-  return NUMBER_2.format(quarters / 4);
+  return new Intl.NumberFormat(currentLocale(), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(quarters / 4);
 }
 
-/* Zeitpunkte                                                           */
+/* Points in time                                                       */
 
 export function formatDate(timestamp: string): string {
-  return DATE_FORMAT.format(new Date(timestamp));
+  return dateFormat().format(new Date(timestamp));
 }
 
 export function formatTime(timestamp: string): string {
-  return TIME_FORMAT.format(new Date(timestamp));
+  return timeFormat().format(new Date(timestamp));
 }
 
 export function formatDateTime(timestamp: string): string {
   return `${formatDate(timestamp)}, ${formatTime(timestamp)}`;
 }
 
-/** Zeitraum einer Buchung, zum Beispiel `12.08.2026, 09:12–10:19`. */
+/** Period of a booking, for example `12.08.2026, 09:12–10:19`. */
 export function formatPeriod(startedAt: string, endedAt: string): string {
   return `${formatDate(startedAt)}, ${formatTime(startedAt)}–${formatTime(endedAt)}`;
 }
 
-/** Zeitraum ohne Datum, für die aufgeklappte Tagesgruppe: `09:12–09:22 Uhr`. */
+/** Period without date: `09:12–09:22 Uhr` in German, `09:12–09:22` in English. */
 export function formatTimeRange(startedAt: string, endedAt: string): string {
-  return `${formatTime(startedAt)}–${formatTime(endedAt)} Uhr`;
+  return `${formatTime(startedAt)}–${formatTime(endedAt)}${pickTexts(WORDS).timeRangeSuffix}`;
 }
 
-/** Kalendertag mit Wochentag, zum Beispiel `Mi., 12.08.2026`. */
+/** Calendar day with weekday, for example `Mi., 12.08.2026`. */
 export function formatDayLabel(day: string): string {
-  return WEEKDAY_FORMAT.format(new Date(`${day}T12:00:00`));
+  return weekdayFormat().format(new Date(`${day}T12:00:00`));
 }
 
-/* Kalendertage für Filter                                              */
+/* Calendar days for filters                                            */
 
-/** Der Kalendertag eines Zeitpunkts in der Zeitzone des Rechners. */
+/** The calendar day of a timestamp in the computer's time zone. */
 export function calendarDayOf(timestamp: string): string {
   return DAY_FORMAT.format(new Date(timestamp));
 }
 
 /**
- * Ein Kalendertag als deutsches Datum: `12.09.2026`.
- *
- * Für die Frist an einer Zeile und auf einer Karte (A-19.2). Ohne Wochentag —
- * anders als {@link formatDayLabel}, das eine Tagesgruppe von Buchungen
- * überschreibt und dort den Wochentag braucht, weil man Buchungen nach ihm
- * sucht. Eine Frist wird nach dem Datum gesucht.
- *
- * Der Mittag als Uhrzeit ist der übliche Griff gegen Zeitzonenversatz beim
- * Auslesen: `new Date("2026-09-12")` ist Mitternacht **UTC** und liegt westlich
- * von Greenwich noch am Vortag. **Er rechnet nichts** — welcher Tag gemeint ist,
- * steht schon in der Zeichenkette; hier wird er nur gesetzt.
+ * A calendar day as a date without weekday, for the deadline (A-19.2).
+ * Noon avoids the time-zone shift of `new Date("2026-09-12")` (midnight UTC);
+ * it computes nothing, the day is already in the string.
  */
 export function formatCalendarDay(day: string): string {
-  return DATE_FORMAT.format(new Date(`${day}T12:00:00`));
+  return dateFormat().format(new Date(`${day}T12:00:00`));
 }
 
-/** Heute, als Filterwert `YYYY-MM-DD`. */
+/** Today, as filter value `YYYY-MM-DD`. */
 export function todayCalendarDay(): string {
   return DAY_FORMAT.format(new Date());
 }
 
 /**
- * Verschiebt einen Kalendertag um `days` Tage.
- *
- * Reine Kalenderarithmetik für Filterschaltflächen („letzte 7 Tage“), nicht
- * für einen Abrechnungswert. Welche Buchung zu welchem Tag zählt, entscheidet
- * weiterhin der Dienst (E-025).
+ * Moves a calendar day by `days` days. Calendar arithmetic for filter buttons
+ * ("last 7 days"), not for a billing value (E-025).
  */
 export function shiftCalendarDay(day: string, days: number): string {
   const base = new Date(`${day}T12:00:00`);
@@ -234,13 +195,11 @@ export function shiftCalendarDay(day: string, days: number): string {
   return DAY_FORMAT.format(base);
 }
 
-/* Eingabefelder für Zeitpunkte                                         */
+/* Input fields for points in time                                      */
 
 /**
- * Zeitstempel des Dienstes in den Wert eines `datetime-local`-Feldes.
- *
- * Der Dienst führt UTC, das Feld zeigt Ortszeit. Beide Richtungen stehen hier,
- * damit die Umrechnung nicht in zwei Formularen unterschiedlich geschieht.
+ * Service timestamp (UTC) to the value of a `datetime-local` field (local time).
+ * Both directions live here so two forms never convert differently.
  */
 export function toLocalInputValue(timestamp: string): string {
   const date = new Date(timestamp);
@@ -249,9 +208,9 @@ export function toLocalInputValue(timestamp: string): string {
 }
 
 /**
- * Wert eines `datetime-local`-Feldes zurück in einen Zeitstempel des Dienstes.
- * Leere oder unlesbare Eingaben liefern `null`; der Aufrufer meldet das als
- * Feldfehler, statt einen Zeitpunkt zu erfinden.
+ * Value of a `datetime-local` field back to a service timestamp. Empty or
+ * unreadable input returns `null`; the caller reports a field error instead of
+ * inventing a point in time.
  */
 export function fromLocalInputValue(value: string): string | null {
   if (value.trim().length === 0) return null;
@@ -260,46 +219,34 @@ export function fromLocalInputValue(value: string): string | null {
   return `${date.toISOString().slice(0, 19)}Z`;
 }
 
-/* Zahlen und Text                                                      */
+/* Numbers and text                                                     */
 
-/** Ganze Zahl mit Tausenderpunkt. */
+/** Whole number with the language's thousands separator. */
 export function formatCount(value: number): string {
-  return new Intl.NumberFormat(LOCALE).format(value);
+  return new Intl.NumberFormat(currentLocale()).format(value);
 }
 
-/** Dateigröße, zum Beispiel `12,4 kB`. */
+/** File size, for example `12,4 kB` or `12.4 kB`. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${formatCount(bytes)} B`;
+  const oneDecimal = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 1 });
   const kilo = bytes / 1024;
-  if (kilo < 1024) {
-    return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 }).format(kilo)} kB`;
-  }
-  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 }).format(kilo / 1024)} MB`;
+  if (kilo < 1024) return `${oneDecimal.format(kilo)} kB`;
+  return `${oneDecimal.format(kilo / 1024)} MB`;
 }
 
-/** `1 Buchung` / `7 Buchungen` — Einzahl und Mehrzahl an einer Stelle. */
+/**
+ * `1 Buchung` / `7 Buchungen`. The caller passes both forms from its text
+ * bundle, so each language brings its own.
+ */
 export function plural(count: number, one: string, many: string): string {
   return `${formatCount(count)} ${count === 1 ? one : many}`;
 }
 
-/* Aufzählungen — sie stehen nicht mehr hier                            */
-
-/*
-  Bis T-124 stand hier `joinGerman`: fünf Zeilen, die „A", „A und B", „A, B
-  und C" ergaben. Sie waren die dritte Abschrift derselben Form — neben
-  `enumerateGerman` in `lib/errorText.ts` und `quoteList` in
-  `features/todos/TodoFormDialog.tsx`, und alle drei neben dem privaten `listPools`
-  in `packages/domain/src/pool-movement.ts`, aus dem sie stammten.
-
-  Seit T-122 führt die Domäne die Form aus: `enumerateGerman`, `quoteName`
-  und `enumerateNames` in `packages/domain/src/enumeration.ts`. Der einzige
-  Aufrufer in dieser Oberfläche — `emptyFolderNames` in `lib/poolRule.ts` —
-  liest sie jetzt dort.
-
-  Warum die Zeilen ersatzlos verschwinden und nicht als Weiterleitung
-  stehenbleiben: Eine Weiterleitung wäre ein zweiter Name für dieselbe
-  Funktion und damit die nächste Gelegenheit, sie an einer Stelle zu ändern.
-  `lib/errorText.ts` führt aus dem einen genannten Grund eine — dort hängt ein
-  Test des unit-testers am Namen, und dieser Bruch gehört nicht in diese
-  Aufgabe (siehe Bericht T-124).
-*/
+/**
+ * "A, B und C" / "A, B and C" in the UI language (welle-18.md 2.2). The domain
+ * keeps `enumerateGerman` for the add-in; the main UI enumerates here.
+ */
+export function formatList(parts: readonly string[]): string {
+  return new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" }).format(parts);
+}

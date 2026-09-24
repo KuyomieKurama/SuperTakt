@@ -3,6 +3,7 @@ import { deadlineState, type DueState } from "../../lib/deadline";
 import { formatCalendarDay } from "../../lib/format";
 import type { CalendarDay } from "../../api/types";
 import { Icon, type IconName } from "./Icon";
+import { labels } from "../../lib/labels";
 
 /**
  * Takt — die Frist an einer Zeile und auf einer Karte (A-19.2 bis A-19.6).
@@ -76,11 +77,12 @@ const DEADLINE_ICON: Readonly<Record<Exclude<DueState, "no_due_date">, IconName>
  * Das Zustandswort. `later` hat keines — A-19.5 **benennt** den Zustand und
  * verlangt nicht, ihn hinzuschreiben (T-144 Abschnitt 8.5).
  */
-const DEADLINE_WORD: Readonly<Record<Exclude<DueState, "no_due_date">, string | null>> = {
-  overdue: "Überfällig",
-  due_today: "Heute fällig",
-  due_later: null,
-};
+function deadlineWord(state: Exclude<DueState, "no_due_date">): string | null {
+  const text = labels().deadline;
+  if (state === "overdue") return text.overdue;
+  if (state === "due_today") return text.dueToday;
+  return null;
+}
 
 export interface DeadlineFlagProps {
   /** Der gespeicherte Tag. `null` heißt: keine Frist, und dann steht hier nichts. */
@@ -101,7 +103,7 @@ export function DeadlineFlag({ dueDate, today, className }: DeadlineFlagProps) {
   if (state === "no_due_date" || dueDate === null) return null;
 
   const date = formatCalendarDay(dueDate);
-  const word = DEADLINE_WORD[state];
+  const word = deadlineWord(state);
 
   return (
     <span
@@ -114,7 +116,7 @@ export function DeadlineFlag({ dueDate, today, className }: DeadlineFlagProps) {
         einen zusammenhängenden Namen, statt Symbol und Text getrennt zu melden.
       */
       role="img"
-      aria-label={word === null ? `Frist: ${date}` : `${word} — Frist: ${date}`}
+      aria-label={word === null ? labels().deadline.name(date) : labels().deadline.nameWithState(word, date)}
     >
       <Icon name={DEADLINE_ICON[state]} size={12} />
       {word === null || state === "overdue" ? null : <span className="deadline__word">{word}</span>}

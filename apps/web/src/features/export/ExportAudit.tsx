@@ -1,6 +1,6 @@
 import { cx } from "../../lib/cx";
 import {
-  AUDIT_EVENT_DESCRIPTION,
+  auditEventDescription,
   AUDIT_EVENT_STATE,
   auditEventLabel,
   type ExportAuditRowModel,
@@ -9,6 +9,7 @@ import type { ExportAuditEvent } from "../../lib/labels";
 import { EXPORT_STATE } from "../../shared/ui/ExportStatus";
 import { Icon } from "../../shared/ui/Icon";
 import { Foreign } from "../../shared/ui/Foreign";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — das Exportprotokoll auf dem Bildschirm (R-10, E-012, E-047, C-01).
@@ -49,11 +50,11 @@ export function ExportAuditEventBadge({
   return (
     <span
       className={cx("badge", `badge--${definition.slug}`, `badge--${size}`, className)}
-      title={AUDIT_EVENT_DESCRIPTION[event]}
+      title={auditEventDescription(event)}
     >
       <Icon name={definition.icon} size={size === "sm" ? 12 : 14} />
       <span>
-        <span className="visually-hidden">Vorgang: </span>
+        <span className="visually-hidden">{exportTexts().eventPrefix}</span>
         {auditEventLabel(event)}
       </span>
     </span>
@@ -81,6 +82,7 @@ export function ExportAuditList({
   onOpenTodo,
   className,
 }: ExportAuditListProps) {
+  const text = exportTexts();
   return (
     <ol className={cx("auditlist", className)}>
       {models.map((model) => (
@@ -91,7 +93,7 @@ export function ExportAuditList({
             </time>
             <ExportAuditEventBadge event={model.event} size="sm" />
             <span className="auditrow__transition">
-              <span className="visually-hidden">Statuswechsel: </span>
+              <span className="visually-hidden">{text.transitionPrefix}</span>
               {model.transition}
             </span>
             {!showBooking || model.booking === null ? null : onOpenTodo === undefined ? (
@@ -119,8 +121,7 @@ export function ExportAuditList({
             <p className="auditrow__booking">
               {model.booking === null ? (
                 <span className="muted">
-                  Diese Buchung ist nicht mehr auffindbar. Die Protokollzeile bleibt trotzdem
-                  stehen — sie ist der Beleg, dass es sie gab.
+                  {text.bookingGone}
                 </span>
               ) : (
                 <>
@@ -131,7 +132,7 @@ export function ExportAuditList({
                     <>
                       <span aria-hidden> · </span>
                       <span className="mono">
-                        Call <Foreign value={model.booking.callNumber} />
+                        {text.call} <Foreign value={model.booking.callNumber} />
                       </span>
                     </>
                   )}
@@ -145,13 +146,13 @@ export function ExportAuditList({
               <>
                 <Icon name="slash-circle" size={13} />
                 <span>
-                  Kein Exportlauf — diese Zeit ist nie in eine Datei gegangen.
+                  {text.noRun}
                 </span>
               </>
             ) : model.run.filePath === "" ? (
               <>
                 <Icon name="alert-triangle" size={13} />
-                <span>Der zugehörige Exportlauf ließ sich nicht laden.</span>
+                <span>{text.runNotLoaded}</span>
               </>
             ) : (
               <>
@@ -159,7 +160,7 @@ export function ExportAuditList({
                 <span className="auditrow__file mono truncate" title={model.run.filePath}>
                   <Foreign value={model.run.fileName} />
                 </span>
-                <span className="auditrow__written">geschrieben {model.run.writtenAt}</span>
+                <span className="auditrow__written">{text.written(model.run.writtenAt)}</span>
               </>
             )}
           </p>
@@ -167,13 +168,12 @@ export function ExportAuditList({
           {model.reason.trim().length === 0 ? (
             model.event === "not_billed" ? (
               <p className="auditrow__reason auditrow__reason--absent">
-                Ohne Begründung ausgebucht. Das Feld ist freiwillig — protokolliert ist
-                trotzdem, dass hier jemand Zeit ohne Abrechnung abgehakt hat, und wann.
+                {text.notBilledWithoutReason}
               </p>
             ) : null
           ) : (
             <p className="auditrow__reason">
-              <span className="auditrow__reason-label">Begründung</span>
+              <span className="auditrow__reason-label">{text.reason}</span>
               <span className="auditrow__reason-text">
                 <Foreign value={model.reason} />
               </span>
@@ -181,7 +181,7 @@ export function ExportAuditList({
           )}
 
           <p className="auditrow__actor">
-            <span className="visually-hidden">Ausgelöst von: </span>
+            <span className="visually-hidden">{text.actorPrefix}</span>
             <Foreign value={model.actor} />
           </p>
         </li>

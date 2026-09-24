@@ -90,7 +90,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
    * veralteten Zeitpunkten gehört an die Stelle, die sie schreibt, nicht an
    * die, die sie abzieht.
    */
-  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running', 'last_version_check_at'], orderBy: 'id' },
+  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'motion_intensity', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running', 'last_version_check_at', 'version_check_enabled', 'ui_language'], orderBy: 'id' },
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [
@@ -155,9 +155,12 @@ export function createDataArchivePort(conn: SqlConnection): DataArchivePort {
       const running = tables.time_entry.find(row => row['ended_at'] === null);
       if (idle !== undefined && running !== undefined) {
         const returned = idle['returned_at'];
-        const valid = returned === null
-          ? running['id'] === idle['session_id'] && String(running['started_at']) <= String(idle['started_at'])
-          : String(running['started_at']) >= String(returned);
+        // A returned idle phase can retain its original open timer while the
+        // user decides how to allocate it. Older archives contain a successor
+        // timer that starts at the return instead, so accept both shapes.
+        const valid = running['id'] === idle['session_id']
+          ? String(running['started_at']) <= String(idle['started_at'])
+          : returned !== null && String(running['started_at']) >= String(returned);
         if (!valid) throw new Error('Laufender Timer und Inaktivitätsphase im Datenarchiv überschneiden sich ungültig.');
       }
       // Vollständig prüfen, bevor der erste bestehende Datensatz angefasst wird.

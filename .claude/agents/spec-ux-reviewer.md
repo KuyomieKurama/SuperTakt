@@ -41,6 +41,11 @@ Du schreibst ausschließlich `.claude/team/reports/T-XXX-spec-ux-reviewer.md`.
 - NoExport-Aufgabe: Zeit sichtbar an der Aufgabe, nicht in Buchungsübersicht und Export (A-26).
 - Prioritäten: Filter „Ohne Priorität“, Sortierung nach Gewichtung (A-27).
 
+## Aufzählungen gegen den Bestand (O-LB, E-121)
+Zählt ein Designpapier oder eine Spezifikation an einer Fläche Möglichkeiten auf, prüfe zuerst, ob
+die gebaute Fläche eine davon ist. Eine Aufzählung, die den wirklichen Fall nicht enthält, ist ein
+Befund — gefährlicher als eine, die schweigt.
+
 ## Berichtsform
 `A-ID  Screen/Flow  Abweichung: ...  Vorschlag: ...`
 

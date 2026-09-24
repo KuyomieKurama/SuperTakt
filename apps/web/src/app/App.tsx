@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listTimeEntries } from "../features/bookings/api";
 import {
   listTodos,
@@ -26,6 +26,9 @@ import { useUpdateNotice } from "../features/settings/useUpdateNotice";
 import { useAsync } from "./useAsync";
 import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
+import { ServiceText } from "../shared/ui/ServiceText";
+import { appTexts } from "./texts";
+import { useLanguage } from "../lib/language";
 
 const BoardScreen = lazy(() => import("../features/board/BoardScreen").then(module => ({ default: module.BoardScreen })));
 const ExportAuditScreen = lazy(() => import("../features/export/ExportAuditScreen").then(module => ({ default: module.ExportAuditScreen })));
@@ -88,6 +91,8 @@ const TodoListScreen = lazy(() => import("../features/todos/TodoListScreen").the
 export function App() {
   useEffect(() => { performance.mark("supertakt:first-render"); }, []);
   const { route, revisit } = useRoute();
+  // Subscribing here re-renders the whole tree when the UI language changes (A-28.2).
+  useLanguage();
   return <ConnectedApp route={route} revisit={revisit} />;
 }
 
@@ -133,13 +138,7 @@ function ConnectedApp({
         }
       })
       .catch((cause: unknown) => {
-        setState({
-          kind: "failed",
-          message:
-            cause instanceof Error
-              ? cause.message
-              : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
-        });
+        setState({ kind: "failed", message: cause instanceof Error ? cause.message : null });
       });
   }, []);
 
@@ -162,11 +161,13 @@ function ConnectedApp({
     return () => window.clearInterval(handle);
   }, [state.kind]);
 
+  const texts = appTexts();
+
   if (state.kind === "connecting") {
     return (
       <div className="boot">
-        <Spinner size={22} label="SuperTakt wird verbunden" />
-        <p className="boot__text">SuperTakt verbindet sich mit dem lokalen Dienst …</p>
+        <Spinner size={22} label={texts.connecting} />
+        <p className="boot__text">{texts.connectingText}</p>
       </div>
     );
   }
@@ -178,17 +179,15 @@ function ConnectedApp({
   if (state.kind === "failed") {
     return (
       <div className="boot">
-        <Card title="SuperTakt konnte sich nicht verbinden">
-          <InlineMessage tone="danger" title="Der lokale Dienst ist nicht erreichbar">
-            {state.message}
+        <Card title={texts.connectFailedTitle}>
+          {/* The title names the cause the body explains; they no longer contradict (A-28.5). */}
+          <InlineMessage tone="danger" title={state.notReady === true ? texts.serviceNotReady : texts.connectionFailed}>
+            {state.message === null ? texts.connectFailedFallback : <ServiceText text={state.message} />}
           </InlineMessage>
-          <p className="boot__text">
-            Ohne den lokalen Dienst gibt es keine Daten: Todos, Zeiten und Einstellungen liegen
-            allein dort. SuperTakt speichert nichts im Browser.
-          </p>
+          <p className="boot__text">{texts.noDataWithoutService}</p>
           <div className="boot__actions">
             <Button variant="primary" iconStart="rotate-ccw" onClick={attempt}>
-              Erneut versuchen
+              {texts.retry}
             </Button>
           </div>
         </Card>
@@ -224,19 +223,12 @@ function ConnectedApp({
 }
 
 function NoShellNotice() {
+  const texts = appTexts();
   return (
     <div className="boot">
-      <Card title="SuperTakt läuft in der SuperTakt-Anwendung">
-        <p className="boot__text">
-          Diese Seite ist die Oberfläche von SuperTakt. Sie spricht mit einem lokalen Dienst, der
-          ausschließlich von der SuperTakt-Anwendung gestartet wird — und sie weist sich dabei mit
-          einem Sitzungsgeheimnis aus, das nur diese Anwendung kennt. Im Browser allein gibt es
-          beides nicht, deshalb bleibt hier alles leer.
-        </p>
-        <p className="boot__text">
-          Das ist kein Fehler, sondern die Absicht: Der Dienst hört nur auf die eigene Maschine
-          und beantwortet keine Anfrage ohne Nachweis — auch nicht die Frage, ob es ihn gibt.
-        </p>
+      <Card title={texts.noShellTitle}>
+        <p className="boot__text">{texts.noShellWhat}</p>
+        <p className="boot__text">{texts.noShellWhy}</p>
         {/*
           Hier stand bis T-057 ein Knopf „Designsystem ansehen". Er war der
           letzte Weg aus der Anwendung in die Musterseite, und der Auftraggeber
@@ -263,8 +255,17 @@ function Workspace({
   /** Der Befund zum Windows-Benutzernamen, kein Name (O-AJ). */
   readonly userName: UserNameFinding;
 }) {
-  const { version } = useRefresh();
+  const { version, bump } = useRefresh();
   const updates = useUpdateNotice();
+
+  // Texts formatted while loading (dates, sentences) would stay in the old language; reload them.
+  const language = useLanguage();
+  const shownLanguage = useRef(language);
+  useEffect(() => {
+    if (shownLanguage.current === language) return;
+    shownLanguage.current = language;
+    bump();
+  }, [language, bump]);
 
   /*
     Hier und nur hier (T-097): Die Arbeitsfläche steht innerhalb beider
@@ -286,10 +287,11 @@ function Workspace({
   const openTodoCount = counters.state.status === "ready" ? counters.state.value.openTodos : null;
   const openEntryCount = counters.state.status === "ready" ? counters.state.value.openEntries : null;
 
+  const texts = appTexts();
   return (
     <div className="app">
       <a className="skip-link" href="#inhalt">
-        Zum Inhalt springen
+        {texts.skipToContent}
       </a>
 
       {shell === null ? null : (
@@ -373,7 +375,7 @@ function Workspace({
       */}
       <main className="app__main">
         <ScreenLoadBoundary key={route.name}>
-          <Suspense fallback={<div className="boot boot--inline" role="status"><Spinner label="Ansicht wird geladen" /><p>Ansicht wird geladen …</p></div>}>
+          <Suspense fallback={<div className="boot boot--inline" role="status"><Spinner label={texts.screenLoading} /><p>{texts.screenLoadingText}</p></div>}>
             <Screen route={route} />
           </Suspense>
         </ScreenLoadBoundary>
@@ -419,16 +421,17 @@ function Screen({ route }: { readonly route: Route }) {
   in seinem Laufbereich (T-322 R-5) — hier füllt er ihn ganz.
 */
 function UnknownScreen() {
+  const texts = appTexts();
   return (
     <section className="screen">
-      <ScreenBody label="Diese Ansicht gibt es nicht">
+      <ScreenBody label={texts.unknownScreen}>
         <EmptyState
           icon="search"
-          title="Diese Ansicht gibt es nicht"
-          description="Die Adresse führt ins Leere. Über die Navigation links geht es weiter."
+          title={texts.unknownScreen}
+          description={texts.unknownScreenHint}
           action={
             <Button variant="primary" onClick={() => (window.location.hash = href("dashboard"))}>
-              Zum Dashboard
+              {texts.toDashboard}
             </Button>
           }
         />
@@ -448,11 +451,12 @@ class ScreenLoadBoundary extends Component<{ children: ReactNode }, { failed: bo
       Laufbereich, nicht in seiner Mitte: eine Fehlerfläche steht dort, wo der
       Inhalt begonnen hätte (T-322 R-5).
     */
+    const texts = appTexts();
     if (this.state.failed) return <section className="screen">
-      <ScreenBody label="Die Ansicht konnte nicht geladen werden">
-        <InlineMessage tone="danger" title="Die Ansicht konnte nicht geladen werden"
-          action={<Button onClick={() => window.location.reload()}>Erneut laden</Button>}>
-          Bitte laden Sie die Anwendung erneut.
+      <ScreenBody label={texts.screenLoadFailed}>
+        <InlineMessage tone="danger" title={texts.screenLoadFailed}
+          action={<Button onClick={() => window.location.reload()}>{texts.reload}</Button>}>
+          {texts.reloadHint}
         </InlineMessage>
       </ScreenBody>
     </section>;

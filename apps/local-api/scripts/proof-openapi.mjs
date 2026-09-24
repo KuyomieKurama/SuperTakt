@@ -510,23 +510,11 @@ check(
   'als Feld beschrieben, aber vom Dienst nicht gelesen (Befund C-03)',
 );
 
-const booking = doc.paths['/addin/todos/{todoId}/time-entries'].post;
-// Seit T-104 heißt das zweite Feld `poolMovement` und nicht mehr `poolNames`:
-// **eine** Form für jede Bewegung über HTTP (E-061 Punkt 3). Die Prüfung misst
-// unverändert, dass die Antwort die Wirkung ansagt — nur unter dem Namen, den
-// sie jetzt trägt.
+// The add-in booking route fell with E-120 (T-389); its answer fields
+// (`doneCleared`, `poolMovement`) are measured at `POST /timer/start` below.
 check(
-  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolMovement',
-  (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
-    'doneCleared',
-  ) &&
-    (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
-      'poolMovement',
-    ),
-);
-check(
-  'und sie begründet, warum ein Nachzügler trotzdem 201 bekommt',
-  booking.description.includes('201') && booking.description.includes('reopenIfDone'),
+  'die Buchungsroute des Add-ins steht nicht mehr in der Beschreibung (E-120)',
+  doc.paths['/addin/todos/{todoId}/time-entries'] === undefined,
 );
 
 section('5  Der Vergleicher prüft sich selbst — sonst wäre alles Folgende grün aus Versehen');

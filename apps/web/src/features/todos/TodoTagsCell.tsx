@@ -4,6 +4,7 @@ import { Portal } from "@ark-ui/react/portal";
 import type { ForeignText } from "../../api/types";
 import { formatCount, plural } from "../../lib/format";
 import { TagChip } from "../../shared/ui/Tag";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — die Tag-Zelle der Todo-Tabelle und die Fläche dahinter
@@ -212,7 +213,7 @@ export function TodoTagsCell({ count, tags, open, onOpenChange }: TodoTagsCellPr
 
   if (count === 0) return null;
 
-  const label = plural(count, "Tag", "Tags");
+  const label = plural(count, todoTexts().tag, todoTexts().tagPlural);
 
   return (
     <Popover.Root

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { errorMessage } from "../../api/client";
+import { useEffect, useState, type ReactNode } from "react";
+import { errorCode, errorMessage, isServiceError } from "../../api/client";
 import {
   createTimeEntry,
   markNotBilled,
@@ -16,8 +16,8 @@ import { NoteField } from "../../shared/ui/NoteField";
 import { Button, EmptyState, InlineMessage, LoadingBlock } from "../../shared/ui/Primitives";
 import { useAsync, useMutation } from "../../app/useAsync";
 import { useRefresh } from "../../app/RefreshContext";
-import { useToasts } from "../../app/ToastContext";
-import { loadDayGroupInsight } from "../../app/dayGroup";
+import { useToasts, type ToastInput } from "../../app/ToastContext";
+import { loadDayGroupInsight, type DayGroupInsight } from "../../app/dayGroup";
 import { loadExportAuditPage } from "../export/exportAuditRows";
 import { navigate } from "../../app/router";
 import {
@@ -30,10 +30,16 @@ import {
   plural,
   toLocalInputValue,
 } from "../../lib/format";
-import { BILLING_NOTE_MAY_BE_EMPTY } from "../../lib/labels";
-import { bookingSentence, withMovement } from "../../lib/movement";
+import { dayGroupMissingNote, dayGroupPreviewFailed, labels } from "../../lib/labels";
+import { bookingTexts } from "./texts";
+import { bookingSentence } from "../../lib/movement";
+// Cycle bookings <-> timer: a manual booking reports exactly like a timer stop (A-28.7, one wording).
+import { stopMessage } from "../timer/stopMessage";
+import { timerTexts } from "../timer/texts";
+import { bookingEndProblem } from "../../lib/bookingEnd";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { ServiceText } from "../../shared/ui/ServiceText";
 
 /**
  * Takt — Dialoge rund um eine Zeitbuchung.
@@ -60,6 +66,58 @@ import { Foreign } from "../../shared/ui/Foreign";
 
 /* Anlegen und Ändern                                                   */
 
+/**
+ * The toast after editing a booking: four situations, three wordings
+ * (docs/design/textbestand.md 12.3, O-II).
+ *
+ * `previewProblem` is checked before `blockedReason`: a failed preview also
+ * carries `blockedReason: null`, and reading that as "all fine" would report
+ * success about a state the application does not know.
+ */
+export function bookingChangedMessage(insight: DayGroupInsight | null): ToastInput {
+  const changed = bookingTexts().bookingChanged;
+  const shared = labels();
+  // L4 — nothing open that day, or the question itself failed.
+  if (insight === null) return { tone: "success", title: `${changed}.` };
+  // L3 — the preview did not answer; the service sentence stays verbatim (12.10).
+  if (insight.previewProblem !== null) {
+    return {
+      tone: "warning",
+      title: `${changed} — ${shared.dayGroupPreviewFailedShort}.`,
+      body: dayGroupPreviewFailed(insight.previewProblem),
+    };
+  }
+  // L2 — the group still has no billing note.
+  if (insight.blockedReason !== null) {
+    return {
+      tone: "warning",
+      title: `${changed} — ${shared.dayGroupNotBillable}.`,
+      body: dayGroupMissingNote(insight.seconds),
+    };
+  }
+  // L1 — the group carries text; name its rounded export value like after a stop (A-28.7).
+  return {
+    tone: "success",
+    title: `${changed}.`,
+    body:
+      insight.quarters === null
+        ? bookingTexts().groupChangesToo
+        : timerTexts().openThatDay(formatDuration(insight.seconds), formatQuarters(insight.quarters)),
+  };
+}
+
+/** A day group whose question failed as a whole: booked stays booked, the value is unknown. */
+function failedInsight(cause: unknown): DayGroupInsight {
+  return {
+    entryCount: 0,
+    seconds: 0,
+    quarters: null,
+    blockedReason: null,
+    previewProblem: errorMessage(cause),
+    previewProblemCode: errorCode(cause),
+  };
+}
+
 export interface BookingFormDialogProps {
   readonly open: boolean;
   /** Vorhandene Buchung — dann wird geändert. */
@@ -80,6 +138,7 @@ export function BookingFormDialog({
   const toasts = useToasts();
   const { bump } = useRefresh();
   const mutation = useMutation();
+  const text = bookingTexts();
 
   const [startedAt, setStartedAt] = useState("");
   const [endedAt, setEndedAt] = useState("");
@@ -109,75 +168,70 @@ export function BookingFormDialog({
     Fläche **angesagt**, während der Dialog schon steht — wer sie hört und nicht
     sieht, hat ohne den Feldnamen keinen Bezug.
   */
-  const startError =
-    attempted && fromLocalInputValue(startedAt) === null ? "Anfang fehlt." : undefined;
-  const endError = attempted && fromLocalInputValue(endedAt) === null ? "Ende fehlt." : undefined;
+  const start = fromLocalInputValue(startedAt);
+  const end = fromLocalInputValue(endedAt);
+  // A-28.6: at most 24 hours, and the end after the start; the service refuses the same.
+  const endProblem = start === null ? (end === null ? "missing" : null) : bookingEndProblem(start, end, false);
+  const startError = attempted && start === null ? text.startMissing : undefined;
+  const endError = attempted && endProblem !== null ? labels().bookingEndProblem[endProblem] : undefined;
 
   const submit = (): void => {
-    const start = fromLocalInputValue(startedAt);
-    const end = fromLocalInputValue(endedAt);
     setAttempted(true);
-    if (start === null || end === null) return;
+    if (start === null || end === null || endProblem !== null) return;
 
     void mutation.run(async () => {
       if (entry === undefined) {
         /*
-          Anlegen: derselbe Rahmen wie nach dem Timerstopp (O-V, Nachtrag zu
-          E-061; T-102 Frage 1).
-
-          **Der Titel nennt das Todo**, der Rumpf sagt, was mit ihm geschehen
-          ist. Der Bewegungssatz beginnt mit „Es" und nennt das Todo nicht;
-          ohne einen Bezug darüber stünde das „Es" allein (W-5 aus R-2a).
-          Vorgeschichte: `docs/decisions/bookings.md`.
-
-          **Der Bewegungssatz kommt vom Dienst**, nicht von hier: `bookingSentence`
-          holt ihn aus `poolMovementSentence` in `@takt/domain`, Anlaß
-          `'booking'`, Zeitform `'past'` — wie beim Stopp. Meldet der Dienst
-          keine Bewegung, entfällt die Zeile ganz (`withMovement`).
+          Create: the title names the todo, the body says what happened to it (W-5). The
+          movement sentence comes from the service (`bookingSentence`), as after a stop.
+          A-28.7: the same toast as after a timer stop — day group of the start day (E-025)
+          and its rounded export value. The dialog closes first, then the question follows
+          (T-118); a failed question still reports the booking.
         */
         const created = await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
-        toasts.success(
-          `Zeit gebucht auf ${quotedName(todoTitle)}.`,
-          withMovement(
-            `Gebucht: ${formatDuration(created.durationSeconds)}.`,
-            bookingSentence(created.poolMovement),
-          ),
-        );
-      } else {
-        /*
-          Ändern: **kein** Bewegungssatz, und das ist der Vertrag, keine
-          Auslassung. Ein geänderter Zeitraum bewegt nichts — die Buchung war
-          schon da, „hat offene Buchungen" stand bereits, und keine Achse einer
-          Regel fragt nach Anfang oder Ende (O-V, letzter Satz). `PATCH
-          /time-entries/{id}` liefert deshalb kein `poolMovement`, und hier ist
-          keines wegzulassen.
-        */
-        await updateTimeEntry(entry.id, { startedAt: start, endedAt: end, note });
-        toasts.success("Buchung geändert.", "Die Tagesgruppe dieses Todos ändert sich mit.");
+        bump();
+        onClose();
+        const movement = bookingSentence(created.poolMovement);
+        void loadDayGroupInsight(todoId, calendarDayOf(created.startedAt))
+          .catch(failedInsight)
+          .then((insight) => toasts.show(stopMessage(insight, todoTitle, created.durationSeconds, movement)));
+        return;
       }
+
+      /*
+        Edit: no movement sentence by contract — a changed period moves nothing, and
+        `PATCH /time-entries/{id}` returns no `poolMovement` (O-V). The dialog closes first,
+        then the day group is asked with the new start (textbestand 12.8 AK 1 and 6). A failed
+        question is still a saved booking: it reports L4, never an error.
+      */
+      await updateTimeEntry(entry.id, { startedAt: start, endedAt: end, note });
       bump();
       onClose();
+      void loadDayGroupInsight(entry.todoId, calendarDayOf(start))
+        .then((insight) => toasts.show(bookingChangedMessage(insight)))
+        .catch(() => toasts.show(bookingChangedMessage(null)));
     });
   };
 
   return (
     <FormDialog
       open={open}
-      title={entry === undefined ? "Zeit von Hand erfassen" : "Buchung bearbeiten"}
+      title={entry === undefined ? text.manualTitle : text.editTitle}
       description={
         entry === undefined
-          ? `Für ${quotedName(todoTitle)}. Die Dauer ergibt sich aus Anfang und Ende; SuperTakt rechnet sie aus.`
-          : `Für ${quotedName(todoTitle)}. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
+          ? text.manualLead(quotedName(todoTitle))
+          : text.editLead(quotedName(todoTitle))
       }
-      submitLabel={entry === undefined ? "Buchen" : "Speichern"}
+      submitLabel={entry === undefined ? text.book : text.save}
       busy={mutation.busy}
       error={mutation.error}
+      errorFromService={mutation.errorFromService}
       onSubmit={submit}
       onCancel={onClose}
     >
       <div className="field-row">
         <TextField
-          label="Anfang"
+          label={text.start}
           type="datetime-local"
           value={startedAt}
           onChange={setStartedAt}
@@ -185,7 +239,7 @@ export function BookingFormDialog({
           {...(startError === undefined ? {} : { error: startError })}
         />
         <TextField
-          label="Ende"
+          label={text.end}
           type="datetime-local"
           value={endedAt}
           onChange={setEndedAt}
@@ -200,7 +254,7 @@ export function BookingFormDialog({
         onChange={setNote}
         rows={3}
         maxLength={8192}
-        placeholder="Was wurde geleistet?"
+        placeholder={text.notePlaceholder}
       />
 
       {/*
@@ -219,7 +273,7 @@ export function BookingFormDialog({
 
         Der Wortlaut steht in `lib/labels.ts` und nicht zweimal in der Ansicht.
       */}
-      <p className="dialog__hint">{BILLING_NOTE_MAY_BE_EMPTY}</p>
+      <p className="dialog__hint">{labels().billingNoteMayBeEmpty}</p>
     </FormDialog>
   );
 }
@@ -237,7 +291,8 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
   const toasts = useToasts();
   const { bump } = useRefresh();
   const [busy, setBusy] = useState(false);
-  const [context, setContext] = useState<string | null>(null);
+  const [context, setContext] = useState<ReactNode>(null);
+  const text = bookingTexts();
 
   /**
    * Was die Rücknahme für die Tagesgruppe bedeutet, wird **vor** dem
@@ -255,9 +310,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
       .then((insight) => {
         if (!live) return;
         if (insight === null) {
-          setContext(
-            `An diesem Tag ist auf diesem Todo derzeit nichts offen. Diese Buchung mit ${formatDuration(entry.durationSeconds)} bildet danach die Tagesgruppe.`,
-          );
+          setContext(bookingTexts().resetNothingOpen(formatDuration(entry.durationSeconds)));
           return;
         }
         /*
@@ -268,17 +321,22 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
         */
         if (insight.previewProblem !== null) {
           setContext(
-            `An diesem Tag sind auf diesem Todo bereits ${formatDuration(insight.seconds)} offen. Diese Buchung mit ${formatDuration(entry.durationSeconds)} kommt hinzu. Was die Tagesgruppe danach gerundet ergibt, ließ sich gerade nicht abfragen: ${insight.previewProblem}`,
+            <>
+              {bookingTexts().resetPreviewFailedLead(
+                formatDuration(insight.seconds),
+                formatDuration(entry.durationSeconds),
+              )}
+              <ServiceText text={insight.previewProblem} fromService={insight.previewProblemCode !== null} />
+            </>,
           );
           return;
         }
+        const words = bookingTexts();
         const current =
           insight.quarters === null
-            ? `${formatDuration(insight.seconds)} offen`
-            : `${formatDuration(insight.seconds)} offen, das ergibt beim Export ${formatQuarters(insight.quarters)}`;
-        setContext(
-          `An diesem Tag sind auf diesem Todo bereits ${current}. Diese Buchung mit ${formatDuration(entry.durationSeconds)} kommt hinzu und verändert den gerundeten Wert der Tagesgruppe.`,
-        );
+            ? words.openAmount(formatDuration(insight.seconds))
+            : words.openAmountWithExport(formatDuration(insight.seconds), formatQuarters(insight.quarters));
+        setContext(words.resetAdds(current, formatDuration(entry.durationSeconds)));
       })
       .catch((cause: unknown) => {
         if (!live) return;
@@ -288,7 +346,11 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
           `consequence`, der so klaenge, als waere nachgesehen worden.
         */
         setContext(
-          `Was an diesem Tag auf diesem Todo bereits offen ist, ließ sich nicht abfragen: ${errorMessage(cause)} Dieselbe Arbeitszeit geht mit dem Zurücksetzen trotzdem beim nächsten Export erneut in die Abrechnung.`,
+          <>
+            {bookingTexts().resetContextFailedLead}
+            <ServiceText text={errorMessage(cause)} fromService={isServiceError(cause)} />
+            {bookingTexts().resetContextFailedTail}
+          </>,
         );
       });
     return () => {
@@ -304,13 +366,13 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
         bump();
         toasts.show({
           tone: "warning",
-          title: "Exportstatus zurückgesetzt.",
-          body: `Die Buchung ist wieder offen und geht beim nächsten Export erneut in die Abrechnung. Der Vorgang steht mit Ihrer Begründung im Protokoll.`,
+          title: text.resetDone,
+          body: text.resetDoneBody,
         });
         onClose();
       })
       .catch((cause: unknown) =>
-        toasts.failure("Der Exportstatus ließ sich nicht zurücksetzen", errorMessage(cause)),
+        toasts.failure(text.resetFailed, errorMessage(cause), isServiceError(cause)),
       )
       .finally(() => setBusy(false));
   };
@@ -319,20 +381,21 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
     <ConfirmDialog
       open={open && entry !== null}
       tone="danger"
-      title="Exportstatus zurücksetzen?"
+      title={text.resetTitle}
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird wieder als offen geführt.`
+          : text.resetLead(
+              formatDayLabel(calendarDayOf(entry.startedAt)),
+              quotedName(todoTitle),
+              formatDuration(entry.durationSeconds),
+            )
       }
-      consequence={
-        context ??
-        "Dieselbe Arbeitszeit geht damit beim nächsten Export erneut in die Abrechnung."
-      }
-      confirmLabel="Zurücksetzen"
-      reasonLabel="Begründung für das Protokoll"
+      consequence={context ?? text.resetConsequence}
+      confirmLabel={text.reset}
+      reasonLabel={text.reasonForLog}
       reasonRequired
-      acknowledgeLabel="Mir ist klar, dass diese Zeit dadurch ein zweites Mal abgerechnet werden kann."
+      acknowledgeLabel={text.resetAcknowledge}
       busy={busy}
       onConfirm={confirm}
       onCancel={onClose}
@@ -365,6 +428,7 @@ export interface NotBilledDialogProps {
  */
 export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDialogProps) {
   const toasts = useToasts();
+  const text = bookingTexts();
   const { bump } = useRefresh();
   const [busy, setBusy] = useState(false);
 
@@ -374,30 +438,36 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
     void markNotBilled(entry.id, reason.trim())
       .then(() => {
         bump();
-        toasts.success(
-          "Diese Zeit wird nicht abgerechnet.",
-          "Die Buchung ist abgeschlossen und geht in keinen Export mehr ein. Der Vorgang steht im Protokoll.",
-        );
+        toasts.success(text.notBilledDone, text.notBilledDoneBody);
         onClose();
       })
-      .catch((cause: unknown) =>
-        toasts.failure("Die Buchung ließ sich nicht ausbuchen", errorMessage(cause)),
-      )
+      .catch((cause: unknown) => {
+        // A-26.3: the service refuses "not billed" for a NoExport todo (409 `time_entry_no_export`).
+        if (errorCode(cause) === "time_entry_no_export") {
+          toasts.failure(text.notBilledFailed, text.notBilledNoExport);
+          return;
+        }
+        toasts.failure(text.notBilledFailed, errorMessage(cause), isServiceError(cause));
+      })
       .finally(() => setBusy(false));
   };
 
   return (
     <ConfirmDialog
       open={open && entry !== null}
-      title="Diese Zeit nicht abrechnen?"
+      title={text.notBilledTitle}
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird als abgeschlossen geführt.`
+          : text.notBilledLead(
+              formatDayLabel(calendarDayOf(entry.startedAt)),
+              quotedName(todoTitle),
+              formatDuration(entry.durationSeconds),
+            )
       }
-      consequence="Sie geht in keinen Export mehr ein. Exportiert wird sie nicht — Sie rechnen diese Zeit einfach nicht ab. Rückgängig machen lässt sich das über „Exportstatus zurücksetzen“."
-      confirmLabel="Nicht abrechnen"
-      reasonLabel="Grund (freiwillig)"
+      consequence={text.notBilledConsequence}
+      confirmLabel={text.notBilled}
+      reasonLabel={text.reasonOptional}
       busy={busy}
       onConfirm={confirm}
       onCancel={onClose}
@@ -454,15 +524,16 @@ function BookingHistoryBody({
   );
 
   const state = exportDisplayState(entry.exportStatus, entry.exportCount);
+  const text = bookingTexts();
 
   return (
     <InfoDialog
       open
       wide
-      title="Verlauf dieser Buchung"
+      title={text.historyTitle}
       description={
         <>
-          {formatPeriod(entry.startedAt, entry.endedAt)} auf <Foreign value={quotedName(todoTitle)} /> ·{" "}
+          {formatPeriod(entry.startedAt, entry.endedAt)} {text.on} <Foreign value={quotedName(todoTitle)} /> ·{" "}
           {formatDuration(entry.durationSeconds)}
         </>
       }
@@ -475,52 +546,48 @@ function BookingHistoryBody({
             navigate("exportAudit");
           }}
         >
-          Gesamtes Protokoll
+          {text.fullLog}
         </Button>
       }
       onClose={onClose}
     >
       <p className="bhistory__now">
-        <span className="bhistory__now-label">Heute</span>
+        <span className="bhistory__now-label">{text.today}</span>
         <ExportStatusBadge state={state} size="sm" />
         <span className="muted">
           {entry.exportCount === 0
-            ? "In keinem Exportlauf gewesen."
-            : plural(
-                entry.exportCount,
-                "Exportlauf hat diese Zeit enthalten",
-                "Exportläufe haben diese Zeit enthalten",
-              )}
+            ? text.inNoRun
+            : plural(entry.exportCount, text.runContained, text.runsContained)}
         </span>
       </p>
 
       {history.state.status === "loading" ? (
-        <LoadingBlock label="Der Verlauf dieser Buchung wird geladen" rows={2} />
+        <LoadingBlock label={text.historyLoading} rows={2} />
       ) : history.state.status === "error" ? (
         <InlineMessage
           tone="danger"
-          title="Der Verlauf ließ sich nicht laden"
+          title={text.historyFailed}
           action={
             <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={history.reload}>
-              Erneut versuchen
+              {labels().retry}
             </Button>
           }
         >
-          {history.state.message} Der Exportstatus der Buchung ist davon unberührt.
+          <ServiceText text={history.state.message} fromService={history.state.fromService} />{" "}
+          {text.historyFailedTail}
         </InlineMessage>
       ) : history.state.value.rows.length === 0 ? (
         <EmptyState
           compact
           icon="clock"
-          title="Für diese Buchung ist nichts protokolliert"
-          description="Das Protokoll hält ausschließlich Wechsel des Exportstatus fest: exportiert, zurückgesetzt, nicht abgerechnet. Eine geänderte Zeit oder ein nachgetragener Leistungstext steht nicht darin."
+          title={text.historyEmptyTitle}
+          description={text.historyEmptyBody}
         />
       ) : (
         <>
           <p className="bhistory__lead">
-            {plural(history.state.value.rows.length, "Vorgang", "Vorgänge")}, der jüngste zuerst.
-            Das Protokoll ist anhängend: Es gibt keinen Weg, eine dieser Zeilen zu ändern oder zu
-            löschen.
+            {plural(history.state.value.rows.length, text.event, text.events)}
+            {text.historyLeadTail}
           </p>
           <ExportAuditList models={history.state.value.rows} showBooking={false} />
         </>

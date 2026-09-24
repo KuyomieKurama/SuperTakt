@@ -3,7 +3,7 @@ import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../s
 import { DateField } from "../../shared/ui/DateField";
 import { todayCalendarDay, shiftCalendarDay } from "../../lib/format";
 import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import {
   listExportTemplates,
   previewExport,
@@ -16,7 +16,6 @@ import {
   listTodos,
 } from "../todos/api";
 import type {
-  ExportDirectoryState,
   ExportPreview,
   ExportRow,
   Id,
@@ -49,7 +48,10 @@ import {
   readSourceCatalog,
   type SourceCatalog,
 } from "./exportTemplateModel";
-import { ROUNDING_MODE_LABEL } from "../../lib/labels";
+import { labels } from "../../lib/labels";
+import { useLanguage } from "../../lib/language";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { exportTexts } from "./texts";
 import {
   formatDayLabel,
   formatDuration,
@@ -65,7 +67,7 @@ import { GroupRowDetail, type TemplateFieldsResult } from "./GroupRowDetail";
 import { ExportRunList } from "./ExportRunList";
 import { RunResult } from "./RunResult";
 import {
-  ALL_EXCLUDED,
+  allExcluded,
   collectExportEntries,
   groupKeyOf,
   PAGE_SIZE,
@@ -133,38 +135,6 @@ import { foreignText } from "../../lib/foreign";
  * Vorgeschichte: `docs/decisions/export.md`.
  */
 
-/** Was der geprüfte Ordnerzustand für den Benutzer bedeutet (R-11). */
-const DIRECTORY_PROBLEM: Readonly<
-  Record<Exclude<ExportDirectoryState, "ok">, { title: string; body: string }>
-> = {
-  not_set: {
-    title: "Es ist kein Exportordner eingestellt",
-    body: "Ohne Exportordner schreibt SuperTakt keine Datei. Wählen Sie ihn in den Einstellungen.",
-  },
-  missing: {
-    title: "Der eingestellte Exportordner ist nicht da",
-    body: "Er wurde verschoben, umbenannt oder liegt auf einem Laufwerk, das gerade nicht verbunden ist. SuperTakt legt ihn nicht von sich aus wieder an.",
-  },
-  not_writable: {
-    title: "In den Exportordner lässt sich nicht schreiben",
-    body: "Der Ordner ist da, aber die Rechte fehlen. Ein Lauf würde mitten im Vorgang scheitern — deshalb hält SuperTakt hier an.",
-  },
-  not_a_directory: {
-    title: "Der eingestellte Pfad ist kein Ordner",
-    body: "Er zeigt auf eine Datei. SuperTakt schreibt Exporte nur in einen Ordner.",
-  },
-  /*
-   * T-039: „antwortet nicht" ist nicht „gibt es nicht". Der Dienst wartet drei
-   * Sekunden; was danach kommt, ist **nicht als abwesend belegt**. Der
-   * Unterschied führt zu verschiedenen Handgriffen — einen anderen Ordner
-   * wählen oder das Laufwerk neu verbinden —, und deshalb steht er als
-   * eigener Fall da und nicht unter `missing`.
-   */
-  unreachable: {
-    title: "Der Exportordner antwortet nicht",
-    body: "Die Prüfung hat drei Sekunden gewartet und keine Antwort bekommen. Das heißt nicht, dass es den Ordner nicht gibt — bei einem Netzlaufwerk heißt es meistens, dass die Verbindung fehlt. Verbinden Sie das Laufwerk neu, statt einen neuen Pfad einzutragen.",
-  },
-};
 
 /**
  * Die Gesamtvorschau des Laufs — und ob es sie gibt (A-8.6, Befund aus T-044).
@@ -189,12 +159,14 @@ type TotalsState =
   | { readonly kind: "idle" }
   | { readonly kind: "pending" }
   | { readonly kind: "ready"; readonly value: ExportPreview; readonly selection: string; readonly templateId: string | null }
-  | { readonly kind: "failed"; readonly message: string };
+  | { readonly kind: "failed"; readonly message: string; readonly fromService: boolean };
 
 export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<string, string>> }) {
   const structure = useStructure();
   const toasts = useToasts();
   const { version, bump } = useRefresh();
+  const language = useLanguage();
+  const text = exportTexts();
 
   const [status, setStatus] = useState(query["status"] ?? "open");
   const [todoId, setTodoId] = useState(query["todo"] ?? "");
@@ -202,20 +174,37 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   const [toDay, setToDay] = useState(() => query["bis"] ?? todayCalendarDay());
   const [onlyPrevious, setOnlyPrevious] = useState(query["vorher"] === "1");
   const [todoSearch, setTodoSearch] = useState(query["suche"] ?? "");
-  const filterKey = JSON.stringify([status, todoId, fromDay, toDay, onlyPrevious, todoSearch.trim()]);
+  // C-14: tag, pool and "has Leistung", filtered in the service before paging (E-124 point 5).
+  const [tagFilter, setTagFilter] = useState(query["tag"] ?? "");
+  const [poolFilter, setPoolFilter] = useState(query["pool"] ?? "");
+  const [noteFilter, setNoteFilter] = useState<"" | "vorhanden" | "fehlt">(
+    query["leistung"] === "vorhanden" || query["leistung"] === "fehlt" ? query["leistung"] : "",
+  );
+  const filterKey = JSON.stringify([status, todoId, fromDay, toDay, onlyPrevious, todoSearch.trim(), tagFilter, poolFilter, noteFilter]);
   const activeFilters: ActiveFilter[] = [];
-  if (todoId) activeFilters.push({ id: "todo", field: "Todo", value: "eingeschränkt", onRemove: () => setTodoId("") });
-  if (fromDay) activeFilters.push({ id: "from", field: "Ab", value: fromDay, onRemove: () => setFromDay("") });
-  if (toDay) activeFilters.push({ id: "to", field: "Bis", value: toDay, onRemove: () => setToDay("") });
-  if (onlyPrevious) activeFilters.push({ id: "previous", field: "Einengung", value: "schon einmal exportiert", onRemove: () => setOnlyPrevious(false) });
-  if (todoSearch.trim()) activeFilters.push({ id: "search", field: "Todo", value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
-  const resetFilters = () => { setStatus(""); setTodoId(""); setFromDay(""); setToDay(""); setOnlyPrevious(false); setTodoSearch(""); };
+  if (todoId) activeFilters.push({ id: "todo", field: text.filterTodo, value: text.restricted, onRemove: () => setTodoId("") });
+  if (fromDay) activeFilters.push({ id: "from", field: text.filterFrom, value: fromDay, onRemove: () => setFromDay("") });
+  if (toDay) activeFilters.push({ id: "to", field: text.filterTo, value: toDay, onRemove: () => setToDay("") });
+  if (onlyPrevious) activeFilters.push({ id: "previous", field: text.narrowing, value: text.exportedBefore, onRemove: () => setOnlyPrevious(false) });
+  if (todoSearch.trim()) activeFilters.push({ id: "search", field: text.filterTodo, value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
+  const tagOptions = structure.allTags.map((info) => ({
+    value: info.tag.id,
+    // Each name treated on its own (O-AT): a joined row of foreign text would lose its origin.
+    label: [...info.path, info.tag.name].map(foreignText).join(" › "),
+  }));
+  const poolOptions = structure.state.status === "ready" ? structure.state.value.pools : [];
+  // A link may name a deleted tag or pool: the chip says so instead of dropping it (8.2).
+  if (tagFilter) activeFilters.push({ id: "tag", field: text.filterTag, value: tagOptions.find((option) => option.value === tagFilter)?.label ?? text.filterGone, onRemove: () => setTagFilter("") });
+  if (poolFilter) activeFilters.push({ id: "pool", field: text.filterPool, value: poolOptions.find((pool) => pool.id === poolFilter)?.name ?? text.filterGone, onRemove: () => setPoolFilter("") });
+  if (noteFilter) activeFilters.push({ id: "note", field: text.filterNote, value: noteFilter === "fehlt" ? text.noteAbsent : text.notePresent, onRemove: () => setNoteFilter("") });
+  const resetFilters = () => { setStatus(""); setTodoId(""); setFromDay(""); setToDay(""); setOnlyPrevious(false); setTodoSearch(""); setTagFilter(""); setPoolFilter(""); setNoteFilter(""); };
 
-  const [templateId, setTemplateId] = useState<string>("");
+  // `null` follows the saved setting; "" is an explicit choice of the built-in template.
+  const [templateChoice, setTemplateChoice] = useState<string | null>(null);
   const [bookingSelection, setBookingSelection] = useState<ReadonlySet<Id> | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [layout, setLayout] = useState<readonly GroupLayout[]>([]);
-  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [layoutError, setLayoutError] = useState<{ readonly message: string; readonly fromService: boolean } | null>(null);
   const [insights, setInsights] = useState<ReadonlyMap<string, GroupInsight>>(() => new Map());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
@@ -256,7 +245,16 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
 
   const data = useAsync(async () => {
     const [entries, todos, runs] = await Promise.all([
-      collectExportEntries({ ...(status === "open" || status === "exported" ? { exportStatus: status } : {}), ...(todoId ? { todoId } : {}), ...(fromDay ? { fromDay } : {}), ...(toDay ? { toDay } : {}), ...(onlyPrevious ? { onlyPreviouslyExported: true } : {}) }),
+      collectExportEntries({
+        ...(status === "open" || status === "exported" ? { exportStatus: status } : {}),
+        ...(todoId ? { todoId } : {}),
+        ...(fromDay ? { fromDay } : {}),
+        ...(toDay ? { toDay } : {}),
+        ...(onlyPrevious ? { onlyPreviouslyExported: true } : {}),
+        ...(tagFilter ? { tagIds: [tagFilter] } : {}),
+        ...(poolFilter ? { poolIds: [poolFilter] } : {}),
+        ...(noteFilter ? { hasNote: noteFilter === "vorhanden" } : {}),
+      }),
       listTodos(todoSearch.trim() ? { search: todoSearch.trim() } : {}, { limit: PAGE_SIZE }),
       listExportRuns({ limit: 5 }),
     ]);
@@ -296,7 +294,10 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   const excluded = useMemo(() => new Set(allKey.split(",").filter(id => !bookingIds.has(id))), [allKey, bookingIds]);
   const deselected = useMemo(() => new Set(layout.filter(group => group.entryIds.every(id => !bookingIds.has(id))).map(group => group.key)), [layout, bookingIds]);
 
-  const activeTemplateId = templateId.length > 0 ? templateId : (settings?.activeExportTemplateId ?? null);
+  let activeTemplateId: string | null;
+  if (templateChoice === null) activeTemplateId = settings?.activeExportTemplateId ?? null;
+  else if (templateChoice === "") activeTemplateId = null;
+  else activeTemplateId = templateChoice;
 
   /**
    * **Ein** Aufruf für die Gliederung. Er liefert, welche Tagesgruppen es gibt
@@ -323,7 +324,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
       .catch((cause: unknown) => {
         if (!live) return;
         setLayout([]);
-        setLayoutError(errorMessage(cause));
+        setLayoutError({ message: errorMessage(cause), fromService: isServiceError(cause) });
       });
     return () => {
       live = false;
@@ -353,7 +354,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
       return;
     }
     if (includedKey.length === 0) {
-      setInsights(new Map(layout.map((group) => [group.key, ALL_EXCLUDED])));
+      setInsights(new Map(layout.map((group) => [group.key, allExcluded()])));
       return;
     }
     let live = true;
@@ -376,7 +377,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         // Eine Gruppe, deren Buchungen alle abgewählt sind, kommt gar nicht
         // zurück — sie steht trotzdem in der Liste und braucht ihren Grund.
         for (const group of layout) {
-          if (!next.has(group.key)) next.set(group.key, ALL_EXCLUDED);
+          if (!next.has(group.key)) next.set(group.key, allExcluded());
         }
         setInsights(next);
       })
@@ -425,7 +426,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         if (live) setTotalsState({ kind: "ready", value: preview, selection: selectedKey, templateId: activeTemplateId });
       })
       .catch((cause: unknown) => {
-        if (live) setTotalsState({ kind: "failed", message: errorMessage(cause) });
+        if (live) setTotalsState({ kind: "failed", message: errorMessage(cause), fromService: isServiceError(cause) });
       });
     return () => {
       live = false;
@@ -471,13 +472,13 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     if (sources.state.status === "error") {
       return {
         kind: "failed",
-        message: `Die Auswahlliste der Quellen ließ sich nicht laden: ${sources.state.message}`,
+        message: exportTexts().sourcesFailed(sources.state.message),
       };
     }
     if (templates.state.status === "error") {
       return {
         kind: "failed",
-        message: `Die Exportvorlagen ließen sich nicht laden: ${templates.state.message}`,
+        message: exportTexts().templatesFailed(templates.state.message),
       };
     }
     if (catalog === null) return { kind: "pending" };
@@ -490,7 +491,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     return parsed.ok
       ? { kind: "ready", fields: parsed.value.fields }
       : { kind: "failed", message: parsed.message };
-  }, [catalog, sources.state, templates.state, activeTemplateId]);
+    // `language`: the failure messages and the parser's messages are UI text.
+  }, [catalog, sources.state, templates.state, activeTemplateId, language]);
 
   /**
    * Die Zeile je Tagesgruppe: `totals.groups[i]` gehört zu `totals.rows[i]`.
@@ -516,7 +518,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
    * nicht die Frage, ob ein Pfad gesetzt ist.
    */
   const directoryProblem =
-    directoryState === null || directoryState === "ok" ? null : DIRECTORY_PROBLEM[directoryState];
+    directoryState === null || directoryState === "ok" ? null : text.directoryProblem[directoryState];
 
   /*
    * Dieselbe Beurteilung wie in S-09, an der Stelle, an der die Datei
@@ -571,16 +573,21 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         setResultRows(plannedRows);
         setConfirmOpen(false);
         bump();
+        const words = exportTexts();
         if (outcome.skipped.length === 0) {
           toasts.success(
-            "Export geschrieben.",
-            `${plural(outcome.run.entryCount, "Buchung", "Buchungen")} in ${plural(plannedRows, "Exportzeile", "Exportzeilen")} · ${formatQuarters(outcome.run.totalQuarters)} Stunden.`,
+            words.exportWritten,
+            words.exportWrittenBody(
+              plural(outcome.run.entryCount, words.booking, words.bookings),
+              plural(plannedRows, words.exportRow, words.exportRows),
+              formatQuarters(outcome.run.totalQuarters),
+            ),
           );
         } else {
           toasts.show({
             tone: "warning",
-            title: "Export geschrieben — mit ausgelassenen Gruppen.",
-            body: `${plural(outcome.skipped.length, "Tagesgruppe blieb", "Tagesgruppen blieben")} stehen, weil die Leistung fehlt. Sie sind weiterhin offen und erscheinen beim nächsten Mal wieder.`,
+            title: words.exportWrittenSkipped,
+            body: words.exportWrittenSkippedBody(plural(outcome.skipped.length, words.groupStayed, words.groupsStayed)),
           });
         }
       })
@@ -591,8 +598,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   return (
     <section className="screen">
       <ScreenHeader
-        title="Export"
-        lead="Buchungen prüfen, bearbeiten und exportieren. Die Dateivorschau fasst Zeiten je Todo und Tag zusammen."
+        title={text.screenTitle}
+        lead={text.screenLead}
         refreshing={data.state.status === "ready" && data.state.refreshing}
         /*
           Gesperrt, solange nicht feststeht, was geschrieben würde (A-8.6). Bis
@@ -610,9 +617,9 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
             }
             title={
               totalsState.kind === "failed"
-                ? "Solange die Gesamtvorschau fehlt, steht nicht fest, was geschrieben würde."
+                ? text.runBlockedFailed
                 : totalsState.kind === "pending"
-                  ? "Die Gesamtvorschau wird gerade gerechnet."
+                  ? text.runBlockedPending
                   : undefined
             }
             onClick={() => {
@@ -620,7 +627,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               setConfirmOpen(true);
             }}
           >
-            Export ausführen
+            {text.runExport}
           </Button>
         }
       >
@@ -644,7 +651,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
             className="message--inline-action"
             action={
               <Button size="sm" variant="secondary" onClick={() => navigate("settings", undefined, { bereich: "export" })}>
-                In den Einstellungen prüfen
+                {text.checkSettings}
               </Button>
             }
           >
@@ -664,14 +671,14 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         diese Karte zu heben — eine Änderung der Reihenfolge und damit des
         Designs (T-322 4.7, OF-2).
       */}
-      <ScreenBody label="Export">
+      <ScreenBody label={text.screenTitle}>
         {result === null ? null : (
           <RunResult result={result} rowCount={resultRows} onDismiss={() => setResult(null)} />
         )}
 
         <Card
-          title="Vorlage und Rundung"
-          description="Beides bestimmt, was in der Datei steht — und wie viel abgerechnet wird."
+          title={text.templateAndRounding}
+          description={text.templateAndRoundingLead}
           actions={
             <Button
               size="sm"
@@ -679,7 +686,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               iconStart="pencil"
               onClick={() => navigate("templates", activeTemplateId ?? undefined)}
             >
-              Vorlagen bearbeiten
+              {text.editTemplates}
             </Button>
           }
         >
@@ -692,44 +699,47 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               Vorgeschichte: `docs/decisions/export.md`.
             */}
             <div className="export-settings__fact">
-              <div className="export-settings__label"><span>Exportvorlage</span><InfoHint label="Hinweis zur Exportvorlage">
-                Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
-                Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
+              <div className="export-settings__label"><span>{text.exportTemplate}</span><InfoHint label={text.exportTemplateHint}>
+                {text.savedStateBefore}
+                <strong>{text.savedStateStrong}</strong>
+                {text.savedStateAfter}
               </InfoHint></div>
               <Select
                 hideLabel
-                label="Exportvorlage"
+                label={text.exportTemplate}
                 value={activeTemplateId ?? ""}
-                onChange={setTemplateId}
+                onChange={setTemplateChoice}
                 options={
                   templates.state.status === "ready"
-                    ? templates.state.value.map((template) => ({
-                        value: template.id,
-                        label: template.isBuiltin
-                      ? `${foreignText(template.name)} (mitgeliefert)`
-                      : foreignText(template.name),
-                      }))
-                    : [{ value: "", label: "wird geladen …" }]
+                    ? [
+                        { value: "", label: labels().builtinTemplateOption },
+                        ...templates.state.value.map((template) => ({
+                          value: template.id,
+                          label: template.isBuiltin
+                            ? text.builtIn(foreignText(template.name))
+                            : foreignText(template.name),
+                        })),
+                      ]
+                    : [{ value: activeTemplateId ?? "", label: text.loadingShort }]
                 }
               />
             </div>
             <div className="export-settings__fact">
-              <span className="export-settings__label"><span className="overline">Rundung</span><InfoHint label="Hinweis: Rundung">
-                Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
-                Tagesgruppe, nicht auf die einzelne Buchung.
+              <span className="export-settings__label"><span className="overline">{text.rounding}</span><InfoHint label={text.roundingHint}>
+                {text.roundingRule}
               </InfoHint></span>
               <strong>
-                {settings === null ? "—" : ROUNDING_MODE_LABEL[settings.roundingMode]}
+                {settings === null ? "—" : labels().roundingMode[settings.roundingMode]}
               </strong>
             </div>
             <div className="export-settings__fact">
-              <span className="export-settings__label"><span className="overline">Exportordner</span><InfoHint label="Hinweis: Exportordner">
+              <span className="export-settings__label"><span className="overline">{text.exportFolder}</span><InfoHint label={text.folderHint}>
                 {directoryState === "ok"
-                  ? "Vorhanden und beschreibbar — soeben geprüft."
-                  : (directoryProblem?.title ?? "Zustand unbekannt.")}
+                  ? text.folderCheckedOk
+                  : (directoryProblem?.title ?? text.folderUnknown)}
               </InfoHint></span>
               <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
-                {settings?.exportDirectory ?? "nicht gewählt"}
+                {settings?.exportDirectory ?? text.folderNotChosen}
               </strong>
               <Button
                 size="sm"
@@ -737,17 +747,15 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                 iconStart="folder-open"
                 onClick={() => navigate("settings", undefined, { bereich: "export" })}
               >
-                Ordner ändern
+                {text.changeFolder}
               </Button>
             </div>
             <div className="export-settings__fact">
-              <span className="export-settings__label"><span className="overline">Abgerechnet unter</span><InfoHint label="Hinweis: Abgerechnet unter">
-                {billingUser.length === 0
-                  ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
-                  : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
+              <span className="export-settings__label"><span className="overline">{text.billedAs}</span><InfoHint label={text.billedAsHint}>
+                {billingUser.length === 0 ? text.billedAsNoName : text.billedAsName}
               </InfoHint></span>
               <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
-                {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
+                {billingUser.length === 0 ? text.noNameReported : billingUser}
               </strong>
             </div>
           </div>
@@ -773,21 +781,21 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         {layout.length > 0 && filterReady ? <>
                 <div className="export-summary" role="status" aria-live="polite">
                   <span className="export-summary__count">
-                    {plural(selectedIds.length, "Buchung", "Buchungen")}
+                    {plural(selectedIds.length, text.booking, text.bookings)}
                     {totalsState.kind === "ready"
-                      ? ` in ${plural(rowCount, "Exportzeile", "Exportzeilen")}`
+                      ? text.inRows(plural(rowCount, text.exportRow, text.exportRows))
                       : null}
                   </span>
                   {totalsState.kind === "pending" ? (
                     <span className="export-summary__pending">
-                      <Spinner size={13} label="Zeilen und Stunden werden gerechnet" />
-                      <span>Zeilen und Stunden werden gerechnet …</span>
+                      <Spinner size={13} label={text.computingTotals} />
+                      <span>{text.computingTotalsDots}</span>
                     </span>
                   ) : null}
                   {totalsState.kind === "failed" ? (
                     <span className="export-summary__danger">
                       <Icon name="alert-triangle" size={14} />
-                      Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet
+                      {text.totalsUnknown}
                     </span>
                   ) : null}
                   <span className="export-summary__total tabular">
@@ -799,42 +807,48 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                       <Icon name="rotate-ccw" size={14} />
                       {plural(
                         totals.previouslyExportedCount,
-                        "Zeile enthält eine schon einmal exportierte Buchung",
-                        "Zeilen enthalten schon einmal exportierte Buchungen",
+                        text.rowWithExported,
+                        text.rowsWithExported,
                       )}
                     </span>
                   ) : null}
                   {blockedCount > 0 ? (
                     <span className="export-summary__warn">
                       <Icon name="alert-triangle" size={14} />
-                      {plural(blockedCount, "Gruppe bleibt stehen", "Gruppen bleiben stehen")} —
-                      ohne Leistung kein Export
+                      {text.noNoteNoExport(plural(blockedCount, text.groupStays, text.groupsStay))}
                     </span>
                   ) : null}
                 </div>
 
                 {blockedCount > 0 ? (
                   <details className="export-legend">
-                    <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
-                    <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
-                    <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
-                    <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
+                    <summary><Icon name="info" size={14} /><span>{text.legend}</span><Icon name="chevron-down" size={12} /></summary>
+                    <p><strong>{text.legendNoteMissing}</strong>{text.legendNoteMissingText}</p>
+                    <p><strong>{text.legendAllExcluded}</strong>{text.legendAllExcludedText}</p>
+                    <p>{text.legendGroupsStayOpen}</p>
                   </details>
                 ) : null}
 
         </> : null}
 
-        <FilterBar label="Export filtern"
-          resultLabel={filterReady && data.state.status === "ready" ? plural(data.state.value.entries.length, "Buchung", "Buchungen") : "wird geladen …"}
+        <FilterBar label={text.filterLabel}
+          resultLabel={filterReady && data.state.status === "ready" ? plural(data.state.value.entries.length, text.booking, text.bookings) : text.loadingShort}
           activeFilters={activeFilters} onResetAll={resetFilters}
           controls={<>
-            <Select label="Exportstatus" value={status} options={[{ value: "", label: "Alle" }, { value: "open", label: "Offen" }, { value: "exported", label: "Exportiert" }]}
+            <Select label={text.exportStatus} value={status} options={[{ value: "", label: text.all }, { value: "open", label: text.open }, { value: "exported", label: text.exported }]}
               onChange={setStatus} />
-            <FilterToggle label="Nur schon einmal exportierte" pressed={onlyPrevious} onChange={setOnlyPrevious} />
-            <DateField label="Ab Tag" value={fromDay} onChange={setFromDay} />
-            <DateField label="Bis Tag" value={toDay} onChange={setToDay} />
-            <Button size="sm" variant="ghost" onClick={() => { const today = todayCalendarDay(); setFromDay(shiftCalendarDay(today, -6)); setToDay(today); }}>Letzte 7 Tage</Button>
-            <SearchField label="Todo einschränken" value={todoSearch} onChange={setTodoSearch} placeholder="Todo oder Call suchen …" />
+            <FilterToggle label={text.onlyExportedBefore} pressed={onlyPrevious} onChange={setOnlyPrevious} />
+            <DateField label={text.fromDay} value={fromDay} onChange={setFromDay} />
+            <DateField label={text.toDay} value={toDay} onChange={setToDay} />
+            <Button size="sm" variant="ghost" onClick={() => { const today = todayCalendarDay(); setFromDay(shiftCalendarDay(today, -6)); setToDay(today); }}>{text.lastSevenDays}</Button>
+            <SearchField label={text.restrictTodo} value={todoSearch} onChange={setTodoSearch} placeholder={text.searchTodoOrCall} />
+            <Select label={text.filterTag} value={tagFilter} onChange={setTagFilter}
+              options={[{ value: "", label: text.allTags }, ...tagOptions]} />
+            {/* Pools in their shared order (A-28.3); `pools` comes sorted by position. */}
+            <Select label={text.filterPool} value={poolFilter} onChange={setPoolFilter}
+              options={[{ value: "", label: text.allPoolsOption }, ...poolOptions.map((pool) => ({ value: pool.id, label: pool.name }))]} />
+            <Select<"" | "vorhanden" | "fehlt"> label={text.filterNote} value={noteFilter} onChange={setNoteFilter}
+              options={[{ value: "", label: text.noteAny }, { value: "vorhanden", label: text.notePresent }, { value: "fehlt", label: text.noteAbsent }]} />
           </>} />
 
         {data.state.status === "ready" && filterReady ? <BookingsScreen query={{}} embedded={{
@@ -843,10 +857,10 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         }} /> : null}
 
         <details className="export-preview-details">
-          <summary>Exportvorschau nach Todo und Tag</summary>
+          <summary>{text.previewByTodo}</summary>
         <AsyncBoundary
           state={data.state}
-          label="Offene Buchungen werden geladen"
+          label={text.openBookingsLoading}
           rows={6}
           onRetry={data.reload}
         >
@@ -855,15 +869,15 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               return (
                 <InlineMessage
                   tone="danger"
-                  title="Die Gliederung ließ sich nicht abrufen"
+                  title={text.layoutFailed}
                   action={
                     <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={data.reload}>
-                      Erneut versuchen
+                      {labels().retry}
                     </Button>
                   }
                 >
-                  {layoutError} Solange die Gliederung fehlt, wird nichts zur Auswahl gestellt — eine
-                  geratene Zeilenzahl wäre schlimmer als keine.
+                  <ServiceText text={layoutError.message} fromService={layoutError.fromService} />{" "}
+                  {text.layoutFailedTail}
                 </InlineMessage>
               );
             }
@@ -872,11 +886,11 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               return (
                 <EmptyState
                   icon="check-circle"
-                  title="Nichts zu exportieren"
-                  description={activeFilters.length > 0 ? "Keine offenen Buchungen passen zu diesen Filtern." : "Es liegen keine offenen Buchungen für den Export vor."}
-                  action={activeFilters.length > 0 ? <Button variant="secondary" onClick={resetFilters}>Filter zurücksetzen</Button> :
+                  title={text.nothingToExport}
+                  description={activeFilters.length > 0 ? text.noOpenMatch : text.noOpenBookings}
+                  action={activeFilters.length > 0 ? <Button variant="secondary" onClick={resetFilters}>{text.resetFilters}</Button> :
                     <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
-                      Zur Zeiterfassung
+                      {text.toTimeTracking}
                     </Button>
                   }
                 />
@@ -895,7 +909,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               const groupData: ExportGroupData = {
                 id: group.key,
                 todoId: group.todoId,
-                todoTitle: todo?.title ?? "Unbekanntes Todo",
+                todoTitle: todo?.title ?? text.unknownTodo,
                 callNumber: todo?.callNumber ?? null,
                 day: formatDayLabel(group.day),
                 entries: entries.map((entry) => ({
@@ -944,7 +958,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                 {totalsState.kind === "failed" ? (
                   <InlineMessage
                     tone="danger"
-                    title="Die Gesamtvorschau ließ sich nicht abrufen"
+                    title={text.totalsFailed}
                     action={
                       <Button
                         size="sm"
@@ -952,14 +966,12 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                         iconStart="rotate-ccw"
                         onClick={() => setTotalsAttempt((attempt) => attempt + 1)}
                       >
-                        Erneut versuchen
+                        {labels().retry}
                       </Button>
                     }
                   >
-                    {totalsState.message} Solange sie fehlt, weiß SuperTakt nicht, wie viele Zeilen
-                    und wie viele Stunden dieser Lauf schreiben würde — deshalb ist „Export
-                    ausführen" gesperrt. Eine Null an dieser Stelle wäre keine Auskunft, sondern
-                    eine Behauptung. Die Auswahl darunter bleibt erhalten.
+                    <ServiceText text={totalsState.message} fromService={totalsState.fromService} />{" "}
+                    {text.totalsFailedTail}
                   </InlineMessage>
                 ) : null}
 
@@ -1009,7 +1021,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         </AsyncBoundary>
         </details>
 
-        {templates.state.status === "loading" ? <Spinner size={14} label="Vorlagen werden geladen" /> : null}
+        {templates.state.status === "loading" ? <Spinner size={14} label={text.templatesLoading} /> : null}
       </ScreenBody>
 
       {/*
@@ -1028,18 +1040,19 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
       {totalsState.kind === "ready" ? (
         <ConfirmDialog
           open={confirmOpen && previewCurrent}
-          title="Export ausführen?"
-          description={`${plural(selectedIds.length, "Buchung wird", "Buchungen werden")} in ${plural(totalsState.value.rows.length, "Exportzeile", "Exportzeilen")} geschrieben — zusammen ${formatQuarters(totalsState.value.totalQuarters)} Stunden.`}
-          consequence={
-            runError ??
-            "Die Datei wird geschrieben und jede enthaltene Buchung als exportiert markiert — beides zusammen oder gar nichts. Danach sind diese Buchungen gesperrt; ändern lassen sie sich erst nach dem ausdrücklichen Zurücksetzen des Exportstatus."
-          }
+          title={text.confirmTitle}
+          description={text.confirmLead(
+            plural(selectedIds.length, text.bookingWill, text.bookingsWill),
+            plural(totalsState.value.rows.length, text.exportRow, text.exportRows),
+            formatQuarters(totalsState.value.totalQuarters),
+          )}
+          consequence={runError ?? text.confirmConsequence}
           {...(firstRunIntoDirectory === true
             ? {
-                acknowledgeLabel: `Mir ist bewusst: Die Datei landet in ${settings?.exportDirectory ?? "diesem Ordner"} und enthält lesbare Kundennotizen. Base64 ist eine Kodierung, keine Verschlüsselung.`,
+                acknowledgeLabel: text.firstRunAcknowledge(settings?.exportDirectory ?? text.thisFolder),
               }
             : {})}
-          confirmLabel="Exportieren"
+          confirmLabel={text.confirmExport}
           busy={running}
           onConfirm={doExport}
           onCancel={() => setConfirmOpen(false)}
@@ -1053,8 +1066,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
           todoId={editEntry.todoId}
           todoTitle={
             data.state.status === "ready"
-              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? "diesem Todo")
-              : "diesem Todo"
+              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? text.thisTodo)
+              : text.thisTodo
           }
           onClose={() => setEditEntry(null)}
         />

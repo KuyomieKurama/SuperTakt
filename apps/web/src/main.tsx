@@ -2,6 +2,8 @@ import { installTextEditing } from "./lib/textEditing";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
+import { startupLanguage } from "./features/settings/startupAppearance";
+import { setLanguage } from "./lib/language";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/app.css";
@@ -23,9 +25,12 @@ performance.mark("supertakt:javascript-ready");
 const removeTextEditing = installTextEditing();
 if (import.meta.hot) import.meta.hot.dispose(removeTextEditing);
 
+// Start-up screens already use the last chosen language; the Bestand overrides it once loaded.
+setLanguage(startupLanguage());
+
 const container = document.getElementById("root");
 if (container === null) {
-  throw new Error("Wurzelelement #root nicht gefunden.");
+  throw new Error("Root element #root not found.");
 }
 
 createRoot(container).render(

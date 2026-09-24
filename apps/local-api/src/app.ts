@@ -35,6 +35,7 @@ import {
 } from './config.ts';
 import { errorEnvelope, errorStatus } from './errors.ts';
 import { fail } from './http/problem.ts';
+import { errorKindValue } from './logger.ts';
 import {
   authGuard,
   contentTypeGuard,
@@ -117,16 +118,16 @@ export interface AppOptions {
  * Warum zwei der drei an **einer** Methode und **einem** Pfad hängen
  * ===========================================================================
  *
- * `startsWith(`${API_BASE_PATH}/addin`)` wäre kürzer und falsch: Es hübe die
- * Grenze für **jede** Add-in-Route, auch für die drei, die nichts anlegen.
+ * `startsWith(`${API_BASE_PATH}/addin`)` would be shorter and wrong: it would lift
+ * the limit for **every** add-in route, including the two that create nothing.
  * Eine Ausnahme, deren Menge an einem Präfix aufgespannt ist statt an der
  * Anforderung, wächst mit jeder neuen Nachbarroute mit, ohne daß es jemand
  * entscheidet — derselbe Fehler, den E-099 Punkt 3 für Abwesenheitszusagen
  * beschreibt, nur in die andere Richtung.
  *
  * Deshalb: genau `POST` auf `/addin/todos` oder `/addin/todos/:todoId/mails`.
- * Beide übertragen dieselben E-Mail-Daten. Ein `GET` auf denselben Pfad
- * bekommt sie nicht, ein `POST` auf `/addin/todos/…/time-entries` auch nicht.
+ * Both carry the same e-mail data. A `GET` on the same path does not get the
+ * exception, and neither does any other path below `/addin/todos/…`.
  *
  * Für die Datensicherung gilt dasselbe, und die Reihenfolge der Abfragen unten
  * sagt es: `POST /data-transfer/archive` wird **vor** dem Präfix geprüft. Das
@@ -400,12 +401,14 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
   });
 
   /**
-   * Ein unerwarteter Fehler wird **nicht** nach außen erklärt.
+   * An unexpected error is **not** explained to the outside.
    *
-   * Kein Aufrufstapel, keine Meldung der Laufzeitumgebung, kein Dateipfad —
-   * auch nicht lokal, denn der Client kann ein fremder Browsertab sein
-   * (B-2.4 Punkt 4). Innen bleibt die Zeile im Protokoll, und die trägt nur
-   * einen Schlüssel.
+   * No stack, no runtime message, no file path — not even locally, because the
+   * client may be a foreign browser tab (B-2.4 point 4). The log line carries
+   * the kind of the throw and, when present, its `code` — through `reason`,
+   * never `message`, `stack` or `cause`: `JSON.parse` quotes its input and
+   * `fs` errors name full paths, and the shell forwards this log to the system
+   * journal (T-394).
    */
   app.onError((error, c) => {
     if (error instanceof HTTPException && error.status === 413) {
@@ -421,9 +424,19 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       return fail(c, stored);
     }
     c.set('outcome', 'internal_error');
-    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${where}`);
+    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${where}`, internalErrorReason(error));
     return c.json(errorEnvelope('internal_error'), errorStatus('internal_error'));
   });
 
   return app;
+}
+
+/** `code` only in the closed shape of runtime and own error keys, e.g. `ENOENT` or `NOT_FOUND`. */
+const ERROR_CODE_SHAPE = /^[A-Z0-9_]{1,32}$/;
+
+/** The log reason for an unexpected throw: class name plus code, nothing taken from the message. */
+function internalErrorReason(error: unknown): string {
+  const kind = `internal_error kind=${errorKindValue(error)}`;
+  const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  return typeof code === 'string' && ERROR_CODE_SHAPE.test(code) ? `${kind} code=${code.toLowerCase()}` : kind;
 }

@@ -7,6 +7,7 @@ import {
   plural,
 } from "../../lib/format";
 import type { ExportRun } from "./api";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — die letzten Exportläufe in S-07: was wann geschrieben wurde.
@@ -22,10 +23,11 @@ export interface ExportRunListProps {
 }
 
 export function ExportRunList({ runs }: ExportRunListProps) {
+  const text = exportTexts();
   return (
     <Card
-      title="Letzte Exportläufe"
-      description="Was wann geschrieben wurde."
+      title={text.recentRuns}
+      description={text.recentRunsLead}
       actions={
         <Button
           size="sm"
@@ -33,7 +35,7 @@ export function ExportRunList({ runs }: ExportRunListProps) {
           iconStart="clock"
           onClick={() => navigate("exportAudit")}
         >
-          Protokoll öffnen
+          {text.openLog}
         </Button>
       }
       flush
@@ -42,8 +44,8 @@ export function ExportRunList({ runs }: ExportRunListProps) {
         <EmptyState
           compact
           icon="download"
-          title="Noch kein Export"
-          description="Der erste Lauf schreibt die erste Datei."
+          title={text.noExportTitle}
+          description={text.noExportBody}
         />
       ) : (
         <ul className="run-list">
@@ -54,7 +56,7 @@ export function ExportRunList({ runs }: ExportRunListProps) {
                 {run.filePath}
               </span>
               <span className="run-row__meta">
-                {plural(run.entryCount, "Buchung", "Buchungen")} ·{" "}
+                {plural(run.entryCount, text.booking, text.bookings)} ·{" "}
                 {formatQuarters(run.totalQuarters)} h · {formatBytes(run.bytes)}
               </span>
               {/*
@@ -79,10 +81,10 @@ export function ExportRunList({ runs }: ExportRunListProps) {
                 size="sm"
                 variant="ghost"
                 iconStart="arrow-up-right"
-                title="Öffnet das Protokoll mit diesem Lauf als Filter. Der Filter wirkt über die geladenen Zeilen; bei älteren Läufen müssen dort weitere geladen werden."
+                title={text.runFilterHint}
                 onClick={() => navigate("exportAudit", undefined, { lauf: run.id })}
               >
-                Buchungen dieses Laufs
+                {text.runBookings}
               </Button>
             </li>
           ))}

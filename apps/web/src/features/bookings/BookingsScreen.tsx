@@ -12,11 +12,11 @@ import type { ExportStatus, ForeignText, Id, TimeEntry } from "../../api/types";
 import { exportDisplayState } from "../../shared/ui/ExportStatus";
 import {
   BookingTable,
-  TableShell,
   type BookingRowData,
   type SortColumn,
   type SortDirection,
 } from "./BookingTable";
+import { TableShell } from "../../shared/ui/TableShell";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../shared/ui/FilterBar";
 import { Select } from "../../shared/ui/Select";
@@ -45,6 +45,8 @@ import {
 import { toRows } from "./bookingRows";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { useLanguage } from "../../lib/language";
+import { bookingTexts } from "./texts";
 
 /**
  * Takt — S-06, alle Zeitbuchungen (I-10).
@@ -76,6 +78,8 @@ export interface BookingsScreenProps {
 
 export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
   const toasts = useToasts();
+  const language = useLanguage();
+  const text = bookingTexts();
   const { version, bump } = useRefresh();
 
   const [status, setStatus] = useState<ExportStatus | "">((query["status"] as ExportStatus) ?? "");
@@ -139,33 +143,34 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
     if (status !== "") {
       entries.push({
         id: "status",
-        field: "Exportstatus",
-        value: status === "open" ? "Offen" : "Exportiert",
+        field: text.exportStatus,
+        value: status === "open" ? text.open : text.exported,
         onRemove: () => setStatus(""),
       });
     }
     if (onlyPrevious) {
       entries.push({
         id: "prev",
-        field: "Einengung",
-        value: "schon einmal exportiert",
+        field: text.narrowing,
+        value: text.exportedBefore,
         onRemove: () => setOnlyPrevious(false),
       });
     }
     if (fromDay !== "") {
-      entries.push({ id: "von", field: "Ab", value: fromDay, onRemove: () => setFromDay("") });
+      entries.push({ id: "von", field: text.from, value: fromDay, onRemove: () => setFromDay("") });
     }
     if (toDay !== "") {
-      entries.push({ id: "bis", field: "Bis", value: toDay, onRemove: () => setToDay("") });
+      entries.push({ id: "bis", field: text.to, value: toDay, onRemove: () => setToDay("") });
     }
     if (todoId !== "") {
-      entries.push({ id: "todo", field: "Todo", value: "eingeschränkt", onRemove: () => setTodoId("") });
+      entries.push({ id: "todo", field: text.todo, value: text.restricted, onRemove: () => setTodoId("") });
     }
     if (todoSearch.trim()) {
-      entries.push({ id: "search", field: "Suche", value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
+      entries.push({ id: "search", field: text.search, value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
     }
     return entries;
-  }, [status, onlyPrevious, fromDay, toDay, todoId, todoSearch]);
+    // `language`: the chips carry words of the UI language.
+  }, [status, onlyPrevious, fromDay, toDay, todoId, todoSearch, language]);
 
   const resetAll = useCallback(() => {
     if (embedded) { embedded.resetFilters(); return; }
@@ -213,6 +218,7 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
             break;
           }
         }
+        const words = bookingTexts();
         setBulkBusy(false);
         setBulkOpen(false);
         setSelected(new Set());
@@ -220,13 +226,13 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         if (done === targets.length) {
           toasts.show({
             tone: "warning",
-            title: `${plural(done, "Buchung ist", "Buchungen sind")} wieder offen.`,
-            body: "Dieselbe Arbeitszeit geht beim nächsten Export erneut in die Abrechnung. Jeder Vorgang steht mit Ihrer Begründung im Protokoll.",
+            title: words.reopened(plural(done, words.bookingIs, words.bookingsAre)),
+            body: words.bulkResetBody,
           });
         } else {
           toasts.failure(
-            "Nicht alles ließ sich zurücksetzen",
-            `${String(done)} von ${String(targets.length)} Buchungen sind wieder offen. Der Rest blieb unverändert.${failure === null ? "" : ` Abgebrochen wurde bei: ${failure}`}`,
+            words.bulkPartialTitle,
+            `${words.bulkPartial(done, targets.length)}${failure === null ? "" : words.bulkStoppedAt(failure)}`,
           );
         }
       })();
@@ -248,19 +254,18 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
        * beseitigen sollte.
        */
       const notBilled = exportDisplayState(entry.exportStatus, entry.exportCount) === "not_billed";
-      const lockReason = notBilled
-        ? "Diese Zeit wurde ausgebucht und ist gesperrt. Setzen Sie den Exportstatus zurück, um sie wieder zu bearbeiten."
-        : "Diese Buchung wurde bereits exportiert und ist gesperrt. Setzen Sie den Exportstatus zurück, um sie zu bearbeiten.";
+      const words = bookingTexts();
+      const lockReason = notBilled ? words.lockedNotBilled : words.lockedExported;
       return [
         {
           id: "todo",
-          label: "Todo öffnen",
+          label: words.openTodo,
           icon: "arrow-up-right",
           onSelect: () => navigate("todo", entry.todoId),
         },
         {
           id: "edit",
-          label: "Bearbeiten",
+          label: words.edit,
           icon: "pencil",
           disabled: locked,
           ...(locked ? { disabledReason: lockReason } : {}),
@@ -272,39 +277,43 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         // Buchung darf zeigen, dass zu ihr nichts protokolliert ist.
         {
           id: "history",
-          label: "Verlauf dieser Buchung",
+          label: words.historyTitle,
           icon: "clock",
           onSelect: () => setHistoryEntry(entry),
         },
         {
           id: "reset",
-          label: "Exportstatus zurücksetzen",
+          label: words.resetExportStatus,
           icon: "rotate-ccw",
           disabled: !locked,
-          ...(locked ? {} : { disabledReason: "Diese Buchung ist bereits offen." }),
+          ...(locked ? {} : { disabledReason: words.alreadyOpen }),
           onSelect: () => setResetEntry(entry),
         },
         // E-047. Der Eintrag steht nur bei offenen Buchungen zur Wahl und
         // heißt nirgends „als exportiert markieren": Exportiert wird diese
         // Zeit nicht, sie wird schlicht nicht abgerechnet.
-        {
-          id: "not-billed",
-          label: "Nicht abrechnen",
-          // Nicht der Haken (E-050): Der traegt seit jeher „Exportiert", und
-          // exportiert wird diese Zeit gerade nicht. Der durchgestrichene
-          // Kreis ist dasselbe Zeichen, das die Buchung danach in der Liste
-          // traegt — Vorgang und Ergebnis sehen gleich aus.
-          icon: "slash-circle",
-          disabled: locked,
-          ...(locked
-            ? {
-                disabledReason: notBilled
-                  ? "Diese Zeit ist bereits ausgebucht."
-                  : "Diese Buchung ist bereits exportiert und damit abgeschlossen.",
-              }
-            : {}),
-          onSelect: () => setNotBilledEntry(entry),
-        },
+        // A-26.3 (E-133 point 5): a NoExport booking never offers "not billed" — hidden, not
+        // only disabled, because the service refuses it anyway (`time_entry_no_export`).
+        ...(entry.todoNoExport
+          ? []
+          : ([
+            {
+              id: "not-billed",
+              label: words.notBilled,
+              // Nicht der Haken (E-050): Der traegt seit jeher „Exportiert", und
+              // exportiert wird diese Zeit gerade nicht. Der durchgestrichene
+              // Kreis ist dasselbe Zeichen, das die Buchung danach in der Liste
+              // traegt — Vorgang und Ergebnis sehen gleich aus.
+              icon: "slash-circle",
+              disabled: locked,
+              ...(locked
+                ? {
+                    disabledReason: notBilled ? words.alreadyNotBilled : words.alreadyExported,
+                  }
+                : {}),
+              onSelect: () => setNotBilledEntry(entry),
+            },
+          ] satisfies MenuEntry[])),
       ];
     },
     [data.state],
@@ -313,39 +322,39 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
   return (
     <section className={embedded ? "export-bookings" : "screen"}>
       {embedded ? null : <ScreenHeader
-        title="Buchungen"
-        lead="Zeitbuchungen prüfen, bearbeiten und nach Exportstatus filtern."
+        title={text.screenTitle}
+        lead={text.lead}
       >
         <ExportTabs active="bookings" />
         <FilterBar
-          label="Buchungen filtern"
+          label={text.filterLabel}
           resultLabel={
             data.state.status === "ready"
-              ? plural(data.state.value.page.total, "Buchung", "Buchungen")
-              : "wird geladen …"
+              ? plural(data.state.value.page.total, text.booking, text.bookings)
+              : text.loadingShort
           }
           activeFilters={activeFilters}
           onResetAll={resetAll}
           controls={
             <>
               <Select
-                label="Exportstatus"
+                label={text.exportStatus}
                 value={status}
                 onChange={(next) => setStatus(next as ExportStatus | "")}
                 options={[
-                  { value: "", label: "Alle" },
-                  { value: "open", label: "Offen" },
-                  { value: "exported", label: "Exportiert" },
+                  { value: "", label: text.all },
+                  { value: "open", label: text.open },
+                  { value: "exported", label: text.exported },
                 ]}
               />
               <FilterToggle
-                label="Nur schon einmal exportierte"
+                label={text.onlyExportedBefore}
                 pressed={onlyPrevious}
                 onChange={setOnlyPrevious}
-                hint="Einengung innerhalb des Status, kein eigener Statuswert"
+                hint={text.onlyExportedBeforeHint}
               />
-              <DateField label="Ab Tag" value={fromDay} onChange={setFromDay} />
-              <DateField label="Bis Tag" value={toDay} onChange={setToDay} />
+              <DateField label={text.fromDay} value={fromDay} onChange={setFromDay} />
+              <DateField label={text.toDay} value={toDay} onChange={setToDay} />
               <Button
                 size="sm"
                 variant="ghost"
@@ -355,13 +364,13 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
                   setToDay(today);
                 }}
               >
-                Letzte 7 Tage
+                {text.lastSevenDays}
               </Button>
               <SearchField
-                label="Todo einschränken"
+                label={text.restrictTodo}
                 value={todoSearch}
                 onChange={setTodoSearch}
-                placeholder="Todo suchen …"
+                placeholder={text.searchTodo}
               />
             </>
           }
@@ -374,9 +383,10 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         sechs Einträge gedeckelt.
       */}
       {!embedded && todoSearch.trim().length > 0 && data.state.status === "ready" ? (
-        <ul className="screen__bar pick-list pick-list--inline" aria-label="Todo für den Filter wählen">
+        <ul className="screen__bar pick-list pick-list--inline" aria-label={text.pickTodo}>
           {data.state.value.todos
-            .filter((todo) => todo.title.toLowerCase().includes(todoSearch.trim().toLowerCase()))
+            // A-26.2: a NoExport todo has no bookings in this overview, so it is no filter choice.
+            .filter((todo) => todo.noExport !== true && todo.title.toLowerCase().includes(todoSearch.trim().toLowerCase()))
             .slice(0, 6)
             .map((todo) => (
               <li key={todo.id} className="pick-row">
@@ -408,10 +418,10 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
       */}
       <AsyncBoundary
         state={data.state}
-        label="Buchungen werden geladen"
+        label={text.loading}
         rows={8}
         onRetry={data.reload}
-        fallbackFrame={(content) => <Body label="Buchungen">{content}</Body>}
+        fallbackFrame={(content) => <Body label={text.screenTitle}>{content}</Body>}
       >
         {(value, refreshing) => {
           const rows = toRows(value.page.items, value.titles, sort);
@@ -426,28 +436,28 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
 
           if (rows.length === 0) {
             return (
-              <Body label="Buchungen">
+              <Body label={text.screenTitle}>
                 <TableShell>
                   <EmptyState
                     icon={!embedded && activeFilters.length === 0 ? "clock" : "search"}
                     title={
                       !embedded && activeFilters.length === 0
-                        ? "Noch keine Zeitbuchung"
-                        : "Keine Buchung passt zu diesen Filtern"
+                        ? text.noBookingTitle
+                        : text.noMatchTitle
                     }
                     description={
                       !embedded && activeFilters.length === 0
-                        ? "Starten Sie den Timer auf einem Todo — die erste Buchung entsteht beim Stoppen."
-                        : "Setzen Sie einen Filter zurück oder erweitern Sie den Zeitraum."
+                        ? text.noBookingBody
+                        : text.noMatchBody
                     }
                     action={
                       !embedded && activeFilters.length === 0 ? (
                         <Button variant="primary" iconStart="clock" onClick={() => navigate("time")}>
-                          Zur Zeiterfassung
+                          {text.toTimeTracking}
                         </Button>
                       ) : (
                         <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                          Filter zurücksetzen
+                          {text.resetFilters}
                         </Button>
                       )
                     }
@@ -464,12 +474,12 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
                   <RefreshHint active={refreshing} />
                   {selected.size === 0 ? (
                     <span className="bulkbar__hint">
-                      Zeilen auswählen, um mehrere Buchungen auf einmal zu bearbeiten.
+                      {text.selectHint}
                     </span>
                   ) : (
                     <>
                       <span className="bulkbar__count">
-                        {plural(selected.size, "Buchung ausgewählt", "Buchungen ausgewählt")} ·{" "}
+                        {plural(selected.size, text.bookingSelected, text.bookingsSelected)} ·{" "}
                         {formatDuration(selectedSeconds)}
                       </span>
                       <Button
@@ -479,10 +489,10 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
                         disabled={exportedSelected === 0}
                         onClick={() => setBulkOpen(true)}
                       >
-                        Exportstatus zurücksetzen ({exportedSelected})
+                        {text.resetSelected(exportedSelected)}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                        Auswahl aufheben
+                        {text.clearSelection}
                       </Button>
                     </>
                   )}
@@ -491,9 +501,9 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
 
               <BookingTable
                 className={embedded ? "export-bookings__table" : "screen__body"}
-                {...(embedded ? {} : { surface: runAreaSurface("Buchungen", true) })}
+                {...(embedded ? {} : { surface: runAreaSurface(text.screenTitle, true) })}
                 rows={rows}
-                caption="Alle Zeitbuchungen mit Exportstatus, Zeitraum, Dauer und Leistung"
+                caption={text.caption}
                 selectedIds={selected}
                 onToggleRow={toggleRow}
                 onToggleAll={() =>
@@ -521,7 +531,7 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
                     x,
                     y,
                     entries: rowMenu(row),
-                    label: `Aktionen für die Buchung ${foreignText(row.todoTitle)}`,
+                    label: text.rowActions(foreignText(row.todoTitle)),
                   })
                 }
               />
@@ -539,8 +549,8 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
           todoId={editing.todoId}
           todoTitle={
             data.state.status === "ready"
-              ? (data.state.value.titles.get(editing.todoId)?.title ?? "diesem Todo")
-              : "diesem Todo"
+              ? (data.state.value.titles.get(editing.todoId)?.title ?? text.thisTodo)
+              : text.thisTodo
           }
           onClose={() => setEditing(null)}
         />
@@ -551,8 +561,8 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         entry={resetEntry}
         todoTitle={
           resetEntry === null || data.state.status !== "ready"
-            ? "diesem Todo"
-            : (data.state.value.titles.get(resetEntry.todoId)?.title ?? "diesem Todo")
+            ? text.thisTodo
+            : (data.state.value.titles.get(resetEntry.todoId)?.title ?? text.thisTodo)
         }
         onClose={() => setResetEntry(null)}
       />
@@ -562,8 +572,8 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         entry={historyEntry}
         todoTitle={
           historyEntry === null || data.state.status !== "ready"
-            ? "diesem Todo"
-            : (data.state.value.titles.get(historyEntry.todoId)?.title ?? "diesem Todo")
+            ? text.thisTodo
+            : (data.state.value.titles.get(historyEntry.todoId)?.title ?? text.thisTodo)
         }
         onClose={() => setHistoryEntry(null)}
       />
@@ -573,8 +583,8 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         entry={notBilledEntry}
         todoTitle={
           notBilledEntry === null || data.state.status !== "ready"
-            ? "diesem Todo"
-            : (data.state.value.titles.get(notBilledEntry.todoId)?.title ?? "diesem Todo")
+            ? text.thisTodo
+            : (data.state.value.titles.get(notBilledEntry.todoId)?.title ?? text.thisTodo)
         }
         onClose={() => setNotBilledEntry(null)}
       />
@@ -582,13 +592,13 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
       <ConfirmDialog
         open={bulkOpen}
         tone="danger"
-        title="Exportstatus mehrerer Buchungen zurücksetzen?"
-        description="Alle ausgewählten Buchungen, die exportiert sind, werden wieder als offen geführt."
-        consequence="Dieselbe Arbeitszeit geht beim nächsten Export erneut in die Abrechnung. Jeder einzelne Vorgang wird mit dieser Begründung protokolliert."
-        confirmLabel="Zurücksetzen"
-        reasonLabel="Begründung für das Protokoll"
+        title={text.bulkTitle}
+        description={text.bulkLead}
+        consequence={text.bulkConsequence}
+        confirmLabel={text.reset}
+        reasonLabel={text.reasonForLog}
         reasonRequired
-        acknowledgeLabel="Mir ist klar, dass diese Zeiten dadurch ein zweites Mal abgerechnet werden können."
+        acknowledgeLabel={text.bulkAcknowledge}
         busy={bulkBusy}
         onConfirm={bulkReset}
         onCancel={() => setBulkOpen(false)}

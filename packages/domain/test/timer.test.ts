@@ -37,6 +37,9 @@ import {
   determineReopen,
   decideTimerStart,
   decideOrphanedTimer,
+  decideTimerStop,
+  exceedsMaximumDuration,
+  MAX_TIME_ENTRY_SECONDS,
   BOOKING_EFFECT,
   ENTRY_CLOSED_EFFECT,
 } from '../src/time-entry.js';
@@ -320,6 +323,102 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       expect(result.reason).toBe('timer_too_short');
       expect(result.durationSeconds).toBeLessThan(0);
     }
+  });
+});
+
+/**
+ * T-388 (`reports/T-388-domain-dev.md`, Nächster Schritt 1 und 2, R-34): an unreadable timestamp
+ * must never fall through to booking the wall clock. Before T-388, `earlierOf` compared with
+ * `<=` directly on `Date.parse`, and a `NaN` comparison is always false — it silently picked the
+ * second value. For a booking cap that is the expensive direction (T-380).
+ */
+describe('decideOrphanedTimer / decideTimerStop — an unreadable timestamp never books the wall clock (T-388, R-34)', () => {
+  const runningSince = (startedAt: Timestamp): RunningTimeEntry => ({
+    id: 'te-orphan' as never,
+    todoId: todoId('todo-a'),
+    startedAt,
+    note: 'unread heartbeat guard',
+    source: 'timer',
+  });
+
+  it('an unreadable heartbeat ("2026-13-01…", a syntactically valid but nonexistent month) discards, instead of booking until "now"', () => {
+    const running = runningSince(timestamp('2026-08-31T22:00:00Z'));
+
+    const result = decideOrphanedTimer({
+      running,
+      // `Date.parse` returns `NaN` for this — month 13 does not exist.
+      heartbeatAt: '2026-13-01T00:00:00Z' as Timestamp,
+      resolution: 'book_until_heartbeat',
+      now: timestamp('2026-09-01T09:00:00Z'),
+    });
+
+    // Before T-388 this booked 39 600 s (the wall clock, "now" minus start) — never again.
+    expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
+    if (result.kind === 'recorded') {
+      expect((result as { entry: { durationSeconds: number } }).entry.durationSeconds).not.toBe(39_600);
+    }
+  });
+
+  it('an unreadable "now" discards as well — the cap itself must be readable before it can cap anything', () => {
+    const running = runningSince(timestamp('2026-08-31T22:00:00Z'));
+
+    const result = decideOrphanedTimer({
+      running,
+      heartbeatAt: timestamp('2026-08-31T23:00:00Z'),
+      resolution: 'book_until_heartbeat',
+      now: '2026-13-01T00:00:00Z' as Timestamp,
+    });
+
+    expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
+  });
+
+  it('decideTimerStop with an unreadable start yields discarded/durationSeconds: 0, not a NaN booking', () => {
+    const running = runningSince('2026-13-01T00:00:00Z' as Timestamp);
+
+    const result = decideTimerStop({ running, note: 'x', now: timestamp('2026-09-01T09:00:00Z') });
+
+    expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
+  });
+
+  it('decideTimerStop with an unreadable "now" yields discarded/durationSeconds: 0 as well', () => {
+    const running = runningSince(timestamp('2026-08-31T22:00:00Z'));
+
+    const result = decideTimerStop({ running, note: 'x', now: '2026-13-01T00:00:00Z' as Timestamp });
+
+    expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
+  });
+});
+
+/**
+ * A-28.6 / E-124 point 3: a single time entry lasts at most 24 hours (`MAX_TIME_ENTRY_SECONDS`).
+ * `exceedsMaximumDuration` is the pure rule the storage layer asks at every write door
+ * (create, update, stop, displacing start) — see `packages/storage/test/repo-time.test.ts` for
+ * the doors themselves. Here: the boundary itself, both sides of it.
+ */
+describe('exceedsMaximumDuration / MAX_TIME_ENTRY_SECONDS — the 24-hour cap on a single booking (A-28.6)', () => {
+  it('MAX_TIME_ENTRY_SECONDS is exactly 24 hours in seconds', () => {
+    expect(MAX_TIME_ENTRY_SECONDS).toBe(86_400);
+  });
+
+  it('exactly 24 hours (86 400 s) does NOT exceed the cap', () => {
+    expect(
+      exceedsMaximumDuration(timestamp('2026-08-31T00:00:00Z'), timestamp('2026-09-01T00:00:00Z')),
+    ).toBe(false);
+  });
+
+  it('24 hours plus one second (86 401 s) DOES exceed the cap', () => {
+    expect(
+      exceedsMaximumDuration(timestamp('2026-08-31T00:00:00Z'), timestamp('2026-09-01T00:00:01Z')),
+    ).toBe(true);
+  });
+
+  it('an unreadable pair of timestamps answers false — a rule that reads them rejects them elsewhere, not here', () => {
+    expect(
+      exceedsMaximumDuration('2026-13-01T00:00:00Z' as Timestamp, timestamp('2026-09-01T00:00:01Z')),
+    ).toBe(false);
+    expect(
+      exceedsMaximumDuration(timestamp('2026-08-31T00:00:00Z'), '2026-13-01T00:00:00Z' as Timestamp),
+    ).toBe(false);
   });
 });
 

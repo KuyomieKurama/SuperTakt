@@ -16,9 +16,9 @@ import { defineConfig } from 'vite';
  *    kein Symbolpaket, keine Messbibliothek (B-10.6). Was gebraucht wird, liegt
  *    im Bündel.
  *
- * 3. **`sourcemap: true`.** Der Aufgabenbereich läuft in einem Steuerelement,
- *    an das kein Debugger von außen kommt. Ohne Quellzuordnung ist ein Fehler
- *    im Feld eine Zeilennummer in einer verkürzten Datei.
+ * 3. **`sourcemap: 'hidden'`** (A-28.11, E-120). Maps are still written for
+ *    local debugging, but no bundle carries a `sourceMappingURL` comment, and
+ *    the service must not serve `.map` files.
  *
  * Der Entwicklungsserver bindet auf die Loopback-Adresse (E-001) und benutzt
  * denselben Port, unter dem das Add-in später ausgeliefert wird — siehe
@@ -39,9 +39,8 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    rollupOptions: { input: ['index.html', 'commands.html'] },
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: 'hidden',
     target: 'es2022',
   },
   worker: {

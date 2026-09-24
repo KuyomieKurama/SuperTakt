@@ -1,4 +1,4 @@
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import {
   clearTodoDone,
 } from "./api";
@@ -6,6 +6,7 @@ import type { ForeignText, Id } from "../../api/types";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import type { ToastAction, ToastApi } from "../../app/ToastContext";
 import { quotedName } from "../../lib/foreign";
+import { todoTexts } from "./texts";
 
 /**
  * Der Rückweg aus „Erledigt" — einmal, für alle drei Flächen (B-6 und B-7 aus
@@ -44,10 +45,10 @@ import { quotedName } from "../../lib/foreign";
   steht im Titel der Meldung („„X" ist wieder offen.") — der Rumpf hat ihn
   wiederholt. Regel S-13: Der Rumpf wiederholt den Titel nicht.
 */
-const UNDONE_BODY = "Tags und Status ändern sich dadurch nicht.";
-
-/** Der Titel, wenn das Zurücknehmen scheitert. Ein Wortlaut für alle drei Flächen. */
-const UNDO_FAILED_TITLE = "Das Zurücknehmen hat nicht geklappt";
+/** The title when undoing fails. One wording for all three surfaces. */
+export function undoFailedTitle(): string {
+  return todoTexts().undoFailed;
+}
 
 /**
  * Baut den Rückweg für die Meldung nach „Erledigt".
@@ -66,23 +67,23 @@ export function undoDoneAction(
   afterwards: () => void,
 ): ToastAction {
   return {
-    label: "Rückgängig",
+    label: todoTexts().undo,
     onSelect: () => {
       void clearTodoDone(todoId)
         .then((undone) => {
           afterwards();
           toasts.show({
             tone: "info",
-            title: `${quotedName(todoTitle)} ist wieder offen.`,
+            title: todoTexts().openAgain(quotedName(todoTitle)),
             /*
               `cleared: true` — das Kennzeichen wird **aufgehoben**, also der
               Anlaß `'reopen'` („wieder"). Welcher Anlaß zu welcher Handlung
               gehört, entscheidet `lib/movement.ts` und nicht die Aufrufstelle.
             */
-            body: withMovement(UNDONE_BODY, doneMovementSentence(undone.poolMovement, true)),
+            body: withMovement(todoTexts().undoneBody, doneMovementSentence(undone.poolMovement, true)),
           });
         })
-        .catch((cause: unknown) => toasts.failure(UNDO_FAILED_TITLE, errorMessage(cause)));
+        .catch((cause: unknown) => toasts.failure(undoFailedTitle(), errorMessage(cause), isServiceError(cause)));
     },
   };
 }

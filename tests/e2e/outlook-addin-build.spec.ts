@@ -170,7 +170,10 @@ test.describe('A-10.11 — gebautes Formular mit Office- und API-Mocks', () => {
       const headers = { 'Access-Control-Allow-Origin': 'https://127.0.0.1:17944', 'Access-Control-Allow-Headers': 'Content-Type, X-Takt-Token', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
       if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
       let data: unknown = context;
-      if (request.url().includes('todo-matches')) data = { searched: true, callNumber: '24470', matches: action === 'no_match' ? [] : [{ id: todo, title: 'Vorhandene Aufgabe', callNumber: '24470', statusId: status, tagIds: [tag], completedAt: null, openSeconds: 0, exportedSeconds: 0, poolMovement: null }] };
+      // Kein `poolMovement` mehr in der Attrappe (E-125, T-398): Das Feld ist aus
+      // `GET /addin/todo-matches` gefallen, weil der Aufgabenbereich seit E-120 nicht mehr
+      // bucht und keine Bewegungsvorschau mehr zeigt.
+      if (request.url().includes('todo-matches')) data = { searched: true, callNumber: '24470', matches: action === 'no_match' ? [] : [{ id: todo, title: 'Vorhandene Aufgabe', callNumber: '24470', statusId: status, tagIds: [tag], completedAt: null, openSeconds: 0, exportedSeconds: 0 }] };
       if (request.method() === 'POST') {
         const body = request.postDataJSON() as Record<string, unknown>;
         requests.push(body);
@@ -181,9 +184,9 @@ test.describe('A-10.11 — gebautes Formular mit Office- und API-Mocks', () => {
     await page.goto('/');
     if (action === 'no_match') {
       await expect(page.getByLabel('Titel', { exact: true })).toBeVisible();
-      await expect(page.getByRole('radio', { name: /Zur Aufgabe ergänzen/ })).toHaveCount(0);
+      await expect(page.getByRole('radio', { name: /Zum Todo ergänzen:/ })).toHaveCount(0);
     } else {
-      await expect(page.getByRole('radio', { name: /Zur Aufgabe ergänzen/ })).toBeChecked();
+      await expect(page.getByRole('radio', { name: /Zum Todo ergänzen:/ })).toBeChecked();
       await expect(page.getByLabel('Titel', { exact: true })).toHaveCount(0);
     }
     await expect(page.getByLabel('Zeitschätzung in Minuten')).toHaveCount(0);
@@ -192,7 +195,7 @@ test.describe('A-10.11 — gebautes Formular mit Office- und API-Mocks', () => {
     await page.getByLabel('E-Mail-Auszug in die Notizen übernehmen').uncheck();
     await expect(page.getByLabel('Vermerk (bleibt in SuperTakt)')).toHaveValue('Meine eigene Notiz');
     if (action === 'append') {
-      await page.getByRole('button', { name: 'E-Mail an Aufgabe anhängen', exact: true }).click();
+      await page.getByRole('button', { name: 'E-Mail an Todo anhängen', exact: true }).click();
       await expect.poll(() => requests.length).toBe(1);
       expect(requests[0]).toMatchObject({ note: 'Meine eigene Notiz', mail: { excerpt: null }, attachments: { items: [{ kind: 'message' }] } });
       expect(requests[0]).not.toHaveProperty('estimateMinutes');
@@ -200,10 +203,10 @@ test.describe('A-10.11 — gebautes Formular mit Office- und API-Mocks', () => {
       await expect(page.getByText('Vorhandene Aufgabe', { exact: true })).toBeVisible();
       return;
     }
-    if (action === 'create') await page.getByRole('button', { name: 'Stattdessen neue Aufgabe erstellen', exact: true }).click();
+    if (action === 'create') await page.getByRole('button', { name: 'Stattdessen neues Todo anlegen', exact: true }).click();
     await page.getByLabel('Titel', { exact: true }).fill('Bewusste Neuanlage');
     await page.getByLabel('Frist', { exact: true }).fill('2026-10-25');
-    await page.getByLabel('Fälligkeitsuhrzeit (optional)').fill('02:30');
+    await page.getByLabel('Uhrzeit der Frist (optional)').fill('02:30');
     await expect(page.getByLabel('Zeitschätzung in Minuten')).toHaveCount(0);
     await page.getByRole('button', { name: 'Kunden', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Nord', exact: true })).toHaveCount(0);
@@ -220,9 +223,9 @@ test.describe('A-10.11 — gebautes Formular mit Office- und API-Mocks', () => {
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.locator('.tagpicker').evaluate(element => element.scrollIntoView({ block: 'center' }));
     await page.locator('.tagpicker').screenshot({ path: test.info().outputPath('tags.png') });
-    await page.getByRole('button', { name: 'Neue Aufgabe anlegen', exact: true }).click();
+    await page.getByRole('button', { name: 'Neues Todo anlegen', exact: true }).click();
     await expect.poll(() => requests.length).toBe(1);
-    expect(requests[0]).toMatchObject({ title: 'Bewusste Neuanlage', mode: action === 'no_match' ? 'auto' : 'new', statusId: status, tagIds: [tag], dueDate: '2026-10-25', dueTime: '02:30', estimateMinutes: null, note: 'Meine eigene Notiz', mail: { excerpt: null, internetMessageId: '<build@example.test>' } });
+    expect(requests[0]).toMatchObject({ title: 'Bewusste Neuanlage', mode: 'new', statusId: status, tagIds: [tag], dueDate: '2026-10-25', dueTime: '02:30', estimateMinutes: null, note: 'Meine eigene Notiz', mail: { excerpt: null, internetMessageId: '<build@example.test>' } });
     await expect(page.getByText('Bewusste Neuanlage', { exact: true })).toBeVisible();
   });
 });

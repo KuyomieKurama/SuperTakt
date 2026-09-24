@@ -1101,3 +1101,54 @@ die Freigaberunde über T-371 durch ist.
 gemessen 39 000 s zur Verteilung an; nur benannt, nicht behoben. **A-A-127** — weiterhin keine
 Obergrenze für eine Dauer.
 
+
+**Nachtrag 2026-09-23 (Triage, E-121):** Die Urteile widersprechen sich — T-381 gab R-34 zum
+Schließen frei, T-380 fand danach einen blockierenden Fehler (`earlierOf` bei unlesbarem
+Lebenszeichen, `packages/domain/src/time-entry.ts:284-314`). Das strengere Urteil gilt: **R-34 bleibt
+offen**, bis T-388 den Fehler samt Prüffall behoben hat und eine Freigaberunde ihn gesehen hat.
+Eigene Einträge dazu: R-35 und R-36.
+
+## R-35 — Das Zuordnungsfenster reist mit dem Archiv (B-5)
+
+**Schwere:** hoch. **Betrifft:** domain-dev. Neu am 2026-09-23 (aus T-381 §47.7, Triage).
+
+Ein eingespieltes Archiv kann eine offene Inaktivitätsphase mit einem Zuordnungsfenster von vielen
+Stunden (gemessen 42 000 s) mitbringen; beim Import wird es nicht auf die Wanduhr des Zielrechners
+gezogen. Dazu kommt ein Uhrversatz: `timer_idle.started_at` in der Zukunft macht die Rückkehr
+unbuchbar (`features/timer/idle.ts:192-205`). Beides landet im Geldpfad. Gegenmittel in T-388.
+
+## R-36 — Eine Buchung hat keine Obergrenze (A-A-127)
+
+**Schwere:** mittel. **Betrifft:** domain-dev, frontend-dev. Neu am 2026-09-23.
+
+Keine Schicht begrenzt die Dauer einer Zeitbuchung; ein vergessener Timer oder ein präparierter
+Fremdimport erzeugt beliebig lange Buchungen, die exportiert werden. Mit E-120 entschieden:
+höchstens 24 Stunden (A-28.6). Gegenmittel in T-388 (Dienst) und im Stopp-Dialog der Oberfläche.
+
+## R-37 — Ein Archiv verlegt den Exportordner (N-1)
+
+**Schwere:** mittel. **Betrifft:** domain-dev. Neu am 2026-09-23 (T-394).
+
+`app_setting.export_directory` wurde aus dem Archiv unverändert übernommen; die Rückfrage bei
+UNC- und Netzordnern gibt es nur in der Oberfläche, `runExport` prüft nicht. Ein fremdes Archiv
+leitet so künftige Abrechnungsexporte auf eine fremde Freigabe um; unter Windows sendet schon die
+Ordnerprüfung Anmeldedaten an den fremden Wirt. Gegenmittel E-124 Punkt 9, gebaut in T-388.
+
+**Nachtrag 2026-09-24 (T-406a, E-136):** R-34, R-35, R-36 und R-37 sind aus Sicherheitssicht
+**geschlossen** — Geldpfad (NaN, Uhrversatz, Zuordnungsfenster, 24 h an allen Türen) und
+Exportordner-Übernahme gemessen. Die benannte Restlücke `separateIdle` für Altphasen (E-127) bleibt
+bewußt stehen.
+
+## R-38 — Ein Archiv schaltet die Versionsprüfung still ab (N-5)
+
+**Schwere:** mittel. **Betrifft:** domain-dev. Neu am 2026-09-24 (T-406a), Bauart R-30.
+
+Ein Archiv mit `version_check_enabled = 0` wird ohne Warnung eingespielt; danach meldet die
+Versionsprüfung `unknown`, und Hinweise auf Sicherheitsbehebungen bleiben dauerhaft aus. Gegenmittel
+(verträglich mit A-28.1): Die Importzusammenfassung warnt, wenn das Archiv eine hier eingeschaltete
+Prüfung ausschaltet (T-411a).
+
+**R-38, Nachtrag 2026-09-24 (N-6):** Ein Archiv ohne `app_setting`-Zeile wurde angenommen und machte
+`GET /settings` unbrauchbar (500). Gegenmittel: `parseArchive` verlangt genau eine Zeile mit
+`id = 1` (T-411a). Die fehlende Zeile gilt seit T-412 als „an", ein zweiter stiller Ausschalter ist
+damit ausgeschlossen (T-406a bestätigt).

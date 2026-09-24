@@ -3,6 +3,7 @@ import { Dialog } from "@ark-ui/react/dialog";
 import { DialogSurface } from "../../shared/ui/DialogSurface";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, IconButton } from "../../shared/ui/Primitives";
+import { settingsTexts } from "./texts";
 
 /** A-18.6–9: Versionsvergleich und Öffnen der offiziellen Release-Seite.
  * Beide Aktionen bleiben gleich gewichtet; initialer Fokus liegt auf dem Dialog.
@@ -72,30 +73,30 @@ export function UpdateDialog({
         <span className="update-dialog__icon"><Icon name="download" size={22} /></span>
         <div className="grow">
           <Dialog.Title className="dialog__title">
-            Update verfügbar
+            {settingsTexts().updateAvailable}
           </Dialog.Title>
           <Dialog.Description asChild>
             <p className="dialog__lead">
-              Eine neue Version von SuperTakt ist bereit.
+              {settingsTexts().updateReady}
             </p>
           </Dialog.Description>
         </div>
         <Dialog.CloseTrigger asChild>
-          <IconButton label="Später entscheiden" icon="x" size="sm" disabled={busy} />
+          <IconButton label={settingsTexts().decideLater} icon="x" size="sm" disabled={busy} />
         </Dialog.CloseTrigger>
       </div>
 
       <div className="dialog__body dialog__body--form">
         <div className="update-dialog__versions">
-          <dl><dt>Installiert</dt><dd>{installed}</dd></dl>
+          <dl><dt>{settingsTexts().installed}</dt><dd>{installed}</dd></dl>
           <Icon name="chevron-right" size={20} />
-          <dl className="update-dialog__available"><dt>Neue Version</dt><dd>{available}</dd></dl>
+          <dl className="update-dialog__available"><dt>{settingsTexts().newVersion}</dt><dd>{available}</dd></dl>
         </div>
         <p className="update-dialog__explanation">
-          Die Release-Seite öffnet sich im Browser. Download und Installation starten Sie dort selbst.
+          {settingsTexts().releasePageHint}
         </p>
         <details className="update-dialog__source">
-          <summary>Offizielle Release-Seite auf GitHub <Icon name="link" size={14} /></summary>
+          <summary>{settingsTexts().officialReleasePage} <Icon name="link" size={14} /></summary>
           <p>{url}</p>
         </details>
 
@@ -115,7 +116,7 @@ export function UpdateDialog({
         </div>
 
         <p className="dialog__hint">
-          Überspringen blendet nur diese Version aus. Schließen erinnert beim nächsten Start.
+          {settingsTexts().skipHint}
         </p>
       </div>
 
@@ -126,10 +127,10 @@ export function UpdateDialog({
       */}
       <div className="dialog__footer">
         <Button variant="secondary" iconEnd="arrow-up-right" onClick={onInstall} disabled={busy}>
-          Release-Seite öffnen
+          {settingsTexts().openReleasePage}
         </Button>
         <Button variant="secondary" onClick={onSkip} loading={busy}>
-          Überspringen
+          {settingsTexts().skip}
         </Button>
       </div>
     </DialogSurface>

@@ -61,7 +61,11 @@ import type { Logger } from './logger.ts';
  */
 export interface AppContext {
   /** Snapshot taken before HTTP starts; timers created in this service run are not orphaned. */
-  readonly timerRecovery?: { entryId: TimeEntryId | null };
+  readonly timerRecovery?: {
+    entryId: TimeEntryId | null;
+    /** Open idle phase found at service start or brought in by an archive (B-5, R-35). */
+    idleSessionId?: TimeEntryId | null;
+  };
   readonly transactions: TransactionPort;
   readonly clock: ClockPort;
   readonly files: FilePort;

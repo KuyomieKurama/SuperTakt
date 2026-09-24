@@ -17,7 +17,6 @@ import type { EmailAttachmentEnvelope } from '../attachments/model.ts';
 
 import type {
   AddinContextDto,
-  BookResponseDto,
   CreateTodoResponseDto,
   MatchResponseDto,
 } from './types.ts';
@@ -59,7 +58,7 @@ export interface ApiClientOptions {
 export interface CreateTodoRequest {
   readonly requestId?: string;
   readonly mail?: MailMetadata;
-  readonly mode?: 'auto' | 'new';
+  readonly mode?: 'new';
   readonly dueTime?: string | null;
   readonly estimateMinutes?: number | null;
   readonly title: string;
@@ -103,14 +102,6 @@ export interface CreateTodoRequest {
  */
 export const ATTACHMENTS_TRAVEL_WITH_CREATE: boolean = true;
 
-export interface BookRequest {
-  readonly todoId: string;
-  readonly startedAt: string;
-  readonly endedAt: string;
-  /** Die **Leistung** (A-7.3). Sie geht in die Abrechnung (A-7.4). */
-  readonly note: string;
-}
-
 export interface AppendMailRequest {
   readonly todoId: string;
   readonly requestId: string;
@@ -126,8 +117,6 @@ export interface ApiClient {
   loadContext(): Promise<ApiResult<AddinContextDto>>;
   findMatches(callNumber: string): Promise<ApiResult<MatchResponseDto>>;
   createTodo(input: CreateTodoRequest): Promise<ApiResult<CreateTodoResponseDto>>;
-
-  book(input: BookRequest): Promise<ApiResult<BookResponseDto>>;
 }
 
 const MESSAGES: Readonly<Record<ApiFailureKind, string>> = Object.freeze({
@@ -286,18 +275,6 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
         requestId: input.requestId, callNumber: input.callNumber, mail: input.mail,
         note: input.note, attachments: input.attachments,
       });
-    },
-    book(input: BookRequest) {
-      return call<BookResponseDto>(
-        'POST',
-        `/api/v1/addin/todos/${encodeURIComponent(input.todoId)}/time-entries`,
-        undefined,
-        {
-          startedAt: input.startedAt,
-          endedAt: input.endedAt,
-          note: input.note,
-        },
-      );
     },
   };
 };

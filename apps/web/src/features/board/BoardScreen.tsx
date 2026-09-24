@@ -1,7 +1,7 @@
 import { Select } from "../../shared/ui/Select";
 import { listPriorities } from "../settings/api";
 import { useCallback, useMemo, useState } from "react";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import { updatePool } from "../structure/api";
 import type { Id, Pool, PoolRuleTerm, Todo } from "../../api/types";
 import { loadExportSummaries } from "../../app/exportSummary";
@@ -16,7 +16,8 @@ import type { MenuEntry } from "../../shared/ui/Menu";
 import { Button } from "../../shared/ui/Primitives";
 import { quotedName } from "../../lib/foreign";
 import { formatTime, plural } from "../../lib/format";
-import { poolPlacementMessage, RULE_WHAT_MOVES_A_CARD } from "../../lib/labels";
+import { labels, poolPlacementMessage } from "../../lib/labels";
+import { boardTexts } from "./texts";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
 import { ScreenBody, ScreenFrame, runAreaSurface } from "../../shared/ui/ScreenBody";
@@ -102,7 +103,7 @@ function seedTagIds(rule: readonly PoolRuleTerm[]): readonly Id[] {
 
 /** Dieselbe Frage für eine ganze Spalte. */
 function seedTagsOf(column: Pool): readonly Id[] {
-  return seedTagIds(column.rule);
+  return seedTagIds(column.requiredTags);
 }
 
 /**
@@ -209,17 +210,18 @@ export function BoardScreen() {
             werden. Wo also der Bewegungssatz steht, ist er die genauere
             Antwort auf dieselbe Frage, und die pauschale Zeile entfällt.
           */
+          const text = boardTexts();
           const movement = doneMovementSentence(result.poolMovement, wasDone);
-          const unchanged = "Tags und Status ändern sich dadurch nicht.";
+          const unchanged = text.doneUnchanged;
           toasts.show({
             tone: wasDone ? "info" : "success",
-            title: wasDone ? `${quotedName(todo.title)} ist wieder offen.` : `${quotedName(todo.title)} ist erledigt.`,
+            title: wasDone ? text.reopenedTitle(quotedName(todo.title)) : text.doneTitle(quotedName(todo.title)),
             body: withMovement(
               wasDone || movement !== null
                 ? unchanged
                 : showDone
-                  ? `Erledigte Karten sind eingeblendet, sie bleibt also sichtbar. ${unchanged}`
-                  : `Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. ${unchanged}`,
+                  ? text.doneStaysVisible(unchanged)
+                  : text.doneDisappears(unchanged),
               movement,
             ),
             /*
@@ -231,7 +233,7 @@ export function BoardScreen() {
           });
         })
         .catch((cause: unknown) =>
-          toasts.failure("Das Kennzeichen ließ sich nicht ändern", errorMessage(cause)),
+          toasts.failure(boardTexts().doneFailed, errorMessage(cause), isServiceError(cause)),
         );
     },
     [bump, showDone, timer, toasts],
@@ -274,7 +276,7 @@ export function BoardScreen() {
             ...(!restoring && previous !== placement
               ? {
                   action: {
-                    label: "Rückgängig",
+                    label: boardTexts().undo,
                     onSelect: () => {
                       setPlacement({ ...pool, placement }, previous, true);
                     },
@@ -284,14 +286,16 @@ export function BoardScreen() {
           });
         })
         .catch((cause: unknown) =>
-          toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
+          toasts.failure(boardTexts().placementFailed, errorMessage(cause), isServiceError(cause)),
         );
     },
     [bump, structure, toasts],
   );
 
   const columnMenu = useCallback(
-    (column: Pool): readonly MenuEntry[] => [
+    (column: Pool): readonly MenuEntry[] => {
+      const text = boardTexts();
+      return [
       /*
        * Der Eintrag steht auch dann da, wenn er nicht geht — mit dem Grund
        * daneben. Eine Spalte, die als einzige kein Pluszeichen trägt, wirkt
@@ -301,16 +305,15 @@ export function BoardScreen() {
       seedTagsOf(column).length === 0
         ? {
             id: "add",
-            label: "Todo in dieser Spalte anlegen",
+            label: text.addInColumn,
             icon: "plus",
             disabled: true,
-            disabledReason:
-              "Diese Regel nennt nur Ordner. Welche Tags darin liegen, löst der Dienst auf — die Ansicht rechnet das nicht nach.",
+            disabledReason: text.addOnlyFolders,
             onSelect: () => undefined,
           }
         : {
             id: "add",
-            label: "Todo mit den Tags dieser Regel anlegen",
+            label: text.addWithTags,
             icon: "plus",
             onSelect: () => setCreateIn(column),
           },
@@ -326,38 +329,41 @@ export function BoardScreen() {
        */
       {
         id: "rename",
-        label: "Umbenennen",
+        label: text.rename,
         icon: "pencil",
         onSelect: () => setRenaming(column),
       },
       {
         id: "edit",
-        label: "Regel bearbeiten",
+        label: text.editRule,
         icon: "filter",
         onSelect: () => setRuleForm({ pool: column }),
       },
       {
         id: "list",
-        label: "Alle Todos dieser Regel in der Liste",
+        label: text.allTodosInList,
         icon: "arrow-up-right",
         onSelect: () => navigate("todos", undefined, { pool: column.id }),
       },
       { kind: "separator", id: "sep" },
       {
         id: "remove",
-        label: "Vom Board nehmen",
+        label: text.removeFromBoard,
         icon: "x",
         tone: "danger",
         onSelect: () => setPlacement(column, "pool"),
       },
-    ],
+      ];
+    },
     [setPlacement],
   );
 
   const createInTags = useMemo(
-    () => (createIn === null ? [] : seedTagIds(createIn.rule)),
+    () => (createIn === null ? [] : seedTagIds(createIn.requiredTags)),
     [createIn],
   );
+
+  const text = boardTexts();
 
   return (
     <section className="screen">
@@ -376,27 +382,27 @@ export function BoardScreen() {
         `--text-secondary` (`components.css`).
       */}
       <ScreenHeader
-        title="Kanban"
-        lead="Aufgaben im Blick – nach Ihren Spalten und Prioritäten."
+        title={text.screenTitle}
+        lead={text.lead}
         actions={<Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
-          Spalten verwalten
+          {text.manageColumns}
         </Button>}
       />
       <div className="screen__bar">
-        <section className="board__filters" aria-label="Kanban filtern und sortieren">
-            <Select label="Priorität" value={priority} onChange={value => { setPriority(value); setPerColumn(PAGE_SIZE); }} options={[
-              { value: "", label: "Alle Prioritäten" }, { value: "none", label: "Ohne Priorität" },
+        <section className="board__filters" aria-label={text.filtersLabel}>
+            <Select label={text.priority} value={priority} onChange={value => { setPriority(value); setPerColumn(PAGE_SIZE); }} options={[
+              { value: "", label: text.allPriorities }, { value: "none", label: text.noPriority },
               ...(priorities.state.status === "ready" ? priorities.state.value.map(item => ({ value: item.id, label: `${item.name} · ${item.weight}` })) : []),
             ]} />
-            <Select label="Sortierung" value={prioritySort} onChange={setPrioritySort} options={[{ value: "priority", label: "Priorität: wichtigste zuerst" }, { value: "updated", label: "Zuletzt geändert" }]} />
+            <Select label={text.sorting} value={prioritySort} onChange={setPrioritySort} options={[{ value: "priority", label: text.sortPriority }, { value: "updated", label: text.sortUpdated }]} />
             <FilterToggle
-              label="Erledigte einblenden"
+              label={text.showDone}
               pressed={showDone}
               onChange={setShowDone}
             />
-          <details className="board__help"><summary>Wie funktionieren die Spalten?</summary>
-            <p>{RULE_WHAT_MOVES_A_CARD}</p>
-            <p>Erledigte Aufgaben sind ausgeblendet. Spalten, die ausdrücklich danach fragen, zeigen sie trotzdem.</p>
+          <details className="board__help"><summary>{text.howColumnsWork}</summary>
+            <p>{labels().ruleWhatMovesACard}</p>
+            <p>{text.doneHidden}</p>
           </details>
         </section>
       </div>
@@ -418,10 +424,10 @@ export function BoardScreen() {
       */}
       <AsyncBoundary
         state={data.state}
-        label="Board wird geladen"
+        label={text.loading}
         rows={4}
         onRetry={data.reload}
-        fallbackFrame={(content) => <ScreenBody label="Kanban">{content}</ScreenBody>}
+        fallbackFrame={(content) => <ScreenBody label={text.screenTitle}>{content}</ScreenBody>}
       >
         {(value, refreshing) => {
           const columnName = new Map(value.board.columns.map((view) => [view.column.id, view.column.name]));
@@ -432,7 +438,7 @@ export function BoardScreen() {
 
           if (value.board.columns.length === 0) {
             return (
-              <ScreenBody label="Kanban">
+              <ScreenBody label={text.screenTitle}>
                 <BoardEmptyState
                   pools={pools}
                   poolsKnown={structure.state.status === "ready"}
@@ -450,19 +456,19 @@ export function BoardScreen() {
               <div className="screen__bar">
                 <div className="board__bar">
                   <p className="board__stamp">
-                    Stand {formatTime(value.board.generatedAt)} ·{" "}
-                    {plural(value.board.columns.length, "Spalte", "Spalten")}
+                    {text.stamp} {formatTime(value.board.generatedAt)} ·{" "}
+                    {plural(value.board.columns.length, text.column, text.columns)}
                     {value.board.appearances.length === 0
                       ? ""
-                      : ` · ${plural(value.board.appearances.length, "Karte steht", "Karten stehen")} in mehreren Spalten`}
+                      : ` · ${plural(value.board.appearances.length, text.cardStands, text.cardsStand)}${text.inSeveralColumns}`}
                   </p>
                   {partial ? <Button size="sm" variant="secondary"
                     onClick={() => setPerColumn(current => current + PAGE_SIZE)}>
-                    Mehr Karten laden
+                    {text.moreCards}
                   </Button> : null}
                   <RefreshHint active={refreshing} />
                   <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
-                    Neu berechnen
+                    {text.recalculate}
                   </Button>
                 </div>
               </div>
@@ -481,10 +487,12 @@ export function BoardScreen() {
                 kein neuer Oberflaechentext (A-25.7).
               */}
               <ScreenFrame>
-                <div className={`board${value.board.columns.length === 1 ? " board--single" : ""}`} {...runAreaSurface("Kanban", true)}>
+                <div className={`board${value.board.columns.length === 1 ? " board--single" : ""}`} {...runAreaSurface(text.screenTitle, true)}>
                   {value.board.columns.map((view) => (
                     <BoardColumn
                     priorities={priorities.state.status === "ready" ? priorities.state.value : []}
+                    priorityFiltered={priority !== ""}
+                    onClearPriorityFilter={() => setPriority("")}
                       key={view.column.id}
                       view={view}
                       columnName={columnName}
@@ -505,7 +513,7 @@ export function BoardScreen() {
                         setHighlighted(next);
                         setAnnouncement(
                           next === null
-                            ? "Hervorhebung aufgehoben."
+                            ? text.highlightCleared
                             : /*
                                  Jeder Name einzeln behandelt (O-AT): `join` auf
                                  einer Reihe fremden Textes ergibt gewöhnlichen
@@ -514,7 +522,7 @@ export function BoardScreen() {
                                  Richtungszeichen in einem Regelnamen drehte
                                  ihn um.
                                */
-                              `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].map(quotedName).join(", ")}.`,
+                              text.standsInColumns(quotedName(todo.title), columns.length + 1, [view.column.name, ...columns].map(quotedName).join(", ")),
                         );
                       }}
                       isTimerRunning={(todo) => timer.isRunningFor(todo.id)}

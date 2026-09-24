@@ -99,6 +99,8 @@ export interface DataImportSummary {
   readonly sections: number;
   readonly tags: number;
   readonly timeEntries: number;
+  /** Foreign bookings refused for lasting more than 24 hours (A-28.6). Always 0 for an own archive. */
+  readonly rejectedTimeEntries: number;
   readonly images: number;
   readonly warnings: readonly ServiceText[];
 }

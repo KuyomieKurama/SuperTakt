@@ -53,6 +53,11 @@ Für jede neue oder stark veränderte UI-Fläche:
 Wer einen Oberflächentext streicht oder umbenennt, sucht vorher den heutigen Wortlaut in
 `tests/**` und `apps/*/test/**` (E-087, siehe `CLAUDE.md`).
 
+## Dienst stirbt im Lauf (O-LJ, E-121)
+Ein Lauf, dessen lokaler Dienst oder Vite-Server mitten im Lauf endet, ist **nicht gelaufen** —
+nicht rot, nicht grün. Prüfe die Lebendigkeit der Dienste auch nach dem Start
+(`tests/e2e/support/services.ts`) und melde den Fall ausdrücklich.
+
 ## Definition of Done
 - Jeder Ablauf als Testfall vorhanden.
 - Visuelle QA für betroffene Screens ausgeführt oder explizit als nicht gelaufen markiert.

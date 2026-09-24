@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useId, useRef, type KeyboardEvent } from "react";
+import { Dialog } from "@ark-ui/react/dialog";
 
 import type { ForeignText, UncappedText } from "../../api/types";
 import { cx } from "../../lib/cx";
-import { focusableWithin, keepTabInside } from "../../lib/focus";
 import { foreignText } from "../../lib/foreign";
 import { effectiveFileNameOf, extensionOf, fileNameOf, runsWhenOpened } from "./attachmentLabel";
 import { Foreign } from "../../shared/ui/Foreign";
 import { ForeignName } from "../../shared/ui/ForeignName";
 import { Icon } from "../../shared/ui/Icon";
 import { Button } from "../../shared/ui/Primitives";
-import { Scrim } from "../../shared/ui/DialogSurface";
+import { DialogSurface } from "../../shared/ui/DialogSurface";
+import { labels } from "../../lib/labels";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — die Rückfrage vor dem Öffnen einer **Datei** (E-072 Punkt 3, R-21,
@@ -239,81 +240,13 @@ export function AttachmentOpenDialog({
   onConfirm,
   onCancel,
 }: AttachmentOpenDialogProps) {
-  const titleId = useId();
-  const descriptionId = `${titleId}-description`;
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    openerRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    /*
-      Der Fokus geht auf den **Dialog** und nicht auf einen seiner Knöpfe
-      (Eigenschaft 4). Ein Fokus auf „Ausführen" machte ein bloßes Enter zur
-      Antwort — und ein Doppelklick auf die Zeile darunter erzeugt das zweite
-      Ereignis, bevor der Benutzer die Frage gelesen hat.
-    */
-    dialogRef.current?.focus();
-    return () => {
-      openerRef.current?.focus();
-    };
-  }, [open]);
-
-  /*
-    Während der Öffnen-Befehl läuft, sperren sich beide Knöpfe — und ein
-    Element, das den Fokus trägt und dabei gesperrt wird, gibt ihn an den
-    Dokumentkörper ab. Der Benutzer stünde dann außerhalb des modalen Dialogs,
-    ohne ihn verlassen zu haben (SC 2.4.3). Derselbe Griff wie im
-    Versionsdialog.
-  */
-  useEffect(() => {
-    if (!open || !busy) return;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && dialogRef.current?.contains(active) === true) {
-      dialogRef.current.focus();
-    }
-  }, [open, busy]);
-
-  const onKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (!busy) onCancel();
-        return;
-      }
-      /*
-        Der Dialog trägt `tabIndex={-1}` und steht damit nicht in der
-        Tabulatorreihenfolge; `keepTabInside` kennt ihn weder als erstes noch
-        als letztes Element. Liegt der Fokus auf ihm — und das tut er beim
-        Öffnen —, liefe ein Shift+Tab beim allerersten Tastendruck hinaus.
-      */
-      if (event.key === "Tab" && document.activeElement === dialogRef.current) {
-        /*
-          Angehalten wird auch dann, wenn gerade **kein** Knopf bedienbar ist:
-          Während der Öffnen-Befehl läuft, sind beide gesperrt, und ein
-          durchgelassener Tabulator führte dann aus dem modalen Dialog heraus.
-        */
-        event.preventDefault();
-        const buttons = focusableWithin(dialogRef.current);
-        const target = event.shiftKey ? buttons[buttons.length - 1] : buttons[0];
-        target?.focus();
-        return;
-      }
-      keepTabInside(dialogRef.current, event);
-    },
-    [busy, onCancel],
-  );
-
-  if (!open) return null;
-
   /*
     Steht die Absage schon fest, wird nichts ausgeführt und nichts geöffnet —
     dann ist auch die Frage nach der Endung keine, die noch etwas entscheidet.
   */
   const blocked = foreseenRefusal !== null;
   const executes = !blocked && runsWhenOpened(path);
+  const text = todoTexts();
   /*
     Die Endung steht **zweimal** auf dem Bildschirm: im Satz über die Ausführung
     und abgesetzt im Kasten (Auflage A-A-86). Beide Male derselbe Wert aus
@@ -337,6 +270,9 @@ export function AttachmentOpenDialog({
 
   return (
     /*
+      Focus opens on the dialog box itself, never on a button (property 4), and
+      DialogSurface pulls it back there when both buttons lock while busy.
+
       Die Abdunklung haengt am Dokumentkoerper und nicht dort, wo dieser Dialog
       im Baum steht (A-A-108, T-334). Er steht im Rumpf der Karte „Anhaenge",
       und in den Gestaltungen `glass` und `liquid-glass` traegt jede `.card`
@@ -345,241 +281,238 @@ export function AttachmentOpenDialog({
       rollt mit dem Laufbereich weg. Begruendung und Messung stehen bei
       {@link Scrim}.
     */
-    <Scrim onKeyDown={onKeyDown}>
-      <div
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        tabIndex={-1}
-        className={cx("dialog", "dialog--open-file", executes && "dialog--danger")}
-      >
-        <div className="dialog__head">
-          <span className={cx("dialog__icon", (executes || blocked) && "dialog__icon--danger")}>
-            <Icon name={executes || blocked ? "alert-triangle" : "info"} size={18} />
-          </span>
-          <h2 className="dialog__title" id={titleId}>
-            {blocked
-              ? "Diese Datei wird nicht geöffnet"
-              : executes
-                ? "Diese Datei wird ausgeführt"
-                : "Diese Datei wird geöffnet"}
-          </h2>
-        </div>
-
-        <div className="dialog__body" id={descriptionId}>
-          {/*
-            Eigenschaft 3: die **Wirkung** im Satz. „Dasselbe wie ein
-            Doppelklick" ist der Vergleich, den jeder Benutzer kennt — und er
-            sagt zugleich, dass Takt danach nichts mehr in der Hand hat.
-
-            Steht die Absage schon fest, wäre dieser Satz falsch: Takt übergibt
-            dann gar nichts. An seiner Stelle steht der Grund (V-07).
-          */}
-          {blocked ? (
-            <p className="dialog__consequence">
-              <Icon name="alert-triangle" size={14} />
-              <span>{foreseenRefusal}</span>
-            </p>
-          ) : (
-            <p>
-              SuperTakt übergibt diese Datei an die Standardanwendung des Systems — dasselbe wie ein
-              Doppelklick im Dateimanager. Was danach geschieht, entscheidet die Anwendung, die
-              Ihr System dafür eingestellt hat.
-            </p>
+    <DialogSurface
+      open={open}
+      role="alertdialog"
+      className={cx("dialog", "dialog--open-file", executes && "dialog--danger")}
+      onDismiss={onCancel}
+      closeOnEscape={!busy}
+      initialFocus={(content) => content}
+    >
+      <div className="dialog__head">
+        {/*
+          The blocked state is a statement, not an alarm (O-KT, welle-18.md 1.3): after this the
+          red of "executes" is the only red in the dialog.
+        */}
+        <span
+          className={cx(
+            "dialog__icon",
+            executes && "dialog__icon--danger",
+            blocked && "dialog__icon--statement",
           )}
+        >
+          <Icon name={blocked ? "slash-circle" : executes ? "alert-triangle" : "info"} size={18} />
+        </span>
+        <Dialog.Title className="dialog__title">
+          {blocked ? text.openBlockedTitle : executes ? text.openExecutesTitle : text.openTitle}
+        </Dialog.Title>
+      </div>
 
-          {executes ? (
-            <p className="dialog__consequence">
-              <Icon name="alert-triangle" size={14} />
-              <span>
-                <strong>Diese Datei wird dabei ausgeführt.</strong> Eine Datei mit der Endung „
-                {extension}" ist ein Programm oder eine Befehlsfolge und läuft mit Ihren Rechten.
-              </span>
-            </p>
-          ) : null}
+      <Dialog.Description className="dialog__body">
+        {/*
+          Eigenschaft 3: die **Wirkung** im Satz. „Dasselbe wie ein
+          Doppelklick" ist der Vergleich, den jeder Benutzer kennt — und er
+          sagt zugleich, dass Takt danach nichts mehr in der Hand hat.
 
-          {/*
-            Auflage A-A-85: die **Herkunft**. Sie steht vor dem Kasten mit Namen
-            und Pfad, weil sie die Frage beantwortet, die ein Mensch zuerst
-            stellt — „wo kommt das her?" —, und weil der Kasten darunter die
-            Antwort auf „was genau ist das?" ist.
+          Steht die Absage schon fest, wäre dieser Satz falsch: Takt übergibt
+          dann gar nichts. An seiner Stelle steht der Grund (V-07).
+        */}
+        {blocked ? (
+          <p className="dialog__consequence dialog__consequence--statement">
+            <Icon name="info" size={14} />
+            <span>{foreseenRefusal}</span>
+          </p>
+        ) : (
+          <p>
+            {text.openHandover}
+          </p>
+        )}
 
-            Der Absender ist fremder Text und geht durch `<Foreign>`; ohne die
-            Behandlung ordnete ein Richtungszeichen darin den deutschen Satz um,
-            in dem er steht.
-          */}
-          {fromEmail ? (
-            <p className="dialog__consequence dialog__consequence--origin">
-              <Icon name="inbox" size={14} />
-              <span>
-                {originSender === null ? (
-                  <>Diese Datei stammt aus einer E-Mail.</>
-                ) : (
-                  <>
-                    Diese Datei stammt aus einer E-Mail von{" "}
-                    <Foreign value={originSender} />.
-                  </>
-                )}{" "}
-                Ihren Namen und ihren Inhalt hat der Absender bestimmt, nicht Sie.
-              </span>
-            </p>
-          ) : null}
+        {executes ? (
+          <p className="dialog__consequence">
+            <Icon name="alert-triangle" size={14} />
+            <span>
+              <strong>{text.executesStrong}</strong>
+              {text.executesBody(extension)}
+            </span>
+          </p>
+        ) : null}
 
-          {/*
-            A-19.22b und Auflage A-A-97: der **Nachbau**. Er hängt an der Datei
-            und nicht am Augenblick des Anlegens — deshalb steht er hier und
-            nicht nur im Aufgabenbereich. Der Satz nennt die Folge und nicht die
-            Technik: Was fehlt, sind die ursprünglichen Kopfzeilen, und was
-            daraus folgt, ist die Untauglichkeit als Beleg.
-          */}
-          {rebuilt ? (
-            <p className="dialog__consequence dialog__consequence--rebuilt">
-              <Icon name="alert-triangle" size={14} />
-              <span>
-                <strong>Diese Datei ist ein Nachbau:</strong> Outlook hat die ursprüngliche
-                Nachricht nicht als Datei hergegeben. Absender, Empfänger, Betreff, Versanddatum
-                und Text stehen in der Datei. Die technischen Kopfzeilen der ursprünglichen
-                Nachricht stehen nicht darin — und mit ihnen nicht der Nachweis, welchen Weg sie
-                genommen hat.
-              </span>
-            </p>
-          ) : null}
+        {/*
+          Auflage A-A-85: die **Herkunft**. Sie steht vor dem Kasten mit Namen
+          und Pfad, weil sie die Frage beantwortet, die ein Mensch zuerst
+          stellt — „wo kommt das her?" —, und weil der Kasten darunter die
+          Antwort auf „was genau ist das?" ist.
 
-          <div className="openfile">
-            <p className="openfile__label">Dateiname</p>
-            {/*
-              Eigenschaft 1: Der Dateiname steht abgesetzt über dem Pfad. `bdi`
-              isoliert ihn vom deutschen Satz darum; `foreignText` hat die
-              unsichtbaren Zeichen bereits sichtbar gemacht.
-            */}
-            <p className={cx("openfile__name", "mono", nameDiverges && "openfile__name--diverging")}>
-              <ForeignName value={rawName} />
-            </p>
-            {/*
-              X-05: das dritte Beschriftungspaar. Es steht **vor** dem vollen
-              Pfad und nie an seiner Stelle — A-A-6 Punkt 1 und R-21 bleiben
-              unangetastet, der Pfad behält den rohen Wert.
-            */}
-            {nameDiverges ? (
-              <>
-                <p className="openfile__label">Name beim Öffnen</p>
-                <p className="openfile__name openfile__name--resolved mono">
-                  <ForeignName value={effectiveName} />
-                </p>
-                <p className="openfile__note">
-                  Punkte und Leerzeichen am Ende lässt Windows beim Öffnen weg.
-                </p>
-              </>
-            ) : null}
-            {/*
-              A-19.23a: Der Name aus der E-Mail steht **unter** dem Namen auf
-              der Platte und nicht an seiner Stelle. Die Reihenfolge ist die
-              Aussage: Oben steht, was geöffnet wird; hier steht, was der
-              Benutzer gelesen hat. Wäre es umgekehrt, wäre die Zeile mit der
-              größten Schrift die, die am wenigsten über die Wirkung sagt.
-            */}
-            {displayName === null ? null : (
-              <>
-                <p className="openfile__label">Name aus der E-Mail</p>
-                <p className="openfile__name openfile__name--foreign mono">
-                  <ForeignName value={displayName} />
-                </p>
-                <p className="openfile__note">
-                  Diesen Namen hat der Absender gewählt. SuperTakt zeigt ihn, öffnet aber die Datei
-                  oben — ein fremder Name bestimmt hier nichts.
-                </p>
-              </>
-            )}
-            <p className="openfile__label">Vollständiger Pfad</p>
-            <p className="openfile__path mono">
-              <bdi>{visiblePath}</bdi>
-            </p>
-            {/*
-              Auflage A-A-86: die aufgelöste Endung **abgesetzt**, mit ihrem
-              Urteil daneben. Zwischen lesbarem Namen und Endung können beliebig
-              viele Zeichen stehen, und eine Pfadzeile bricht um — dann steht
-              die Endung irgendwo in der Mitte des Kastens.
-
-              Gerechnet wird sie nicht hier: `extensionOf` ist dieselbe Rechnung,
-              die über „öffnen" und „ausführen" entscheidet. Eine zweite wäre
-              eine zweite Wahrheit über dieselbe Datei.
-            */}
-            <p className="openfile__label">Endung</p>
-            <p
-              className={cx(
-                "openfile__extension",
-                "mono",
-                executes && "openfile__extension--executes",
-              )}
-            >
-              {rawExtension === "" ? (
-                <span className="openfile__extension-none">
-                  keine — das System entscheidet selbst, womit es die Datei öffnet
-                </span>
+          Der Absender ist fremder Text und geht durch `<Foreign>`; ohne die
+          Behandlung ordnete ein Richtungszeichen darin den deutschen Satz um,
+          in dem er steht.
+        */}
+        {fromEmail ? (
+          <p className="dialog__consequence dialog__consequence--origin">
+            <Icon name="inbox" size={14} />
+            <span>
+              {originSender === null ? (
+                <>{text.fromEmailFile}</>
               ) : (
                 <>
-                  <ForeignName className="openfile__extension-value" value={rawExtension} />
-                  <span className="openfile__extension-verdict">
-                    {executes ? "— wird ausgeführt" : "— wird geöffnet"}
-                  </span>
+                  {text.fromEmailFileBy}
+                  <Foreign value={originSender} />.
                 </>
               )}
-            </p>
-          </div>
+              {text.senderDecided}
+            </span>
+          </p>
+        ) : null}
 
-          {/*
-            Die Live-Region steht **immer**, auch leer — sonst meldet eine
-            Vorlesehilfe die Absage nicht, weil sie die Region in dem Augenblick
-            noch nicht kennt (dieselbe Regel wie in `ConfirmDialog`).
-          */}
-          <div role="status">
-            {refusal === null ? null : (
-              <p className="dialog__consequence">
-                <Icon name="alert-triangle" size={14} />
-                <span>{refusal}</span>
-              </p>
-            )}
-          </div>
-        </div>
+        {/*
+          A-19.22b und Auflage A-A-97: der **Nachbau**. Er hängt an der Datei
+          und nicht am Augenblick des Anlegens — deshalb steht er hier und
+          nicht nur im Aufgabenbereich. Der Satz nennt die Folge und nicht die
+          Technik: Was fehlt, sind die ursprünglichen Kopfzeilen, und was
+          daraus folgt, ist die Untauglichkeit als Beleg.
+        */}
+        {rebuilt ? (
+          <p className="dialog__consequence dialog__consequence--rebuilt">
+            <Icon name="alert-triangle" size={14} />
+            <span>
+              <strong>{text.rebuiltStrong}</strong>
+              {text.rebuiltBody}
+            </span>
+          </p>
+        ) : null}
 
-        <div className="dialog__footer">
+        <div className="openfile">
+          <p className="openfile__label">{text.fileName}</p>
           {/*
-            V-07: Steht die Absage fest, gibt es **keinen Öffnen-Knopf**. Ein
-            gesperrter wäre schlechter als keiner — er hielte die Handlung als
-            Möglichkeit auf dem Bildschirm, die es nicht gibt. Es bleibt der eine
-            Knopf, der die Fläche schließt; „Abbrechen" wäre hier falsch, weil
-            nichts abzubrechen ist.
+            Eigenschaft 1: Der Dateiname steht abgesetzt über dem Pfad. `bdi`
+            isoliert ihn vom deutschen Satz darum; `foreignText` hat die
+            unsichtbaren Zeichen bereits sichtbar gemacht.
           */}
-          {blocked ? (
-            <Button variant="secondary" onClick={onCancel}>
-              Schließen
-            </Button>
-          ) : (
+          <p className={cx("openfile__name", "mono", nameDiverges && "openfile__name--diverging")}>
+            <ForeignName value={rawName} />
+          </p>
+          {/*
+            X-05: das dritte Beschriftungspaar. Es steht **vor** dem vollen
+            Pfad und nie an seiner Stelle — A-A-6 Punkt 1 und R-21 bleiben
+            unangetastet, der Pfad behält den rohen Wert.
+          */}
+          {nameDiverges ? (
             <>
-              {/*
-                Eigenschaft 4: Beide Knöpfe tragen dieselbe Gestalt — kein
-                `variant="primary"`, keine Hervorhebung. Bei einer ausführbaren
-                Endung ist der rechte Knopf `danger`; das ist keine Hervorhebung,
-                sondern eine Warnung, und sie zieht keinen Klick an.
-              */}
-              <Button variant="secondary" onClick={onCancel} disabled={busy}>
-                Abbrechen
-              </Button>
-              <Button
-                variant={executes ? "danger" : "secondary"}
-                onClick={onConfirm}
-                loading={busy}
-                iconEnd="arrow-up-right"
-              >
-                {/* Das Wort ist die Hälfte der Auskunft. Nie „OK", nie „Ja". */}
-                {executes ? "Ausführen" : "Öffnen"}
-              </Button>
+              <p className="openfile__label">{text.nameWhenOpening}</p>
+              <p className="openfile__name openfile__name--resolved mono">
+                <ForeignName value={effectiveName} />
+              </p>
+              <p className="openfile__note">
+                {text.trailingDotsNote}
+              </p>
+            </>
+          ) : null}
+          {/*
+            A-19.23a: Der Name aus der E-Mail steht **unter** dem Namen auf
+            der Platte und nicht an seiner Stelle. Die Reihenfolge ist die
+            Aussage: Oben steht, was geöffnet wird; hier steht, was der
+            Benutzer gelesen hat. Wäre es umgekehrt, wäre die Zeile mit der
+            größten Schrift die, die am wenigsten über die Wirkung sagt.
+          */}
+          {displayName === null ? null : (
+            <>
+              <p className="openfile__label">{text.nameFromEmail}</p>
+              <p className="openfile__name openfile__name--foreign mono">
+                <ForeignName value={displayName} />
+              </p>
+              <p className="openfile__note">
+                {text.nameFromEmailNote}
+              </p>
             </>
           )}
+          <p className="openfile__label">{text.fullPath}</p>
+          <p className="openfile__path mono">
+            <bdi>{visiblePath}</bdi>
+          </p>
+          {/*
+            Auflage A-A-86: die aufgelöste Endung **abgesetzt**, mit ihrem
+            Urteil daneben. Zwischen lesbarem Namen und Endung können beliebig
+            viele Zeichen stehen, und eine Pfadzeile bricht um — dann steht
+            die Endung irgendwo in der Mitte des Kastens.
+
+            Gerechnet wird sie nicht hier: `extensionOf` ist dieselbe Rechnung,
+            die über „öffnen" und „ausführen" entscheidet. Eine zweite wäre
+            eine zweite Wahrheit über dieselbe Datei.
+          */}
+          <p className="openfile__label">{text.extension}</p>
+          <p
+            className={cx(
+              "openfile__extension",
+              "mono",
+              executes && "openfile__extension--executes",
+            )}
+          >
+            {rawExtension === "" ? (
+              <span className="openfile__extension-none">
+                {text.noExtension}
+              </span>
+            ) : (
+              <>
+                <ForeignName className="openfile__extension-value" value={rawExtension} />
+                <span className="openfile__extension-verdict">
+                  {executes ? text.willExecute : text.willOpen}
+                </span>
+              </>
+            )}
+          </p>
         </div>
+
+        {/*
+          Die Live-Region steht **immer**, auch leer — sonst meldet eine
+          Vorlesehilfe die Absage nicht, weil sie die Region in dem Augenblick
+          noch nicht kennt (dieselbe Regel wie in `ConfirmDialog`).
+        */}
+        <div role="status">
+          {refusal === null ? null : (
+            <p className="dialog__consequence">
+              <Icon name="alert-triangle" size={14} />
+              <span>{refusal}</span>
+            </p>
+          )}
+        </div>
+      </Dialog.Description>
+
+      <div className="dialog__footer">
+        {/*
+          V-07: Steht die Absage fest, gibt es **keinen Öffnen-Knopf**. Ein
+          gesperrter wäre schlechter als keiner — er hielte die Handlung als
+          Möglichkeit auf dem Bildschirm, die es nicht gibt. Es bleibt der eine
+          Knopf, der die Fläche schließt; „Abbrechen" wäre hier falsch, weil
+          nichts abzubrechen ist.
+        */}
+        {blocked ? (
+          <Button variant="secondary" onClick={onCancel}>
+            {labels().close}
+          </Button>
+        ) : (
+          <>
+            {/*
+              Eigenschaft 4: Beide Knöpfe tragen dieselbe Gestalt — kein
+              `variant="primary"`, keine Hervorhebung. Bei einer ausführbaren
+              Endung ist der rechte Knopf `danger`; das ist keine Hervorhebung,
+              sondern eine Warnung, und sie zieht keinen Klick an.
+            */}
+            <Button variant="secondary" onClick={onCancel} disabled={busy}>
+              {labels().cancel}
+            </Button>
+            <Button
+              variant={executes ? "danger" : "secondary"}
+              onClick={onConfirm}
+              loading={busy}
+              iconEnd="arrow-up-right"
+            >
+              {/* Das Wort ist die Hälfte der Auskunft. Nie „OK", nie „Ja". */}
+              {executes ? text.execute : text.open}
+            </Button>
+          </>
+        )}
       </div>
-    </Scrim>
+    </DialogSurface>
   );
 }

@@ -10,7 +10,7 @@ import { AttachmentOpenDialog } from "../features/todos/AttachmentOpenDialog";
 import { DeadlineFlag } from "../shared/ui/DeadlineFlag";
 import { Icon } from "../shared/ui/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
-import { attachmentLabel, ATTACHMENT_KIND_LABEL } from "../features/todos/attachmentLabel";
+import { attachmentKindLabel, attachmentLabel } from "../features/todos/attachmentLabel";
 import { Foreign } from "../shared/ui/Foreign";
 import { ForeignName } from "../shared/ui/ForeignName";
 import { SHOWCASE_TODAY } from "./data";
@@ -453,4 +453,8 @@ export function DeadlineSection() {
 }
 
 /** Nur damit die Wörter der drei Arten auch hier aus einer Quelle kommen. */
-export const SHOWCASE_KIND_WORDS = ATTACHMENT_KIND_LABEL;
+export const SHOWCASE_KIND_WORDS = {
+  link: attachmentKindLabel("link"),
+  image: attachmentKindLabel("image"),
+  file: attachmentKindLabel("file"),
+};

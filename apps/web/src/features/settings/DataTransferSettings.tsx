@@ -14,6 +14,8 @@ import {
   importTodoistFiles,
   type DataImportSummary,
 } from "./api";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { settingsTexts } from "./texts";
 /* Daten — Sicherung, Wiederherstellung und Fremdimport                 */
 
 function saveJsonFile(value: unknown): void {
@@ -30,10 +32,11 @@ function saveJsonFile(value: unknown): void {
 function ImportResult({ result }: { readonly result: DataImportSummary | null }) {
   if (result === null) return null;
   return (
-    <InlineMessage tone={result.warnings.length === 0 ? "success" : "warning"} title="Import abgeschlossen">
-      {result.todos} Aufgaben, {result.projects} Projekte, {result.tags} Tags und {result.timeEntries} Zeitbuchungen wurden übernommen.
+    <InlineMessage tone={result.warnings.length === 0 ? "success" : "warning"} title={settingsTexts().importDone}>
+      <p>{settingsTexts().importCounts(result.todos, result.projects, result.tags, result.timeEntries)}</p>
+      {result.rejectedTimeEntries > 0 ? <p>{settingsTexts().importRejectedOver24h(result.rejectedTimeEntries)}</p> : null}
       {result.warnings.length === 0 ? null : (
-        <ul>{result.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+        <ul>{result.warnings.map((warning, index) => <li key={index}><ServiceText text={warning} /></li>)}</ul>
       )}
     </InlineMessage>
   );
@@ -44,6 +47,7 @@ export function DataTransferSettings() {
   const { bump } = useRefresh();
   const toasts = useToasts();
   const mutation = useMutation();
+  const text = settingsTexts();
   const archiveInput = useRef<HTMLInputElement>(null);
   const todoistInput = useRef<HTMLInputElement>(null);
   const superProductivityInput = useRef<HTMLInputElement>(null);
@@ -64,14 +68,14 @@ export function DataTransferSettings() {
     setResult(summary);
     structure.reload();
     bump();
-    toasts.success("Daten importiert.");
+    toasts.success(settingsTexts().dataImported);
   };
 
   const exportArchive = (): void => {
     setFileError(null);
     void mutation.run(async () => {
       saveJsonFile(await exportDataArchive());
-      toasts.success("Datensicherung erstellt.");
+      toasts.success(settingsTexts().backupCreated);
     });
   };
 
@@ -81,7 +85,7 @@ export function DataTransferSettings() {
     const file = files?.[0];
     if (file === undefined) return;
     setFileError(null);
-    void readJson(file).then(setPendingArchive).catch(() => setFileError("Die gewählte Datei enthält kein gültiges JSON."));
+    void readJson(file).then(setPendingArchive).catch(() => setFileError(settingsTexts().invalidJson));
   };
 
   const restoreArchive = (): void => {
@@ -111,54 +115,56 @@ export function DataTransferSettings() {
 
   return (
     <>
-      <Card title="SuperTakt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
-        <p className="field__hint">Enthält Aufgaben, Vermerke, Tags, Strukturen, Zeitbuchungen, Exporteinstellungen, Protokolle und Bildanhänge. Eine Wiederherstellung ersetzt den aktuellen Bestand.</p>
+      <Card title={text.backupTitle} description={text.backupLead}>
+        <p className="field__hint">{text.backupHint}</p>
         <div className="data-transfer__actions">
-          <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>Sicherung herunterladen</Button>
-          <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => archiveInput.current?.click()}>Sicherung wiederherstellen</Button>
+          <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>{text.downloadBackup}</Button>
+          <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => archiveInput.current?.click()}>{text.restoreBackup}</Button>
           <input ref={archiveInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseArchive(event.currentTarget.files); event.currentTarget.value = ""; }} />
         </div>
       </Card>
 
-      <Card title="Aus Todoist importieren" description="Ergänzt den vorhandenen Bestand.">
-        <p className="field__hint">Entpacken Sie das Todoist-Backup und wählen Sie eine oder mehrere CSV-Dateien. Projekte werden Pools, Bereiche und Prioritäten werden Tags; Unteraufgaben bleiben im Vermerk nachvollziehbar.</p>
-        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => todoistInput.current?.click()}>Todoist-CSV auswählen</Button>
+      <Card title={text.todoistTitle} description={text.addsToData}>
+        <p className="field__hint">{text.todoistHint}</p>
+        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => todoistInput.current?.click()}>{text.chooseTodoist}</Button>
         <input ref={todoistInput} className="data-transfer__input" type="file" accept="text/csv,.csv" multiple onChange={(event) => { chooseTodoist(event.currentTarget.files); event.currentTarget.value = ""; }} />
       </Card>
 
-      <Card title="Aus Super Productivity importieren" description="Ergänzt den vorhandenen Bestand.">
-        <p className="field__hint">Wählen Sie eine JSON-Datensicherung aus Super Productivity. Projekte, Bereiche, Tags, Fristen, Vermerke, Erledigt-Zustand und erfasste Zeiten werden übernommen.</p>
-        <p className="field__hint">Leistungsnachweise aus OutlookBridge werden dem passenden Buchungstag zugeordnet. Ursprüngliche Notizen bleiben als Vermerk erhalten.</p>
+      <Card title={text.superProductivityTitle} description={text.addsToData}>
+        <p className="field__hint">{text.superProductivityHint}</p>
+        <p className="field__hint">{text.outlookBridgeHint}</p>
         <TextField
-          label="Call-Nummer aus Titel erkennen (Regex)"
+          label={text.callPattern}
           value={callPattern}
           onChange={changeCallPattern}
           maxLength={512}
           disabled={mutation.busy}
-          hint="Die erste Klammergruppe liefert die Call-Nummer, ohne Gruppe der gesamte Treffer. Groß-/Kleinschreibung wird ignoriert. Leer lassen zum Ausschalten."
+          hint={text.callPatternHint}
         />
         <label className="choice__option">
           <input type="checkbox" checked={excludeTransferred} disabled={mutation.busy} onChange={event => setExcludeTransferred(event.target.checked)} />
-          <span>Bereits übertragene Zeiten vom erneuten Export ausnehmen</span>
+          <span>{text.excludeTransferred}</span>
         </label>
-        <p className="field__hint">OutlookBridge-Markierungen „Eingetragen“ werden mit Herkunftsvermerk als ausgebucht übernommen. Ausgeschaltet werden alle Zeiten wieder offen importiert.</p>
-        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => superProductivityInput.current?.click()}>Super-Productivity-JSON auswählen</Button>
+        <p className="field__hint">{text.excludeTransferredHint}</p>
+        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => superProductivityInput.current?.click()}>{text.chooseSuperProductivity}</Button>
         <input ref={superProductivityInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseSuperProductivity(event.currentTarget.files); event.currentTarget.value = ""; }} />
       </Card>
 
       {fileError === null && mutation.error === null ? null : (
-        <InlineMessage tone="danger" title="Die Datei konnte nicht verarbeitet werden">{fileError ?? mutation.error}</InlineMessage>
+        <InlineMessage tone="danger" title={text.fileFailed}>
+          {fileError ?? <ServiceText text={mutation.error ?? ""} fromService={mutation.errorFromService} />}
+        </InlineMessage>
       )}
       <ImportResult result={result} />
 
       <ConfirmDialog
         open={pendingArchive !== null}
         tone="danger"
-        title="SuperTakt-Datensicherung wiederherstellen?"
-        description="Der aktuelle Bestand wird vollständig durch den Inhalt der gewählten Sicherung ersetzt."
-        consequence="Aufgaben und Zeitbuchungen, die nur im aktuellen Bestand vorkommen, sind danach nicht mehr vorhanden."
-        acknowledgeLabel="Ich habe den aktuellen Bestand bei Bedarf gesichert."
-        confirmLabel="Bestand ersetzen"
+        title={text.restoreTitle}
+        description={text.restoreLead}
+        consequence={text.restoreConsequence}
+        acknowledgeLabel={text.restoreAcknowledge}
+        confirmLabel={text.replaceData}
         busy={mutation.busy}
         onConfirm={restoreArchive}
         onCancel={() => setPendingArchive(null)}

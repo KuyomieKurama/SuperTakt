@@ -3,8 +3,10 @@ import { DatePicker, parseDate } from '@ark-ui/react/date-picker';
 import { Portal } from '@ark-ui/react/portal';
 import { Icon } from './Icon';
 import { TimeField } from './TimeField';
+import { currentLocale } from "../../lib/language";
+import { labels } from "../../lib/labels";
 
-/** Calendar-day values stay YYYY-MM-DD; the visible field follows German locale. */
+/** Calendar-day values stay YYYY-MM-DD; the visible field follows the UI language (A-28.2). */
 export function DateField({ label, value, onChange, hint, wide = false, time }: {
   readonly label: string;
   readonly time?: { readonly value: string; readonly onChange: (value: string) => void };
@@ -14,19 +16,20 @@ export function DateField({ label, value, onChange, hint, wide = false, time }: 
   readonly onChange: (value: string) => void;
 }) {
   const hintId = useId();
-  return <DatePicker.Root className={`field date-field${wide ? " date-field--wide" : ""}`} locale="de-DE" startOfWeek={1}
+  const text = labels().dateField;
+  return <DatePicker.Root className={`field date-field${wide ? " date-field--wide" : ""}`} locale={currentLocale()} startOfWeek={1}
     value={value ? [parseDate(value)] : []}
     onValueChange={details => onChange(details.value[0]?.toString() ?? '')}
     positioning={{ placement: 'bottom-start', strategy: 'fixed', gutter: 6 }}
-    translations={{ content: `${label}: Datum wählen`, trigger: open => open ? 'Kalender schließen' : `${label}: Kalender öffnen`,
-      prevTrigger: () => 'Vorheriger Monat', nextTrigger: () => 'Nächster Monat', clearTrigger: 'Datum löschen' }}>
+    translations={{ content: text.pickDate(label), trigger: open => open ? text.closeCalendar : text.openCalendar(label),
+      prevTrigger: () => text.previousMonth, nextTrigger: () => text.nextMonth, clearTrigger: text.clearDate }}>
     <DatePicker.Label className="field__label">{label}</DatePicker.Label>
     <DatePicker.Control className={`date-field__control${time ? " date-field__control--with-time" : ""}`}>
       <DatePicker.Context>{api =>
         <DatePicker.Input aria-describedby={hint ? hintId : undefined}
-          className="field__input" placeholder="TT.MM.JJJJ" onClick={() => api.setOpen(true)} />
+          className="field__input" placeholder={text.placeholder} onClick={() => api.setOpen(true)} />
       }</DatePicker.Context>
-      {time ? <TimeField label={`${label}: Uhrzeit`} value={time.value}
+      {time ? <TimeField label={text.time(label)} value={time.value}
         onChange={time.onChange} disabled={!value} /> : null}
       <DatePicker.Trigger className="date-field__trigger"><Icon name="calendar" size={16} /></DatePicker.Trigger>
     </DatePicker.Control>
@@ -52,7 +55,7 @@ export function DateField({ label, value, onChange, hint, wide = false, time }: 
             </DatePicker.Table>
           </>}</DatePicker.Context>
         </DatePicker.View>
-        <DatePicker.ClearTrigger className="date-field__clear">Datum löschen</DatePicker.ClearTrigger>
+        <DatePicker.ClearTrigger className="date-field__clear">{text.clearDate}</DatePicker.ClearTrigger>
       </DatePicker.Content>
     </DatePicker.Positioner></Portal>
   </DatePicker.Root>;

@@ -1,5 +1,6 @@
 import { cx } from "../../lib/cx";
 import { handleRouteLinkClick, href } from "../../app/router";
+import { exportTexts } from "./texts";
 
 /** Die Bereiche des Exports haben eigene Adressen und Browserhistorie.
  * Export enthält Buchungen, Bearbeitung und Dateivorschau.
@@ -16,14 +17,15 @@ export function ExportTabs({
     eines Satzes, der als `lead` des Protokolls noch einmal steht. Ein
     natives Titelattribut erfüllt SC 1.4.13 nicht (Regel S-16).
   */
+  const text = exportTexts();
   const items = [
-    { key: "export", label: "Export" },
-    { key: "templates", label: "Vorlagen" },
-    { key: "exportAudit", label: "Protokoll" },
+    { key: "export", label: text.tabExport },
+    { key: "templates", label: text.tabTemplates },
+    { key: "exportAudit", label: text.tabLog },
   ] as const;
 
   return (
-    <nav className="subtabs" aria-label="Bereiche des Exports">
+    <nav className="subtabs" aria-label={text.tabsLabel}>
       <ul className="subtabs__list">
         {items.map((item) => (
           <li key={item.key}>

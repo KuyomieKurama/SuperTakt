@@ -1070,14 +1070,11 @@ const NOT_CALLED_BY_UI = new Set([
   // O-M): Dass jede von ihnen im Aufgabenbereich einen Aufrufer hat, misst
   // Abschnitt 7 — mit demselben Leser und demselben Urteil.
   //
-  // Vier seit T-247. Eine fünfte, `addAddinTodoAttachment`, stand hier von
-  // PR #16 bis zur Entscheidung E-100 gegen das Anhängen über das Add-in
-  // (A-19.19). Sie ist ersatzlos gefallen — samt Route, Aufrufer im
-  // Aufgabenbereich und Eintrag in der Beschreibung.
+  // Four since E-120: `addAddinTodoAttachment` fell with E-100 (T-247),
+  // `createAddinTimeEntry` with E-120 (T-389).
   'getAddinContext',
   'findAddinDuplicates',
   'createAddinTodo',
-  'createAddinTimeEntry',
   'appendAddinMail',
   /*
    * Hier standen bis T-253-2 `getBoard` (T-066) und `getVersionCheck` (T-138).
@@ -1220,6 +1217,15 @@ const NEVER_SENT = {
   // hat das Regelformular gebaut, und `PoolWrite` schickt seitdem alle vier.
   // Die Zeilen sind deshalb weg statt fortgeschrieben, aus demselben Grund wie
   // oben: Ein Zusatz, der nicht mehr gilt, macht die Liste zum Rauschen.
+  //
+  // A-28.6 (T-388): the named end after more than 24 hours. `stopTimer` sends it
+  // since T-400; the orphaned-timer option (F-4, E-124 point 3) does not ask for
+  // an end yet. Remove this line when it does.
+  resolveOrphanedTimer: ['endedAt'],
+  // O-D: the web sends `requiredTags` since T-400; `rule` is the deprecated alias
+  // the service still reads until T-411 drops it. Remove both lines then.
+  createPool: ['rule'],
+  updatePool: ['rule'],
 };
 const surprises = [];
 for (const [id, schema] of Object.entries(REQUEST_SCHEMAS)) {
@@ -1669,6 +1675,10 @@ const REQUEST_FORMS = [
    * und eingesammelt wurde. Diese Kunstdatei liegt nirgends — und wird gefunden.
    */
   {
+    name: 'ein Aufruf, versteckt in einem englischen Textbündel (E-138 Punkt 3)',
+    source: "import { request } from '../api/client';\nconst en = { load: () => request(WEG), hint: 'Send it.' };\n",
+  },
+  {
     name: 'eine erfundene `features/erfunden/api.ts` — der Name allein erlaubt nichts',
     ort: 'features/erfunden/api.ts',
     source: "import { request } from '../../api/client';\nexport const laden = async () => request(WEG);\n",
@@ -1685,7 +1695,7 @@ const REQUEST_FORMS = [
  * ihn liest, lockerte ihn an der Stelle, an der er richtig ist.
  */
 const REQUEST_HARMLESS = {
-  name: 'Prosa, `requestStop`, `x-request-id` und der Port sind kein zweiter Weg',
+  name: 'Prosa, `requestStop`, `x-request-id`, der Port und ein englischer Text sind kein zweiter Weg',
   source: [
     '// Diese Ansicht ruft request(…) niemals selbst auf.',
     '/* Auch client.request steht hier nur in einem Absatz. */',
@@ -1694,6 +1704,8 @@ const REQUEST_HARMLESS = {
     "const kennung = kopfzeilen.get('x-request-id');",
     'const antwort = await options.request(WEG);',
     'const feld: RequestOptions = {};',
+    // E-138 point 3: an English UI text may say "request"; only German values are words here.
+    'const en: typeof de = { retry: "Send the request again.", hint: `The request ${String(1)} failed.` };',
     '',
   ].join('\n'),
 };
@@ -1762,7 +1774,7 @@ check(
 );
 check(
   `die Typaufstellung des Add-ins ist gelesen (${ADDIN_CALLER.typeIndex.size} Typen)`,
-  ADDIN_CALLER.typeIndex.has('CreateTodoRequest') && ADDIN_CALLER.typeIndex.has('BookRequest'),
+  ADDIN_CALLER.typeIndex.has('CreateTodoRequest') && ADDIN_CALLER.typeIndex.has('AppendMailRequest'),
 );
 check(
   'jeder Aufruf ist als Ganzes lesbar — Methode, Pfad, Rumpf, Abfrage',

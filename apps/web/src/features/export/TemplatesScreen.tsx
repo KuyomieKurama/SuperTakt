@@ -47,6 +47,9 @@ import { DialogSurface } from "../../shared/ui/DialogSurface";
 import { Dialog } from "@ark-ui/react/dialog";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { labels } from "../../lib/labels";
+import { useLanguage } from "../../lib/language";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — S-14, der Editor für Exportvorlagen (A-8.7, E-005, E-017, I-15).
@@ -113,6 +116,8 @@ export interface TemplatesScreenProps {
 export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   const { version, bump } = useRefresh();
   const toasts = useToasts();
+  const language = useLanguage();
+  const text = exportTexts();
   const structure = useStructure();
   const mutation = useMutation();
 
@@ -171,7 +176,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
    */
   const beginCopy = (template: ExportTemplate): void => {
     // Vorschlag für ein Eingabefeld, siehe `copyField` oben.
-    setCopyName(`Kopie von ${dropHiddenCharacters(template.name)}`);
+    setCopyName(exportTexts().copyOf(dropHiddenCharacters(template.name)));
     setCopyNameTouched(false);
     setCopyDialog(template);
   };
@@ -194,7 +199,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
     setSaveError(null);
 
     if (creating) {
-      setDraft({ name: "Neue Vorlage", fields: [] });
+      setDraft({ name: exportTexts().newTemplate, fields: [] });
       return;
     }
     if (shown === null) return;
@@ -209,7 +214,8 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   const parsedShown = useMemo(
     () =>
       shown === null || catalog === null ? null : parseTemplateDefinition(shown.definition, catalog),
-    [shown, catalog],
+    // `language`: the parser's message is UI text.
+    [shown, catalog, language],
   );
   const unreadable = parsedShown !== null && !parsedShown.ok ? parsedShown.message : null;
 
@@ -243,7 +249,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
     draft === null ? null : JSON.stringify({ name: draft.name, definition: toDefinitionBody(draftFields) });
 
   const dirty = creating
-    ? draft !== null && (draft.fields.length > 0 || draft.name !== "Neue Vorlage")
+    ? draft !== null && (draft.fields.length > 0 || draft.name !== text.newTemplate)
     : savedBody !== null && draftBody !== null && savedBody !== draftBody;
 
   const duplicates = useMemo(() => duplicateFieldNames(draftFields), [draftFields]);
@@ -254,7 +260,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       readOnly || builtinFields.length === 0 || catalog === null
         ? []
         : describeDeviations(draftFields, builtinFields, catalog),
-    [readOnly, builtinFields, draftFields, catalog],
+    [readOnly, builtinFields, draftFields, catalog, language],
   );
 
   /* Verlassen mit ungespeicherten Änderungen                          */
@@ -379,10 +385,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
           loadedSignature.current = null;
           if (catalog !== null) editor.replace({ templates: [...list, created], catalog });
           bump();
-          toasts.success(
-            "Vorlage angelegt.",
-            `${quotedName(created.name)} steht jetzt in der Export-Ansicht zur Wahl.`,
-          );
+          toasts.success(exportTexts().templateCreated, exportTexts().templateCreatedBody(quotedName(created.name)));
           navigate("templates", created.id);
         })
       : shown === null
@@ -390,10 +393,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
         : updateExportTemplate(shown.id, { name, definition }).then((updated) => {
             loadedSignature.current = null;
             bump();
-            toasts.success(
-              "Vorlage gespeichert.",
-              `Bereits geschriebene Exportdateien ändern sich dadurch nicht — ${quotedName(updated.name)} gilt ab dem nächsten Lauf.`,
-            );
+            toasts.success(exportTexts().templateSaved, exportTexts().templateSavedBody(quotedName(updated.name)));
           });
 
     void task
@@ -416,7 +416,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
         : { name: shown.name, fields: [] },
     );
     loadedSignature.current = `${shown.id}|${shown.updatedAt}`;
-    toasts.show({ tone: "info", title: "Änderungen verworfen." });
+    toasts.show({ tone: "info", title: exportTexts().changesDiscarded });
   };
 
   /*
@@ -436,10 +436,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       if (catalog !== null) editor.replace({ templates: [...list, created], catalog });
       navigate("templates", created.id);
       bump();
-      toasts.success(
-        "Kopie angelegt.",
-        `${quotedName(created.name)} ist eine ganz gewöhnliche Vorlage: änderbar und löschbar.`,
-      );
+      toasts.success(exportTexts().copyCreated, exportTexts().copyCreatedBody(quotedName(created.name)));
     });
   };
 
@@ -457,10 +454,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       navigate("templates", builtin?.id);
       structure.reload();
       bump();
-      toasts.success(
-        "Vorlage gelöscht.",
-        "Bereits geschriebene Exportdateien bleiben, wie sie sind.",
-      );
+      toasts.success(exportTexts().templateDeleted, exportTexts().templateDeletedBody);
     });
   };
 
@@ -469,10 +463,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       await updateSettings({ activeExportTemplateId: template.id });
       structure.reload();
       bump();
-      toasts.success(
-        "Vorlage aktiviert.",
-        `Der nächste Export benutzt ${quotedName(template.name)}.`,
-      );
+      toasts.success(exportTexts().templateActivated, exportTexts().templateActivatedBody(quotedName(template.name)));
     });
   };
 
@@ -485,8 +476,8 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   return (
     <section className="screen">
       <ScreenHeader
-        title="Exportvorlagen"
-        lead="Eine Vorlage bestimmt, welche Felder in die Datei gehen, in welcher Reihenfolge und unter welchem Namen."
+        title={text.templatesTitle}
+        lead={text.templatesLead}
         refreshing={editor.state.status === "ready" && editor.state.refreshing}
         actions={
           <Button
@@ -494,7 +485,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
             iconStart="plus"
             onClick={() => navigate("templates", NEW_TEMPLATE_ID)}
           >
-            Neue Vorlage
+            {text.newTemplate}
           </Button>
         }
       >
@@ -510,10 +501,10 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
         statt `.app__main`; ohne ihn fiele der Bedienweg „Vorlage wechseln, ohne
         nach oben zu scrollen" still weg (T-322 Abschnitt 9 Nr. 2).
       */}
-      <ScreenBody label="Exportvorlagen">
+      <ScreenBody label={text.templatesTitle}>
         <AsyncBoundary
           state={editor.state}
-          label="Exportvorlagen werden geladen"
+          label={text.templateListLoading}
           rows={4}
           onRetry={editor.reload}
         >
@@ -528,7 +519,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
               />
 
               <div className="tpl-editor">
-                <div className="tpl-preview-action"><Button variant="secondary" onClick={() => setPreviewOpen(true)}>Vorschau öffnen</Button></div>
+                <div className="tpl-preview-action"><Button variant="secondary" onClick={() => setPreviewOpen(true)}>{text.openPreview}</Button></div>
                 {/*
                   Die Notiz-Grenze wird an der **Antwort** noch einmal gezogen
                   (A-7.2, R-06). Der Dienst haelt sie an seinem eigenen
@@ -539,23 +530,20 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                 {noteSourceIsAbsent(value.catalog) ? null : (
                   <InlineMessage
                     tone="danger"
-                    title="Der Dienst hat Feldquellen geliefert, die nicht wählbar sein dürfen"
+                    title={text.forbiddenSourcesTitle}
                   >
-                    SuperTakt bietet sie nicht an:{" "}
-                    {value.catalog.rejectedNoteSources.map((path) => `„${path}“`).join(", ")}. Der
-                    interne Vermerk eines Todos geht in keinen Export (A-7.2). Melden Sie das bitte —
-                    an der Auswahlliste dieses Editors ändert es nichts, aber es gehört geprüft.
+                    {text.forbiddenSources(value.catalog.rejectedNoteSources.map((path) => quotedName(path)).join(", "))}
                   </InlineMessage>
                 )}
 
                 {draft === null ? null : (
                   <>
                     <Card
-                      title={readOnly ? "Standardvorlage" : creating ? "Neue Vorlage" : "Vorlage"}
+                      title={readOnly ? text.builtinTemplate : creating ? text.newTemplate : text.template}
                       description={
                         readOnly
-                          ? "Die Struktur, die das Abrechnungstool erwartet. Sie lässt sich nicht ändern — aber kopieren."
-                          : "Name und Felder. Die Reihenfolge der Felder ist die Reihenfolge der Schlüssel in der Datei."
+                          ? text.builtinLead
+                          : text.editorLead
                       }
                       actions={
                         readOnly ? (
@@ -567,13 +555,13 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                               beginCopy(shown);
                             }}
                           >
-                            Kopie anlegen
+                            {text.createCopy}
                           </Button>
                         ) : (
                           <div className="tpl-editor__actions">
                             {dirty ? (
                               <Button variant="ghost" onClick={discard}>
-                                Verwerfen
+                                {text.discard}
                               </Button>
                             ) : null}
                             <Button
@@ -583,7 +571,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                               disabled={saveBlocked || (!dirty && !creating)}
                               onClick={save}
                             >
-                              Speichern
+                              {text.save}
                             </Button>
                           </div>
                         )
@@ -593,7 +581,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                         <BuiltinNotice fields={builtinFields} />
                       ) : (
                         <TextField
-                          label="Name der Vorlage"
+                          label={text.templateName}
                           value={draft.name}
                           onChange={(next) =>
                             setDraft((previous) =>
@@ -602,9 +590,9 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           }
                           required
                           maxLength={MAX_NAME_LENGTH}
-                          hint="Nur für Sie. In der Datei steht dieser Name nicht."
+                          hint={text.templateNameHint}
                           {...(draft.name.trim().length === 0
-                            ? { error: "Ohne Namen lässt sich die Vorlage nicht wiederfinden." }
+                            ? { error: text.templateNameMissing }
                             : {})}
                         />
                       )}
@@ -614,18 +602,17 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           <p className="tpl-dirty">
                             <Icon name="pencil" size={13} />
                             <span>
-                              Ungespeicherte Änderungen. Die Vorschau zeigt den aktuellen Entwurf — auf
-                              den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
+                              {text.unsavedBefore}
+                              <strong>{text.unsavedStrong}</strong>
+                              {text.unsavedAfter}
                             </span>
                           </p>
                         ) : null}
                       </div>
 
                       {unreadable === null ? null : (
-                        <InlineMessage tone="danger" title="Diese Vorlage lässt sich nicht anzeigen">
-                          {unreadable} Solange das so ist, wird sie hier nicht bearbeitet — eine
-                          halb gelesene Vorlage zu speichern hieße, Felder stillschweigend zu
-                          verlieren.
+                        <InlineMessage tone="danger" title={text.cannotShow}>
+                          {unreadable} {text.cannotShowTail}
                         </InlineMessage>
                       )}
 
@@ -653,29 +640,28 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                     {readOnly || creating ? null : (
                       <DeviationPanel
                         deviations={deviations}
-                        builtinName={builtin?.name ?? "Standardvorlage"}
+                        builtinName={builtin?.name ?? text.builtinTemplate}
                       />
                     )}
 
                     {shown === null || shown.isBuiltin || activeTemplateId === shown.id ? null : (
                       <Card
-                        title="Diese Vorlage benutzen"
-                        description="Der Export nimmt die Vorlage, die in den Einstellungen aktiv ist."
+                        title={text.useTemplateTitle}
+                        description={text.useTemplateLead}
                       >
                         <div className="tpl-activate">
                           <p className="tpl-activate__text">
-                            Aktiv ist derzeit{" "}
+                            {text.activeIsBefore}
                             <strong>
                               <Foreign
                                 value={
                                   list.find((template) => template.id === activeTemplateId)?.name ??
                                   builtin?.name ??
-                                  "die Standardvorlage"
+                                  text.theBuiltinTemplate
                                 }
                               />
                             </strong>
-                            . Änderungen an dieser Vorlage wirken sich erst auf einen Export aus,
-                            wenn sie aktiv ist.
+                            {text.activeIsAfter}
                           </p>
                           <Button
                             variant="secondary"
@@ -683,7 +669,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                             loading={mutation.busy}
                             onClick={() => activate(shown)}
                           >
-                            Für den Export verwenden
+                            {text.useForExport}
                           </Button>
                         </div>
                       </Card>
@@ -694,8 +680,8 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
 
               <DialogSurface open={previewOpen} onDismiss={() => setPreviewOpen(false)} className="dialog dialog--wide tpl-preview-dialog">
                 <div className="dialog__head">
-                  <Dialog.Title className="dialog__title">Vorschau</Dialog.Title>
-                  <Button variant="ghost" onClick={() => setPreviewOpen(false)}>Schließen</Button>
+                  <Dialog.Title className="dialog__title">{text.preview}</Dialog.Title>
+                  <Button variant="ghost" onClick={() => setPreviewOpen(false)}>{labels().close}</Button>
                 </div>
                 <div className="dialog__body">
                   {previewOpen ? <TemplatePreview catalog={value.catalog} stale={dirty} unsaved={creating} fields={draftFields} /> : null}
@@ -708,14 +694,14 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
 
       <ConfirmDialog
         open={confirmDelete !== null}
-        title={`Vorlage ${quotedName(confirmDelete?.name ?? "")} löschen?`}
-        description="Die Vorlage verschwindet aus der Auswahl in der Export-Ansicht und in den Einstellungen."
+        title={text.deleteTitle(quotedName(confirmDelete?.name ?? ""))}
+        description={text.deleteLead}
         consequence={
           confirmDelete !== null && confirmDelete.id === activeTemplateId
-            ? "Diese Vorlage ist gerade die aktive. Nach dem Löschen greift wieder die mitgelieferte Standardvorlage. Bereits geschriebene Exportdateien bleiben unverändert."
-            : "Bereits geschriebene Exportdateien bleiben unverändert. Rückgängig machen lässt sich das Löschen nicht."
+            ? text.deleteActive
+            : text.deleteInactive
         }
-        confirmLabel="Vorlage löschen"
+        confirmLabel={text.deleteConfirm}
         tone="danger"
         busy={mutation.busy}
         onConfirm={() => {
@@ -726,23 +712,24 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
 
       <FormDialog
         open={copyDialog !== null}
-        title="Vorlage kopieren"
+        title={text.copyTitle}
         description={
           copyDialog?.isBuiltin === true
-            ? "Die Kopie enthält dieselben Felder wie die Standardvorlage und ist von da an eine ganz gewöhnliche Vorlage: änderbar und löschbar."
-            : "Die Kopie enthält dieselben Felder und lässt sich unabhängig weiterbearbeiten."
+            ? text.copyBuiltinLead
+            : text.copyLead
         }
-        submitLabel="Kopie anlegen"
+        submitLabel={text.createCopy}
         busy={mutation.busy}
         submitDisabled={copyName.trim().length === 0}
         error={mutation.error}
+        errorFromService={mutation.errorFromService}
         onSubmit={() => {
           if (copyDialog !== null) copy(copyDialog);
         }}
         onCancel={() => setCopyDialog(null)}
       >
         <TextField
-          label="Name der Kopie"
+          label={text.copyName}
           value={copyName}
           onChange={setCopyName}
           onTouched={() => setCopyNameTouched(true)}
@@ -750,18 +737,18 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
           maxLength={MAX_NAME_LENGTH}
           {...(copyNameTouched && copyName.trim().length === 0
             ? /* Grundform T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). */
-              { error: "Name der Kopie fehlt." }
+              { error: text.copyNameMissing }
             : {})}
         />
       </FormDialog>
 
       <ConfirmDialog
         open={pendingHref !== null}
-        title="Diese Vorlage hat ungespeicherte Änderungen"
-        description="Wenn Sie jetzt wechseln, gehen die Änderungen an dieser Vorlage verloren."
-        consequence="Die gespeicherte Fassung bleibt unverändert; Export und Vorschau benutzen weiterhin sie."
-        confirmLabel="Änderungen verwerfen und wechseln"
-        cancelLabel="Hierbleiben"
+        title={text.leaveTitle}
+        description={text.leaveLead}
+        consequence={text.leaveConsequence}
+        confirmLabel={text.leaveConfirm}
+        cancelLabel={text.stay}
         tone="danger"
         onConfirm={() => {
           const target = pendingHref;
@@ -778,6 +765,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
 /* Die Standardvorlage erklären                                         */
 
 function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefinition[] }) {
+  const text = exportTexts();
   return (
     <div className="tpl-builtin">
       <p className="tpl-builtin__lead">
@@ -785,17 +773,15 @@ function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefini
           <Icon name="shield" size={16} />
         </span>
         <span>
-          Diese Vorlage bildet die Struktur ab, die das Abrechnungstool erwartet:{" "}
-          {fields.length === 0
-            ? "die mitgelieferten Felder"
-            : fields.map((field) => `${quotedName(field.name)}`).join(", ")}
-          . Sie ist mitgeliefert und lässt sich weder ändern noch löschen — genau deshalb ist sie
-          der Stand, auf den Sie jederzeit zurückkommen können.
+          {text.builtinStructure(
+            fields.length === 0
+              ? text.builtinFieldsFallback
+              : fields.map((field) => quotedName(field.name)).join(", "),
+          )}
         </span>
       </p>
       <p className="tpl-builtin__text">
-        Wollen Sie etwas anderes exportieren, legen Sie eine Kopie an. Die Kopie ist eine
-        gewöhnliche Vorlage, und SuperTakt zeigt Ihnen dort laufend, worin sie von dieser hier abweicht.
+        {text.builtinCopyHint}
       </p>
     </div>
   );
@@ -811,26 +797,26 @@ function DeviationPanel({
   readonly builtinName: ForeignText;
 }) {
   const warnings = deviations.filter((entry) => entry.tone === "warning");
+  const text = exportTexts();
 
   return (
     <Card
-      title={`Abgleich mit ${quotedName(builtinName)}`}
-      description="Was das Abrechnungstool erwartet, steht in der mitgelieferten Vorlage. Hier steht, worin diese davon abweicht."
+      title={text.compareWith(quotedName(builtinName))}
+      description={text.compareLead}
     >
       {deviations.length === 0 ? (
         <p className="tpl-deviation tpl-deviation--ok">
           <Icon name="check-circle" size={15} />
           <span>
-            Diese Vorlage entspricht der Struktur der Standardvorlage — gleiche Felder, gleiche
-            Quellen, gleiche Transformationen.
+            {text.compareEqual}
           </span>
         </p>
       ) : (
         <>
           <p className="tpl-deviation__lead">
             {warnings.length === 0
-              ? "Die erwartete Struktur ist vollständig enthalten; darüber hinaus gibt es Ergänzungen."
-              : "Abweichungen sind erlaubt — sie sollen nur nicht versehentlich entstehen. Prüfen Sie, ob das Abrechnungstool damit umgehen kann."}
+              ? text.compareOnlyAdditions
+              : text.compareDeviations}
           </p>
           <ul className="tpl-deviation-list">
             {deviations.map((entry) => (

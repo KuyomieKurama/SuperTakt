@@ -2,6 +2,7 @@ import type { Id, TimeEntry } from "../../api/types";
 import { exportDisplayState, type ExportDisplayState } from "../../shared/ui/ExportStatus";
 import { formatDateTime, formatDuration, formatPeriod } from "../../lib/format";
 import type { BookingRowData, SortColumn, SortDirection } from "./BookingTable";
+import { bookingTexts } from "./texts";
 
 /**
  * Takt — aus Buchungen des Dienstes werden Tabellenzeilen (S-06, I-10).
@@ -31,7 +32,7 @@ export function toRows(
       exportCount: entry.exportCount,
       source: entry.source,
       callNumber: todo?.callNumber ?? null,
-      todoTitle: todo?.title ?? "Unbekanntes Todo",
+      todoTitle: todo?.title ?? bookingTexts().unknownTodo,
       period: formatPeriod(entry.startedAt, entry.endedAt),
       duration: formatDuration(entry.durationSeconds),
       note: entry.note,

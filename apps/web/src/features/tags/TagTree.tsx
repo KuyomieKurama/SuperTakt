@@ -11,6 +11,7 @@ import {
 import { cx } from "../../lib/cx";
 import { Icon } from "../../shared/ui/Icon";
 import { Foreign } from "../../shared/ui/Foreign";
+import { tagTexts } from "./texts";
 
 /**
  * Baumansicht der Tag-Ordner — A-4.2 bis A-4.4, S-08, I-07, I-08.
@@ -460,8 +461,8 @@ export function TagTree({
               </span>
               <span className="tree__label truncate">
                 {clipped ? (
-                  <span className="tree__depth" title={`Ebene ${row.level}`}>
-                    E{row.level}
+                  <span className="tree__depth" title={tagTexts().level(row.level)}>
+                    {tagTexts().levelShort(row.level)}
                   </span>
                 ) : null}
                 <Foreign value={row.node.label} />
@@ -469,14 +470,14 @@ export function TagTree({
               {row.node.kind === "folder" && row.node.tagCount !== undefined ? (
                 <span className="tree__count">
                   <span aria-hidden>{row.node.tagCount}</span>
-                  <span className="visually-hidden">{row.node.tagCount} Tags in diesem Ordner</span>
+                  <span className="visually-hidden">{tagTexts().tagsInFolder(row.node.tagCount)}</span>
                 </span>
               ) : null}
               {row.node.kind === "tag" && row.node.usageCount !== undefined ? (
                 <span className="tree__count">
                   <span aria-hidden>{row.node.usageCount}</span>
                   <span className="visually-hidden">
-                    {row.node.usageCount} Todos mit diesem Tag
+                    {tagTexts().todosWithTagCount(row.node.usageCount)}
                   </span>
                 </span>
               ) : null}
@@ -519,14 +520,13 @@ export function TagTree({
           }}
         >
           <Icon name="arrow-up" size={14} />
-          Hierher ziehen: auf die Wurzelebene
+          {tagTexts().dropAtRoot}
         </div>
       ) : null}
 
       {draggable ? (
         <p className="tree__hint">
-          Ziehen legt einen Eintrag in einen Ordner. Stellen, die einen Ordner in sich selbst
-          brächten, nehmen ihn erst gar nicht an. Mit der Tastatur: auswählen, dann „Verschieben“.
+          {tagTexts().dragHint}
         </p>
       ) : null}
     </div>

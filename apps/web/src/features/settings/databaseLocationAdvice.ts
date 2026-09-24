@@ -42,6 +42,7 @@ import {
   shapeOf,
   syncFolderEvidence,
 } from "../../lib/pathInspection";
+import { settingsTexts } from "./texts";
 
 /* Gestalt                                                              */
 
@@ -131,9 +132,9 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
     found.push({
       kind: "sync_folder",
       impacts: ["confidentiality", "durability"],
-      title: "Der Bestand liegt in einem Synchronisierungsordner",
-      body: "In dieser Datei stehen alle Todos, Buchungen und Vermerke im Klartext. Der Client des Anbieters lädt sie fortlaufend hoch — auch während SuperTakt läuft, ohne Rückfrage und ohne dass es jemand sieht. Damit liegen die Daten Ihrer Kunden bei einem Anbieter. Dazu kommt ein zweites Problem: Eine Datenbankdatei, die mitten im Schreiben kopiert wird, kommt dort regelmäßig unbrauchbar an, und wenn zwei Rechner denselben Ordner synchronisieren, beschädigen sie einander die Datei.",
-      remedy: "SuperTakt kann den Ablageort nicht verlegen — er folgt dem Anwendungsdatenverzeichnis dieses Benutzers. Nehmen Sie diesen Ordner im Synchronisierungsclient von der Übertragung aus.",
+      title: settingsTexts().databaseAdvice.sync_folder.title,
+      body: settingsTexts().databaseAdvice.sync_folder.body,
+      remedy: settingsTexts().databaseAdvice.sync_folder.remedy,
       evidence: syncEvidence,
     });
   }
@@ -144,9 +145,9 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
     found.push({
       kind: "network_share",
       impacts: ["confidentiality", "durability"],
-      title: "Der Bestand liegt nicht auf diesem Rechner",
-      body: "Der Pfad zeigt auf eine Netzfreigabe. Eine SQLite-Datei über das Netz zu führen gilt als unsicher: Die Sperren, mit denen sie sich gegen gleichzeitige Zugriffe schützt, wirken über viele Netzdateisysteme nicht zuverlässig, und ein Verbindungsabriss mitten im Schreiben kann sie beschädigen. Außerdem liegen die Kundendaten damit auf einem anderen Rechner — bei einem Produkt, das laut E-001 vollständig lokal arbeitet.",
-      remedy: "Das Anwendungsdatenverzeichnis gehört auf die lokale Festplatte. Wenn es hier im Netz liegt, ist das eine Einstellung des Windows-Profils; das entscheidet die Verwaltung des Rechners, nicht SuperTakt.",
+      title: settingsTexts().databaseAdvice.network_share.title,
+      body: settingsTexts().databaseAdvice.network_share.body,
+      remedy: settingsTexts().databaseAdvice.network_share.remedy,
       evidence: networkEvidence,
     });
   }
@@ -157,9 +158,9 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
     found.push({
       kind: "roaming_profile",
       impacts: ["confidentiality", "durability"],
-      title: "Der Bestand liegt im servergespeicherten Profil",
-      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Der ganze Bestand wandert dann mit, Kundennotizen inbegriffen — und kopiert wird auch eine Datei, die gerade noch geöffnet war. Genau deshalb legt SuperTakt seine Daten unter AppData\\Local ab (E-018).",
-      remedy: "Steht hier trotzdem Roaming, ist dieses Windows-Profil anders eingerichtet. Auch das entscheidet die Verwaltung des Rechners.",
+      title: settingsTexts().databaseAdvice.roaming_profile.title,
+      body: settingsTexts().databaseAdvice.roaming_profile.body,
+      remedy: settingsTexts().databaseAdvice.roaming_profile.remedy,
       evidence: roamingEvidence,
     });
   }
@@ -170,9 +171,9 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
     found.push({
       kind: "temporary_folder",
       impacts: ["durability"],
-      title: "Der Bestand liegt in einem Ordner für flüchtige Dateien",
-      body: "Ordner mit dem Namen Temp oder tmp werden von der Windows-Speicheroptimierung, von Aufräumwerkzeugen und je nach System beim Neustart geleert — ohne Rückfrage. Was Sie eintragen, kann beim nächsten Start fehlen. Im Prüf- und Entwicklungsbetrieb ist das gewollt; auf einem Arbeitsplatz ist es ein Fehler in der Einrichtung.",
-      remedy: "Starten Sie SuperTakt über die installierte Verknüpfung. Ein abweichendes Anwendungsdatenverzeichnis kommt aus der Umgebung, in der die Anwendung gestartet wurde, und nicht aus den Einstellungen.",
+      title: settingsTexts().databaseAdvice.temporary_folder.title,
+      body: settingsTexts().databaseAdvice.temporary_folder.body,
+      remedy: settingsTexts().databaseAdvice.temporary_folder.remedy,
       evidence: volatileEvidence,
     });
   }

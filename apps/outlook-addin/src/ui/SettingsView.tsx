@@ -162,10 +162,10 @@ export function SettingsView({
         </select>}</Field>
         <label className="mail-option"><input type="checkbox" checked={defaults.includeExcerpt} onChange={event => { store.writeDefaults({ ...defaults, includeExcerpt: event.target.checked }); onChanged(); }} />E-Mail-Auszug in der Seitenleiste vorauswählen</label>
         {context ? <>
-          <Field label="Standard-Status" htmlFor="default-status">{(aria) => <select {...aria} className="input" value={defaults.statusId ?? ''} onChange={event => { store.writeDefaults({ ...defaults, statusId: event.target.value || null }); onChanged(); }}>
+          <Field label="Ablagevorgabe: Status" htmlFor="default-status">{(aria) => <select {...aria} className="input" value={defaults.statusId ?? ''} onChange={event => { store.writeDefaults({ ...defaults, statusId: event.target.value || null }); onChanged(); }}>
             <option value="">SuperTakt-Standard</option>{context.statuses.map(status => <option key={status.id} value={status.id}>{status.name}</option>)}
           </select>}</Field>
-          <Field label="Standard-Tags" htmlFor="default-tags">{(aria) => <TagPicker allowNew={false} aria={aria} tree={context.tagTree} selected={defaults.tagIds} defaultTagIds={context.defaultTagIds} onChange={tagIds => { store.writeDefaults({ ...defaults, tagIds }); onChanged(); }} newNames={[]} onNewNamesChange={() => undefined} />}</Field>
+          <Field label="Ablagevorgabe: Tags" htmlFor="default-tags">{(aria) => <TagPicker allowNew={false} aria={aria} tree={context.tagTree} selected={defaults.tagIds} defaultTagIds={context.defaultTagIds} onChange={tagIds => { store.writeDefaults({ ...defaults, tagIds }); onChanged(); }} newNames={[]} onNewNamesChange={() => undefined} />}</Field>
         </> : <p>Die Zielvorgaben sind verfügbar, sobald SuperTakt verbunden ist.</p>}
       </Section>
       <Section
@@ -305,7 +305,7 @@ export function SettingsView({
 
       <Section
         title="Erkennung der Call-Nummer"
-        description="Der Ausdruck steht in dieser Einstellung, nicht im Programm. Übernommen wird immer der Inhalt der ersten Klammer."
+        description="Der Ausdruck steht in dieser Einstellung, nicht im Programm."
       >
         <Field label="Erprobte Muster" htmlFor="catalog" hint="Deckt den Normalfall ab. Alle Beispiele sind erfunden.">
           {(aria) => (
@@ -335,7 +335,7 @@ export function SettingsView({
         <Field
           label="Regulärer Ausdruck (für Fortgeschrittene)"
           htmlFor="pattern"
-          hint="Genau eine Klammer um die Nummer. Rückverweise und Rückschau sind nicht zugelassen."
+          hint="Übernommen wird der Inhalt der ersten Klammer, ohne Klammer der ganze Treffer. Rückverweise und Rückschau sind nicht zugelassen."
           error={patternError}
         >
           {(aria) => (

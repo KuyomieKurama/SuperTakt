@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { errorMessage } from "../../api/client";
-import { deletePool, updatePool } from "../structure/api";
+import { errorMessage, isServiceError } from "../../api/client";
+import { deletePool, swapPoolOrder, updatePool } from "../structure/api";
 import type { Pool, PoolPlacement } from "../../api/types";
 import { useRefresh } from "../../app/RefreshContext";
 import { navigate } from "../../app/router";
@@ -9,11 +9,13 @@ import { useToasts } from "../../app/ToastContext";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Foreign } from "../../shared/ui/Foreign";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Card, EmptyState } from "../../shared/ui/Primitives";
+import { Button, Card, EmptyState, IconButton } from "../../shared/ui/Primitives";
 import { RuleSummary } from "../structure/RuleSummary";
 import { quotedName } from "../../lib/foreign";
-import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../../lib/labels";
-import { axesOf, describeRule, describeRuleReach } from "../../lib/poolRule";
+import { useReorderFocus } from "../../lib/focus";
+import { labels, poolPlacementMessage } from "../../lib/labels";
+import { tagTexts } from "./texts";
+import { axesOf, describeRule, describeStoredRuleReach } from "../../lib/poolRule";
 import { PoolFormDialog } from "../structure/PoolFormDialog";
 import { PoolRenameDialog } from "../structure/PoolRenameDialog";
 
@@ -54,6 +56,43 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
 
   const lookup = useRuleLookup();
 
+  /*
+    A-28.3: `rules` is the complete list sorted by position, so swapping with the neighbour here
+    changes no third rule's relative order. Board columns are the board-placed rules in the
+    same order; the toast says whether the board changed too (welle-18-fluss.md 3.2, 3.3).
+  */
+  const [reordering, setReordering] = useState(false);
+  const rememberMoved = useReorderFocus(rules);
+  const moveRule = (index: number, offset: -1 | 1): void => {
+    const current = rules[index];
+    const target = rules[index + offset];
+    if (current === undefined || target === undefined || reordering) return;
+    const onBoard = (pool: Pool) => pool.placement !== "pool";
+    const boardChanged = onBoard(current) && onBoard(target);
+
+    setReordering(true);
+    rememberMoved(current.id);
+    void swapPoolOrder(rules, current.id, target.id)
+      .then(() => {
+        bump();
+        const moved = tagTexts().orderMoved(quotedName(current.name), offset < 0);
+        toasts.show({
+          tone: "success",
+          title: tagTexts().orderChanged,
+          body: boardChanged ? `${moved} ${tagTexts().orderMovedOnBoard(offset < 0)}` : moved,
+          replaceKey: "pool-order",
+        });
+      })
+      .catch((cause: unknown) =>
+        toasts.failure(tagTexts().orderFailed, errorMessage(cause), isServiceError(cause)),
+      )
+      .finally(() => {
+        // Success and failure both reload: the list shows the stored order either way.
+        structure.reload();
+        setReordering(false);
+      });
+  };
+
   /**
    * Den Anzeigeort einer Regel ändern — mit demselben Rückweg wie auf dem
    * Board (S-5 aus R-2).
@@ -83,7 +122,7 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
           ...(!restoring && previous !== placement
             ? {
                 action: {
-                  label: "Rückgängig",
+                  label: tagTexts().undo,
                   onSelect: () => setPlacement({ ...pool, placement }, previous, true),
                 },
               }
@@ -91,9 +130,11 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
         });
       })
       .catch((cause: unknown) =>
-        toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
+        toasts.failure(tagTexts().placementFailed, errorMessage(cause), isServiceError(cause)),
       );
   };
+
+  const text = tagTexts();
 
   return (
     <>
@@ -104,11 +145,11 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
         statt allgemein. Der Anzeigeort steht als Marke neben jedem Namen.
       */}
       <Card
-        title="Regeln"
-        description="Eine Regel bündelt Todos. Der Anzeigeort sagt, wo sie erscheint."
+        title={text.rulesTitle}
+        description={text.rulesLead}
         actions={
           <Button size="sm" variant="primary" iconStart="plus" onClick={() => setForm({})}>
-            Neue Regel
+            {text.newRule}
           </Button>
         }
       >
@@ -116,22 +157,22 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
           <EmptyState
             compact
             icon="filter"
-            title="Noch keine Regel"
+            title={text.noRuleTitle}
             /*
               Das **Beispiel** bleibt, die Definition faellt (T-181, ST-05).
               Ein Leerzustand zeigt den naechsten Schritt, er klaert keinen
               Begriff (Regel S-08).
             */
-            description="Etwa alles unter dem Ordner „Kunden“ — oder alles Erledigte, das noch offen ist."
+            description={text.noRuleBody}
             action={
               <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
-                Erste Regel anlegen
+                {text.firstRule}
               </Button>
             }
           />
         ) : (
           <ul className="pool-list">
-            {rules.map((pool) => {
+            {rules.map((pool, index) => {
               const poolDescription = describeRule(axesOf(pool), lookup);
 
               return (
@@ -141,7 +182,7 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                     <Foreign value={pool.name} />
                     <span className={`placement-badge placement-badge--${pool.placement}`}>
                       <Icon name={pool.placement === "pool" ? "filter" : "square"} size={11} />
-                      {POOL_PLACEMENT_SHORT[pool.placement]}
+                      {labels().poolPlacementShort[pool.placement]}
                     </span>
                   </p>
                   {/*
@@ -160,8 +201,32 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                   <RuleSummary
                     className="pool-row__rule"
                     description={poolDescription}
-                    reach={describeRuleReach(poolDescription, pool.resolved)}
-                    emptyText="Ohne Bedingung — dieser Pool bleibt leer."
+                    reach={describeStoredRuleReach(poolDescription, pool.resolved)}
+                    emptyText={text.poolEmpty}
+                  />
+                </div>
+                {/* Same controls as the board columns (A-28.3); no motion (welle-18.md 0). */}
+                <div
+                  className="board-order"
+                  role="group"
+                  aria-label={text.orderOf(quotedName(pool.name))}
+                  data-order-group={pool.id}
+                >
+                  <IconButton
+                    label={text.moveUp(quotedName(pool.name))}
+                    icon="arrow-up"
+                    size="sm"
+                    disabled={index === 0}
+                    aria-disabled={reordering}
+                    onClick={() => moveRule(index, -1)}
+                  />
+                  <IconButton
+                    label={text.moveDown(quotedName(pool.name))}
+                    icon="arrow-down"
+                    size="sm"
+                    disabled={index === rules.length - 1}
+                    aria-disabled={reordering}
+                    onClick={() => moveRule(index, 1)}
                   />
                 </div>
                 <Button
@@ -170,7 +235,7 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                   iconStart="filter"
                   onClick={() => navigate("todos", undefined, { pool: pool.id })}
                 >
-                  Todos ansehen
+                  {text.showTodos}
                 </Button>
                 {/*
                   Der Anzeigeort ist der einzige Unterschied zwischen Pool und
@@ -185,7 +250,7 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                   iconStart={pool.placement === "pool" ? "plus" : "x"}
                   onClick={() => setPlacement(pool, pool.placement === "pool" ? "both" : "pool")}
                 >
-                  {pool.placement === "pool" ? "Als Spalte aufnehmen" : "Vom Board nehmen"}
+                  {pool.placement === "pool" ? text.addAsColumn : text.removeFromBoard}
                 </Button>
                 <Button
                   size="sm"
@@ -193,10 +258,10 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                   iconStart="pencil"
                   onClick={() => setRenaming(pool)}
                 >
-                  Umbenennen
+                  {text.rename}
                 </Button>
                 <Button size="sm" variant="ghost" iconStart="filter" onClick={() => setForm({ pool })}>
-                  Regel bearbeiten
+                  {text.editRule}
                 </Button>
                 <Button
                   size="sm"
@@ -204,7 +269,7 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
                   iconStart="trash"
                   onClick={() => setPendingDelete(pool)}
                 >
-                  Löschen
+                  {text.delete}
                 </Button>
               </li>
               );
@@ -237,14 +302,14 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title="Regel löschen?"
-        description={pendingDelete === null ? "" : `Die Regel ${quotedName(pendingDelete.name)} wird entfernt.`}
+        title={text.deleteRuleTitle}
+        description={pendingDelete === null ? "" : text.deleteRuleLead(quotedName(pendingDelete.name))}
         consequence={
           pendingDelete !== null && pendingDelete.placement !== "pool"
-            ? "An den Todos ändert sich nichts — die Zugehörigkeit war nie gespeichert. Auf dem Board verschwindet die Spalte; ihre Karten stehen weiter in der Todo-Liste."
-            : "An den Todos ändert sich nichts. Die Zugehörigkeit war nie gespeichert."
+            ? text.deleteColumnConsequence
+            : text.deletePoolConsequence
         }
-        confirmLabel="Löschen"
+        confirmLabel={text.delete}
         onConfirm={() => {
           const pool = pendingDelete;
           if (pool === null) return;
@@ -253,10 +318,10 @@ export function PoolAdministration({ rules }: { readonly rules: readonly Pool[] 
               setPendingDelete(null);
               structure.reload();
               bump();
-              toasts.success("Regel gelöscht.");
+              toasts.success(tagTexts().ruleDeleted);
             })
             .catch((cause: unknown) =>
-              toasts.failure("Die Regel ließ sich nicht löschen", errorMessage(cause)),
+              toasts.failure(tagTexts().ruleDeleteFailed, errorMessage(cause), isServiceError(cause)),
             );
         }}
         onCancel={() => setPendingDelete(null)}

@@ -10,6 +10,7 @@ import {
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { TagChip } from "../../shared/ui/Tag";
 import { Foreign } from "../../shared/ui/Foreign";
+import { structureTexts } from "./texts";
 
 /**
  * Takt — die Regel einer Spalte oder eines Pools in Worten (T-076, T-079).
@@ -156,9 +157,9 @@ function ChipView({
       <Icon name={empty ? "alert-triangle" : "folder"} size={11} />
       <Foreign value={chip.label} />
       {empty ? (
-        <span className="rule-summary__folder-note"> — kein Tag darin</span>
+        <span className="rule-summary__folder-note">{structureTexts().noTagInside}</span>
       ) : chip.withSubfolders === true ? (
-        <span className="rule-summary__folder-note"> mit Unterordnern</span>
+        <span className="rule-summary__folder-note">{structureTexts().withSubfolders}</span>
       ) : null}
     </span>
   );
@@ -246,18 +247,14 @@ export function RuleSummary({
       {emptyFolders === null ? null : (
         <p className="rule-summary__unreachable">
           <Icon name="alert-triangle" size={11} />
-          Kein Tag in {emptyFolderNames(emptyFolders)} —{" "}
-          {emptyFolders.length === 1 ? "diese Bedingung kann" : "diese Bedingungen können"} kein
-          Todo erfüllen, und die Regel trifft damit nichts.
+          {structureTexts().unreachable(emptyFolderNames(emptyFolders), emptyFolders.length === 1)}
         </p>
       )}
 
       {showNeutral && description.neutral.length > 0 ? (
         <p className="rule-summary__neutral">
           <Icon name="info" size={11} />
-          Ohne Einschränkung: {description.neutral.map((axis) => axis.label).join(", ")}. Diese
-          Bedingungen lassen alles durch, was die übrigen übrig lassen — sie treffen nichts von
-          sich aus.
+          {structureTexts().neutralAxes(description.neutral.map((axis) => axis.label).join(", "))}
         </p>
       ) : null}
     </div>

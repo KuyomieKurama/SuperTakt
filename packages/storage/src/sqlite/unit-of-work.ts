@@ -99,7 +99,7 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
     pools: createPoolPort(conn, ids, searchTodos),
     statuses: createTodoStatusPort(conn, ids),
     priorities: createTodoPriorityPort(conn, ids),
-    timeEntries: createTimeEntryPort(conn, ids, options.timeZone),
+    timeEntries: createTimeEntryPort(conn, ids, options.timeZone, resolvePools),
     timer: createTimerPort(conn, ids),
     idle: createIdleTimerPort(conn),
     heartbeat: createTimerHeartbeatPort(conn),
@@ -213,10 +213,12 @@ export function createTransactionPort(conn: SqlConnection, options: UnitOptions 
        * Eintrag als verwaist; mit zwei Klammern sah einer einen laufenden
        * Timer über elf Stunden.
        *
-       * **Wer hier `return queue` schriebe, öffnete R-34 wieder, und nichts
-       * würde rot.** Ein Prüffall dafür fehlt bis heute; er gehört dem
-       * unit-tester (T-358 Abschnitt 8 Fall E, erweitert um einen nebenher
-       * gereihten Leser). Bis er steht, ist dieser Absatz die einzige Wache.
+       * Measured state (T-375, T-381 §47.4, A-A-132): `return queue` is loud,
+       * not silent — it breaks the return value of every caller (86 failing
+       * tests in 11 files). The silent regressions (two transactions in
+       * `importDataArchive`, or a return value that resolves after `queue`)
+       * are caught by case F in
+       * `apps/local-api/test/usecases/data-transfer-timer-recovery.test.ts`.
        */
       const next = queue.then(() => run(work));
 

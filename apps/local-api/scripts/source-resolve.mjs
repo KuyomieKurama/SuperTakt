@@ -51,8 +51,9 @@
  *      durchsuchen und den Umweg melden" schreibt auf `stdout`, und ein
  *      Baustein, der schreibt, ist in einem Nachweis schwer zu messen.
  *
- * Dazu die drei fachnahen Helfer, die nur `local-api` braucht:
- * `dienstEinstieg`, `migrationsVerzeichnis`, `quellbaum`. Eine gemeinsame
+ * Dazu die zwei fachnahen Helfer, die nur `local-api` braucht:
+ * `migrationsVerzeichnis`, `quellbaum`. (The service entry helper is gone since T-397b:
+ * every service run starts the sibling `proof-access-entry.ts` on TAKT_PROOF_PORT.) Eine gemeinsame
  * Datei, die alles aufnimmt, was irgendwo gebraucht wird, wäre der Sammelordner,
  * den der Auftraggeber ausgeschlossen hat.
  *
@@ -297,28 +298,6 @@ function quelleSuchen(paketName, { hinweis, merkmal, endungen }) {
       `${displayPath(wurzel, treffer.path)}\n`,
   );
   return { pfad: treffer.path, grund: '' };
-}
-
-/**
- * Der Einstiegspunkt des lokalen Dienstes, wie ihn die Nachweisläufe starten.
- *
- * Fünf Läufe starteten ihn bis T-249-1 über `join(HERE, '..', 'src',
- * 'index.ts')` — fünf Abschriften desselben Pfades. Der Umbau nach Merkmalen
- * legt Routen und Anwendungsfälle je Merkmal zusammen; ob `index.ts` dabei
- * liegen bleibt, entscheidet nicht dieser Lauf. Das Merkmal ist der Aufruf, um
- * den es geht: die Datei, die `main()` ausführt.
- *
- * Ein fehlgeschlagener Start wäre hier übrigens **laut** gewesen — der
- * Kindprozeß stirbt, die Anfragen laufen ins Leere. Es geht also nicht um einen
- * stummen Ausgang, sondern um die eine Stelle statt fünf: Nach dem Umzug wäre
- * sonst an fünf Dateien dasselbe nachzuziehen, und die vergessene sechste ist
- * die, die man sucht.
- */
-export function dienstEinstieg() {
-  return paketQuelle('@takt/local-api', {
-    hinweis: 'src/index.ts',
-    merkmal: ['await main()', "from './main.ts'"],
-  });
 }
 
 /**

@@ -39,9 +39,19 @@ import { z } from 'zod';
  * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
 import {
+  FORBIDDEN_NAME_CHARACTER_MESSAGE,
+  hasForbiddenNameCharacter,
+  MAIL_EXCERPT_MAX_LENGTH,
+  MAIL_IDENTITY_MAX_LENGTH,
+  MAIL_MESSAGE_ID_MAX_LENGTH,
+  MAIL_NOTE_MAX_LENGTH,
+  MAIL_SENDER_MAX_LENGTH,
+  MAIL_SUBJECT_MAX_LENGTH,
   MAX_EMAIL_ATTACHMENT_COUNT,
   MAX_EMAIL_ATTACHMENT_TOTAL_BYTES,
   MAX_EMAIL_DISPLAY_NAME_CHARACTERS,
+  TODO_TAG_IDS_MAX,
+  TODO_TAG_NAMES_MAX,
 } from '@takt/domain';
 
 import {
@@ -54,36 +64,6 @@ import {
 /** UUID Fassung 7, wie `Id` in der OpenAPI-Beschreibung. */
 const id = z.string().uuid();
 
-/** `YYYY-MM-DDTHH:MM:SSZ`, wie `Timestamp` in der Domäne. */
-const timestamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-
-/**
- * Der interne Vermerk aus der E-Mail (A-7.1, B-12.3 Punkt 3).
- *
- * Enger als an der Tür der Hauptanwendung, wo `textSchema` gilt. Der Vorschlag
- * stammt aus B-12.3 Punkt 3: Was aus einer E-Mail übernommen wird, soll der
- * Kontext sein und nicht ein ganzer Zitatverlauf. Wer mehr braucht, schreibt es
- * in der Hauptanwendung dazu.
- *
- * **Die Gegenzahl steht bis heute im Add-in** als `MAX_TAKEOVER_CHARACTERS`
- * (`apps/outlook-addin/src/office/mail.ts`), und sie muss dieselbe sein: Der
- * Knopf „Inhalt der E-Mail übernehmen" füllt das Feld, bevor der Benutzer es
- * gelesen hat. Kürzte das Add-in großzügiger, als diese Zeile annimmt, bekäme
- * er ein 422 für einen Text, den nicht er geschrieben hat — dieselbe Sackgasse
- * wie bei der Titellänge vor T-114. Auflösen lässt sich das nur in
- * `@takt/domain`, weil ein Browserbündel `@takt/local-api` nicht einbinden darf;
- * T-134 meldet es, statt es halb zu tun. Bis dahin hält
- * `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16 beide Seiten
- * gegeneinander — ein Vergleich, der den Schaden bewacht und nicht die Ursache
- * (E-063 Punkt 5), aber einer, der rot wird.
- *
- * **Der Wortlaut hier nannte bis T-134 „65536" als Zahl der Hauptanwendung.**
- * Sie war seit langem falsch — `textSchema` nimmt weniger —, und sie war es
- * unbemerkt, weil eine Beschreibung, die eine fremde Zahl abschreibt, dieselbe
- * Abschrift ist wie eine im Quelltext, nur ohne die Möglichkeit, rot zu werden
- * (E-063 Punkt 5). Sie zeigt jetzt auf den Namen statt auf einen Wert.
- */
-export const ADDIN_NOTE_MAX_LENGTH = 4000;
 
 /**
  * Transportdeckel für die Call-Nummer — **nicht** die Fachregel (T-041, T-046).
@@ -105,43 +85,6 @@ export const ADDIN_NOTE_MAX_LENGTH = 4000;
  */
 export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
 
-/**
- * Wie viele **Kennungen** eine Anfrage höchstens mitgeben darf (T-058, T-134).
- *
- * Bis T-134 stand die Zahl als `.max(200)` mitten im Schema, ohne Namen und
- * ohne Grund — und ohne einen Hinweis darauf, dass sie nicht allein steht.
- *
- * **Sie steht an zwei Türen.** `features/todos/routes.ts` führt dieselbe Zahl an
- * `createSchema` und an `updateSchema`; es ist dieselbe Wahrheit („wie viele
- * Tags darf ein Todo in einer Anfrage bekommen") und nicht bloß derselbe Wert.
- * Aufgelöst ist sie damit **nicht**: Der andere Weg liegt außerhalb dieser Datei
- * (E-053), und eine halb umgestellte Zahl ist schlechter als eine ganz
- * doppelte — sie sieht aus wie erledigt. T-134 gibt ihr deshalb hier einen
- * Namen, meldet die zweite Tür und lässt sie messen
- * (`apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16): Laufen die beiden
- * Türen auseinander, wird der Lauf rot, statt dass ein Kommentar es hofft.
- *
- * Warum überhaupt eine Grenze: Ohne sie nimmt die Tür eine Liste beliebiger
- * Länge entgegen und legt sie in eine Transaktion. Warum 200 und nicht 50 wie
- * bei den Namen, steht eine Zeile weiter unten.
- */
-export const ADDIN_TAG_IDS_MAX = 200;
-
-/**
- * Wie viele **Namen** eine Anfrage höchstens benennen darf (T-058, T-061).
- *
- * Dieselbe Zahl wie in `features/todos/routes.ts`, und aus demselben Grund:
- * Kennungen kommen aus einer Auswahl, Namen aus einem Eingabefeld. Fünfzig
- * neue Tags in einer Anfrage sind kein Arbeitsablauf, sondern ein Skript. Zwei
- * verschiedene Zahlen an den beiden Wegen wären die Art Unterschied, die
- * niemand bemerkt, bis eine Anfrage über den einen Weg durchgeht und über den
- * anderen nicht.
- *
- * Dieser Satz war bis T-134 eine Zusicherung, die niemand ausführt — genau die
- * Bauart, an der T-114 gescheitert ist. Seither hält Abschnitt 16 des
- * Add-in-Nachweises beide Türen gegeneinander, für `tagIds` wie für `tagNames`.
- */
-export const ADDIN_TAG_NAMES_MAX = 50;
 
 // Die Anhänge aus der E-Mail (A-19.22 bis A-19.33, E-108) — T-304
 
@@ -225,7 +168,33 @@ export const ADDIN_ATTACHMENT_SENDER_MAX_LENGTH = 2048;
  * geglaubt werden. Gezählt wird an der Zeichenkette und danach am dekodierten
  * Puffer, beides in der Domäne.
  */
-const attachmentDisplayName = z.string().min(1).max(ADDIN_ATTACHMENT_NAME_MAX_LENGTH);
+/**
+ * Der **Anzeigename** eines Anhangs — dieselbe Zeichenklasse wie jeder Name
+ * (E-137 Punkt 3, A-20.4, A-A-14).
+ *
+ * Getrimmt und ohne Steuer- oder Richtungszeichen, weil die eigene
+ * Datensicherung genau diese Regel auf `todo_attachment.display_name` anwendet
+ * (`features/data-transfer/data-transfer.ts`, `ARCHIVED_NAME_COLUMNS`). Ohne
+ * sie nähme diese Tür einen Namen an, den das Einspielen des daraus erzeugten
+ * Archivs wieder abwiese — ein Bestand, der sich nicht zurückholen läßt.
+ *
+ * **Das widerspricht A-19.23b nicht.** Der Aufgabenbereich ersetzt ein
+ * Richtungszeichen vorher durch die sichtbare Marke (`planTakeover`,
+ * `visibleText`); was hier mit einem rohen Richtungszeichen ankommt, hat diesen
+ * Weg nicht genommen.
+ *
+ * Die **Länge** bleibt großzügig: Ein zu langer Name wird von
+ * `shortenEmailDisplayName` in der Mitte gekürzt und nicht abgewiesen
+ * (A-19.23b, siehe {@link ADDIN_ATTACHMENT_NAME_MAX_LENGTH}).
+ */
+const attachmentDisplayName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(ADDIN_ATTACHMENT_NAME_MAX_LENGTH)
+  .refine((value) => !hasForbiddenNameCharacter(value), {
+    message: FORBIDDEN_NAME_CHARACTER_MESSAGE,
+  });
 const attachmentBase64 = z.string().min(1).max(ADDIN_ATTACHMENT_BASE64_MAX_LENGTH);
 
 const emailAttachmentItemSchema = z.discriminatedUnion('kind', [
@@ -256,30 +225,34 @@ const emailAttachmentItemSchema = z.discriminatedUnion('kind', [
  * verschiedene Herkünfte behaupten — und die Rückfrage vor dem Öffnen läse eine
  * davon vor.
  *
- * **Keine Todo-Kennung.** Nicht hier, nicht im Eintrag, nirgends an dieser Tür.
- * Was dieser Rumpf trägt, hängt an dem Todo, das **dieselbe Anfrage** anlegt,
- * und an keinem anderen (A-A-82, E-108).
+ * **Keine Todo-Kennung im Rumpf.** Nicht hier und nicht im Eintrag. Welches
+ * Todo die Anhänge bekommt, bestimmt allein die Route, die diesen Umschlag
+ * liest: `POST /addin/todos` das Todo, das dieselbe Anfrage anlegt;
+ * `POST /addin/todos/{todoId}/mails` das Todo aus dem **Pfad**, und auch das
+ * nur bei gleicher gültiger Call-Nummer (A-10.11 bis A-10.13, E-134 Punkt 3).
  */
 export const emailAttachmentsSchema = z.object({
   sender: z.string().max(ADDIN_ATTACHMENT_SENDER_MAX_LENGTH).nullable().default(null),
   items: z.array(emailAttachmentItemSchema).max(ADDIN_ATTACHMENTS_MAX).default([]),
 });
 
+// Every cap here and on `note`, `tagIds`, `tagNames` is a domain name, never a number: the archive
+// import and the task pane read the same values (T-398b, measured by `proof:addin`).
 export const mailMetadataSchema = z.object({
-  identity: z.string().min(1).max(4096),
-  subject: z.string().max(4096),
-  sender: z.string().max(2048),
+  identity: z.string().min(1).max(MAIL_IDENTITY_MAX_LENGTH),
+  subject: z.string().max(MAIL_SUBJECT_MAX_LENGTH),
+  sender: z.string().max(MAIL_SENDER_MAX_LENGTH),
   receivedAt: z.string().datetime({ offset: true }).nullable(),
-  internetMessageId: z.string().max(2048).nullable(),
+  internetMessageId: z.string().max(MAIL_MESSAGE_ID_MAX_LENGTH).nullable(),
   outlookLink: attachmentUrlSchema.nullable(),
-  excerpt: z.string().max(4000).nullable(),
+  excerpt: z.string().max(MAIL_EXCERPT_MAX_LENGTH).nullable(),
 }).strict();
 
 export const appendMailSchema = z.object({
   requestId: id,
   callNumber: z.string().min(1).max(ADDIN_CALL_NUMBER_MAX_LENGTH),
   mail: mailMetadataSchema,
-  note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
+  note: z.string().max(MAIL_NOTE_MAX_LENGTH).default(''),
   attachments: emailAttachmentsSchema.nullable().default(null),
 }).strict();
 
@@ -342,12 +315,26 @@ export const createTodoSchema = z.object({
   title: titleSchema,
   requestId: id.optional(),
   mail: mailMetadataSchema.optional(),
-  mode: z.enum(['auto', 'new']).default('new'),
+  /**
+   * Diese Tür legt an — **mehr kennt sie nicht** (E-134 Punkt 2, T-409b-2).
+   *
+   * Bis T-398c stand hier `['auto', 'new']`. `auto` suchte im Dienst selbst
+   * nach einem Todo mit derselben Call-Nummer und hängte die E-Mail samt ihren
+   * Dateien dort an — **ohne Auswahl des Benutzers**, an einer Aufgabe, deren
+   * Nummer bloß im Text einer fremden Mail stand. Sein einziger Aufrufer war
+   * der abgelöste Schnellbefehl (A-10.17). Wer eine vorhandene Aufgabe meint,
+   * benennt sie im Pfad von `POST /addin/todos/{todoId}/mails`, nachdem er sie
+   * gesehen hat (A-10.11, A-10.16).
+   *
+   * Das Feld bleibt mit einem einzigen Wert stehen, weil die Beschreibung es
+   * führt und ein Aufrufer es weiterhin mitschicken darf.
+   */
+  mode: z.enum(['new']).default('new'),
   dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().default(null),
   estimateMinutes: z.number().int().min(1).max(525600).nullable().default(null),
   callNumber: z.string().max(ADDIN_CALL_NUMBER_MAX_LENGTH).nullable().default(null),
   statusId: id.nullable().default(null),
-  tagIds: z.array(id).max(ADDIN_TAG_IDS_MAX).default([]),
+  tagIds: z.array(id).max(TODO_TAG_IDS_MAX).default([]),
   /**
    * Tags über ihren **Namen** statt über eine Kennung (T-058, T-061).
    *
@@ -384,7 +371,7 @@ export const createTodoSchema = z.object({
    * warum die Zeichenprüfung **hier** stehen muss: `checkTagNames` prüft die
    * Gleichheit von Namen, nicht ihre Unbedenklichkeit in einer Anzeige.
    */
-  tagNames: z.array(nameSchema).max(ADDIN_TAG_NAMES_MAX).default([]),
+  tagNames: z.array(nameSchema).max(TODO_TAG_NAMES_MAX).default([]),
   /**
    * Der interne Vermerk — **bewusst ohne die Zeichenprüfung von oben**
    * (T-114 Punkt 4).
@@ -406,7 +393,7 @@ export const createTodoSchema = z.object({
    * zulässige Feldquelle. Der Titel ist eine — das ist der Unterschied, der
    * die Prüfung dort nötig macht und hier nicht.
    */
-  note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
+  note: z.string().max(MAIL_NOTE_MAX_LENGTH).default(''),
   /**
    * Die **Frist** (A-19.21, E-074 Punkt 3 und 4, T-149).
    *
@@ -434,7 +421,7 @@ export const createTodoSchema = z.object({
    * An der Haupttür stehen zwei Schemata nebeneinander: `createSchema` faßt
    * „fehlt" und `null` zusammen, `updateSchema` hält sie auseinander, weil
    * `null` dort **entfernen** heißt (A-19.3). Diese Tür kennt das Ändern
-   * nicht — sie legt an und bucht, mehr nicht. Es gibt hier also nur zwei
+   * nicht — sie legt an, mehr nicht. Es gibt hier also nur zwei
    * Zustände, und `.default(null)` schreibt das einmal hin, statt es an der
    * Aufrufstelle mit `?? null` nachzuholen. Derselbe Handgriff wie bei
    * `callNumber` und `statusId` darüber.
@@ -455,10 +442,9 @@ export const createTodoSchema = z.object({
    * ein Feld mit einer Formprüfung, und der Anhang ist eine ganze Datei mit
    * eigener Herkunft, eigenem Deckel und eigener Rückfrage.
    *
-   * **Was auch mit ihm nicht möglich ist: an ein vorhandenes Todo anhängen.**
-   * Diese Tür führt kein Feld, das ein Todo benennt, und die Fähigkeit
-   * dahinter (`AddinDeps.emailAttachments`) hat keinen Parameter vom Typ
-   * `TodoId` — A-A-82 steht damit im Typ und nicht in diesem Satz.
+   * **Und was mit ihm an dieser Tür nicht möglich ist: ein vorhandenes Todo
+   * treffen.** Sie führt kein Feld, das eines benennt; das Ergänzen läuft über
+   * `POST /addin/todos/{todoId}/mails` und dort über den Pfad (A-10.11).
    */
   dueDate: dueDateSchema.default(null),
   /**
@@ -468,11 +454,13 @@ export const createTodoSchema = z.object({
    * Warum sie im Rumpf des Anlegens fahren und nicht in einer zweiten Anfrage
    * ---------------------------------------------------------------------------
    *
-   * Weil eine zweite Anfrage eine Todo-Kennung tragen müßte. Genau das ist die
-   * Tür, die A-A-82 zuhält: „Es gibt keinen Aufruf, der eine Todo-Kennung
-   * entgegennimmt und einen Anhang erzeugt." Anhänge entstehen ausschließlich
-   * in **derselben** Handlung, die das Todo entstehen läßt — und deshalb an
-   * genau dieser Stelle, im Rumpf von `POST /addin/todos`.
+   * Weil das Anlegen eines Todos und die Übernahme seiner Anhänge **eine**
+   * Handlung sind: Scheitert eines von beidem, steht nichts halb da. Eine
+   * zweite Anfrage nach dem Anlegen könnte ausbleiben, und der Benutzer stünde
+   * vor einem Todo ohne die Dateien, die er gerade eingesammelt hat.
+   *
+   * An ein **vorhandenes** Todo hängt diese Tür nichts; dafür gibt es die eine
+   * enge Zuordnung `POST /addin/todos/{todoId}/mails` (A-10.11, A-10.12).
    *
    * Ein `null` und eine leere Liste sind hier dasselbe wie „ohne Anhänge"; der
    * Anlegevorgang selbst ändert sich dadurch in keiner Weise.
@@ -500,91 +488,9 @@ export const createTodoSchema = z.object({
   attachments: emailAttachmentsSchema.nullable().default(null),
 });
 
-/**
- * Die **Leistung** einer Buchung aus dem Aufgabenbereich (A-7.3, A-7.4).
- *
- * ---------------------------------------------------------------------------
- * Gleiche Zahl, andere Bedeutung — und deshalb ein eigener Name (T-134)
- * ---------------------------------------------------------------------------
- *
- * Bis T-134 stand hier `z.string().max(4000)` als nackte Zahl, zwei Bildschirme
- * unter `ADDIN_NOTE_MAX_LENGTH`, das denselben Wert trägt. Von außen sah das aus
- * wie eine Doppelung innerhalb einer Datei; nachgesehen ist es **keine**:
- *
- * | | `ADDIN_NOTE_MAX_LENGTH` | diese Zahl |
- * |---|---|---|
- * | Feld | der interne Vermerk des Todos (A-7.1) | die Leistung der Buchung (A-7.3) |
- * | Herkunft des Textes | vorbelegt aus der E-Mail (B-12.3) | getippt im Aufgabenbereich |
- * | Weg nach draußen | keiner — nie im Export (A-7.2) | **in die Abrechnungsdatei** (A-7.4) |
- * | Grund für die Grenze | B-12.3 Punkt 3: kein Zitatverlauf | keiner, der aufgeschrieben wäre |
- *
- * Die beiden Zahlen zusammenzulegen hieße zu behaupten, ein übernommener
- * E-Mail-Kontext und eine abgerechnete Leistung seien dieselbe Sache und
- * änderten sich gemeinsam. Sie sind es nicht: Fiele die Grenze des Vermerks
- * morgen aus B-12.3-Gründen auf 2000, hätte das mit der Leistung nichts zu tun.
- * Gleiche Zahl ist nicht gleiche Bedeutung — deshalb steht sie hier mit eigenem
- * Namen und eigenem Grund, statt in einer gemeinsamen Konstante zu verschwinden.
- *
- * ---------------------------------------------------------------------------
- * Ihr wirklicher Namensvetter ist ein anderer — und er sagt etwas anderes
- * ---------------------------------------------------------------------------
- *
- * Dieselbe Spalte wird über die Hauptanwendung mit `textSchema` gefüllt
- * (`POST /time-entries`, `PATCH /time-entries/{id}`, der Stopp des Timers), und
- * `textSchema` nimmt **mehr** an als diese Zeile. Dieselbe Leistung geht also
- * über den einen Weg durch und über den anderen nicht — dieselbe Bauart wie der
- * Befund C-03, nur an einem Freitextfeld statt an einem Titel.
- *
- * Eine Sackgasse ist es heute nicht: Der Aufgabenbereich belegt dieses Feld
- * nicht vor (anders als den Vermerk), und er bearbeitet keine bestehende
- * Buchung — abgewiesen würde nur ein Text, den der Benutzer selbst getippt hat,
- * und das ist der zulässige Fall (B-4.3). Die Entscheidung, ob die Add-in-Tür
- * enger bleiben **soll** als die der Hauptanwendung, ist trotzdem eine
- * Entscheidung und keine Aufräumarbeit: Sie ändert eine Zusage der Schnittstelle
- * und gehört deshalb nach `decisions.md` und nicht in diese Zeile. T-134 meldet
- * sie als offene Frage und lässt den engeren Deckel bis dahin stehen — mit
- * diesem Grund an Ort und Stelle statt ohne einen.
- */
-export const ADDIN_BOOKING_NOTE_MAX_LENGTH = 4000;
-
-export const bookSchema = z.object({
-  startedAt: timestamp,
-  endedAt: timestamp,
-  /**
-   * Die Leistung. Sie geht in die Abrechnung (A-7.4) und ist deshalb hier —
-   * anders als der Vermerk — nicht das Feld, in das E-Mail-Text vorbelegt wird.
-   *
-   * Auch sie trägt die Zeichenprüfung der Namen **nicht**, und aus demselben
-   * Grund wie der Vermerk: Sie ist Freitext des Benutzers, kein Name. Sie
-   * stammt zudem als einziges Feld dieser Tür ausschließlich aus dem
-   * Eingabefeld des Aufgabenbereichs und nicht aus der E-Mail (T-114 Punkt 4).
-   *
-   * Warum ihr Deckel {@link ADDIN_BOOKING_NOTE_MAX_LENGTH} heißt und nicht
-   * {@link ADDIN_NOTE_MAX_LENGTH}, obwohl beide heute dieselbe Zahl tragen,
-   * steht an der Konstante.
-   */
-  note: z.string().max(ADDIN_BOOKING_NOTE_MAX_LENGTH).default(''),
-});
-
-/*
- * Hier stand bis T-038 `reopenIfDone: z.boolean().default(false)`.
- *
- * Seit T-038 hebt eine Buchung „Erledigt" automatisch auf (A-2.5); es gibt
- * nichts mehr zu wählen. Das Feld ist deshalb **ersatzlos** weg und steht
- * bewusst nicht als „wird ignoriert" im Schema: Ein Feld, das man schicken
- * darf und das nichts tut, ist eine Zusage, die niemand einlöst.
- *
- * Ein Aufrufer, der es weiterhin mitschickt, bekommt **kein** 422. Zod wirft
- * unbekannte Schlüssel still weg, und das ist hier die richtige Reihenfolge:
- * Ein `reopenIfDone: false` von einem älteren Aufrufer soll die Aufhebung
- * nicht verhindern — es kann sie nicht verhindern —, und ein 422 an dieser
- * Stelle würde eine Buchung scheitern lassen, die fachlich vollständig ist.
- * Was wirklich geschehen ist, sagt die Antwort (`doneCleared`, `poolMovement`)
- * und nicht die Anfrage.
- */
+// The add-in booking door (`bookSchema`) fell with E-120: A-10.12 and A-10.16 leave no time booking in the add-in.
 
 export type CreateTodoBody = z.infer<typeof createTodoSchema>;
-export type BookBody = z.infer<typeof bookSchema>;
 
 /**
  * Die Rumpfschemata dieser Tür, nach `operationId` der OpenAPI-Beschreibung
@@ -633,7 +539,6 @@ export type BookBody = z.infer<typeof bookSchema>;
 export const REQUEST_SCHEMAS = Object.freeze({
   createAddinTodo: createTodoSchema,
   appendAddinMail: appendMailSchema,
-  createAddinTimeEntry: bookSchema,
 });
 
 export interface FieldIssue {

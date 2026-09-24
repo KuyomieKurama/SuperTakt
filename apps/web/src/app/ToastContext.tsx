@@ -12,6 +12,7 @@ import {
 import { Icon, type IconName } from "../shared/ui/Icon";
 import { Button, IconButton } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
+import { labels } from "../lib/labels";
 
 /**
  * Takt — Rückmeldung nach einer Handlung.
@@ -46,7 +47,14 @@ export interface ToastInput {
   readonly title: string;
   /** Zweite Zeile. Sagt, was jetzt anders ist. */
   readonly body?: string;
+  /** `body` is the service's own message and stays German (A-28.2, E-123 point 5). */
+  readonly bodyFromService?: boolean;
   readonly action?: ToastAction;
+  /**
+   * A newer toast with the same key replaces the older one, so repeated actions of one kind
+   * (reordering, welle-18-fluss.md 3.3) never stack.
+   */
+  readonly replaceKey?: string;
 }
 
 interface Toast extends ToastInput {
@@ -64,7 +72,8 @@ export interface ToastApi {
   readonly show: (toast: ToastInput) => void;
   /** Kurzform für den häufigsten Fall. */
   readonly success: (title: string, body?: string) => void;
-  readonly failure: (title: string, body?: string) => void;
+  /** `bodyFromService`: the body is `errorMessage(cause)` of a service error (`isServiceError`). */
+  readonly failure: (title: string, body?: string, bodyFromService?: boolean) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -72,7 +81,7 @@ const ToastContext = createContext<ToastApi | null>(null);
 export function useToasts(): ToastApi {
   const api = useContext(ToastContext);
   if (api === null) {
-    throw new Error("useToasts steht nur innerhalb von ToastProvider zur Verfügung.");
+    throw new Error("useToasts is only available inside ToastProvider.");
   }
   return api;
 }
@@ -180,14 +189,20 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
 
   const show = useCallback((input: ToastInput) => {
     const id = nextId.current++;
-    setToasts((previous) => [...evict(previous), { ...input, id }]);
+    setToasts((previous) => {
+      const others = input.replaceKey === undefined
+        ? previous
+        : previous.filter((toast) => toast.replaceKey !== input.replaceKey);
+      return [...evict(others), { ...input, id }];
+    });
   }, []);
 
   const api = useMemo<ToastApi>(
     () => ({
       show,
       success: (title, body) => show(body === undefined ? { tone: "success", title } : { tone: "success", title, body }),
-      failure: (title, body) => show(body === undefined ? { tone: "danger", title } : { tone: "danger", title, body }),
+      failure: (title, body, bodyFromService = false) =>
+        show(body === undefined ? { tone: "danger", title } : { tone: "danger", title, body, bodyFromService }),
     }),
     [show],
   );
@@ -261,7 +276,11 @@ function ToastItem({
       </span>
       <div className="grow">
         <p className="toast__title">{toast.title}</p>
-        {toast.body === undefined ? null : <p className="toast__body">{toast.body}</p>}
+        {toast.body === undefined ? null : (
+          <p className="toast__body" lang={toast.bodyFromService === true ? "de" : undefined}>
+            {toast.body}
+          </p>
+        )}
         {toast.action === undefined ? null : (
           <div className="toast__action">
             <Button
@@ -278,7 +297,7 @@ function ToastItem({
           </div>
         )}
       </div>
-      <IconButton label="Meldung schließen" icon="x" size="sm" onClick={() => onDismiss(id)} />
+      <IconButton label={labels().dismissMessage} icon="x" size="sm" onClick={() => onDismiss(id)} />
     </li>
   );
 }

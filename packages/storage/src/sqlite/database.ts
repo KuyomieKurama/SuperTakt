@@ -203,6 +203,17 @@ function errorCodeOf(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
+/** Name of the SQL function registered on every connection that applies {@link foldForSearch}. */
+export const SEARCH_FOLD_FUNCTION = 'takt_fold';
+
+/**
+ * Case- and form-insensitive key for substring search, beyond ASCII ("Ärger" finds "ärger").
+ * NFC first, so a decomposed umlaut from pasted text matches a composed one.
+ */
+export function foldForSearch(value: string): string {
+  return value.normalize('NFC').toLocaleLowerCase('de');
+}
+
 /**
  * Öffnet eine Verbindung und setzt die Einstellungen.
  *
@@ -215,6 +226,10 @@ export function openConnection(location: string): SqlConnection {
   for (const pragma of CONNECTION_PRAGMAS) {
     db.exec(pragma);
   }
+  // SQLite's LIKE and lower() fold ASCII only; searches call this instead (E-132 point 2).
+  db.function(SEARCH_FOLD_FUNCTION, { deterministic: true, directOnly: true }, (value) =>
+    typeof value === 'string' ? foldForSearch(value) : null,
+  );
   // Erst hier und nicht vorher: `journal_mode = WAL` legt `-wal` und `-shm`
   // überhaupt erst an. Dieser Durchgang holt eine Datei ein, die aus einer
   // früheren Fassung mit `0644` daliegt. Damit **künftige** Nachbardateien gar

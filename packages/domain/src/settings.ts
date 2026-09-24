@@ -13,6 +13,13 @@ export type Theme = 'system' | 'light' | 'dark';
 export { DESIGN_THEMES } from './design-themes.generated.ts';
 export type DesignTheme = (typeof DESIGN_THEMES)[number];
 export type Density = 'comfortable' | 'compact';
+/** Stärke der nicht essenziellen Bewegungen in der Oberfläche. */
+export const MOTION_INTENSITIES = ['reduced', 'subtle', 'expressive'] as const;
+export type MotionIntensity = (typeof MOTION_INTENSITIES)[number];
+
+/** Language of the main interface (A-28.2). The add-in and service messages stay German. */
+export const UI_LANGUAGES = ['de', 'en'] as const;
+export type UiLanguage = (typeof UI_LANGUAGES)[number];
 
 /** Das Add-in-Token liegt außerhalb der Datenbank in einer eigenen Datei. */
 export interface AppSettings {
@@ -29,6 +36,7 @@ export interface AppSettings {
   readonly theme: Theme;
   readonly designTheme: DesignTheme;
   readonly density: Density;
+  readonly motionIntensity: MotionIntensity;
   readonly promptOnTimerStop: boolean;
   readonly idleDetectionEnabled: boolean;
   readonly idleKeepTimerRunning: boolean;
@@ -39,6 +47,9 @@ export interface AppSettings {
    * Dieser Wert darf niemals in eine URL eingehen.
    */
   readonly skippedVersion: string | null;
+  /** `false`: no version request and no outgoing connection, not even at start (A-28.1). */
+  readonly versionCheckEnabled: boolean;
+  readonly uiLanguage: UiLanguage;
   readonly updatedAt: Timestamp;
 }
 
@@ -51,12 +62,15 @@ export interface AppSettingsUpdate {
   readonly theme?: Theme;
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
+  readonly motionIntensity?: MotionIntensity;
   readonly promptOnTimerStop?: boolean;
   readonly idleDetectionEnabled?: boolean;
   readonly idleKeepTimerRunning?: boolean;
   readonly idleThresholdMinutes?: number;
   /** `null` setzt „nichts übersprungen" zurück. Nicht gesetzt heißt unverändert. */
   readonly skippedVersion?: string | null;
+  readonly versionCheckEnabled?: boolean;
+  readonly uiLanguage?: UiLanguage;
   readonly now: Timestamp;
 }
 

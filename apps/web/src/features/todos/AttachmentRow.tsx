@@ -1,7 +1,8 @@
 import type { Id } from "../../api/types";
 import { getAttachmentImage, type Attachment, type AttachmentKind } from "./api";
 import { useAsync } from "../../app/useAsync";
-import { ATTACHMENT_KIND_LABEL, attachmentLabel } from "./attachmentLabel";
+import { attachmentKindLabel, attachmentLabel } from "./attachmentLabel";
+import { todoTexts } from "./texts";
 import { cx } from "../../lib/cx";
 import { foreignText, quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
@@ -86,9 +87,9 @@ function AttachmentPreview({ todoId, attachment }: { readonly todoId: Id; readon
       Fehler des Browsers.
     */
     return (
-      <span className="attachment__preview attachment__preview--broken" role="img" aria-label={`Vorschaubild nicht lesbar: ${foreignText(label)}`}>
+      <span className="attachment__preview attachment__preview--broken" role="img" aria-label={todoTexts().previewUnreadable(foreignText(label))}>
         <Icon name="alert-triangle" size={16} />
-        <span className="attachment__preview-note">Nicht mehr lesbar</span>
+        <span className="attachment__preview-note">{todoTexts().noLongerReadable}</span>
       </span>
     );
   }
@@ -102,7 +103,7 @@ function AttachmentPreview({ todoId, attachment }: { readonly todoId: Id; readon
           Der Titel des Anhangs ist fremder Text und geht durch `foreignText` —
           `alt` ist ein Textattribut und wird vorgelesen.
         */
-        alt={`Vorschaubild: ${foreignText(label)}`}
+        alt={todoTexts().preview(foreignText(label))}
       />
     </span>
   );
@@ -152,10 +153,11 @@ function AttachmentOriginMarks({ attachment }: { readonly attachment: Attachment
           <Icon name="inbox" size={12} />
         </span>
         {attachment.originSender === null ? (
-          <span>Aus einer E-Mail</span>
+          <span>{todoTexts().fromEmail}</span>
         ) : (
           <span>
-            Aus einer E-Mail von <Foreign value={attachment.originSender} />
+            {todoTexts().fromEmailBy}
+            <Foreign value={attachment.originSender} />
           </span>
         )}
       </span>
@@ -194,7 +196,7 @@ function RebuiltMark() {
       <span className="attachment__mark-icon" aria-hidden>
         <Icon name="alert-triangle" size={12} />
       </span>
-      (nachgebaut)
+      {todoTexts().rebuilt}
     </span>
   );
 }
@@ -213,7 +215,8 @@ interface AttachmentRowProps {
 
 export function AttachmentRow({ todoId, attachment, onOpen, onRemove, failure, busy }: AttachmentRowProps) {
   const label = attachmentLabel(attachment);
-  const kind = ATTACHMENT_KIND_LABEL[attachment.kind];
+  const kind = attachmentKindLabel(attachment.kind);
+  const text = todoTexts();
   const openable = attachment.kind !== "image";
 
   return (
@@ -246,9 +249,7 @@ export function AttachmentRow({ todoId, attachment, onOpen, onRemove, failure, b
               nur zu sehen ist, gibt es für eine Vorlesehilfe nicht — und sie
               liest den Namen des Knopfes, nicht die Zeile darum.
             */
-            aria-label={`${kind} öffnen: ${quotedName(label)}${
-              attachment.rebuilt ? " (nachgebaut)" : ""
-            }`}
+            aria-label={text.openAttachment(kind, quotedName(label), attachment.rebuilt)}
           >
             <ForeignName className="attachment__label" value={label} />
             {attachment.rebuilt ? <RebuiltMark /> : null}
@@ -299,7 +300,7 @@ export function AttachmentRow({ todoId, attachment, onOpen, onRemove, failure, b
       </span>
 
       <IconButton
-        label={`${kind} entfernen: ${quotedName(label)}`}
+        label={text.removeAttachment(kind, quotedName(label))}
         icon="trash"
         size="sm"
         className="attachment__remove"

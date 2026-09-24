@@ -72,11 +72,12 @@
  *    Größen-, Zeit-, Nachweis- und Rechteprüfung laufen vollständig. Der
  *    security-checker hat B-2.10 auf demselben Weg gemessen; dieser Lauf ist
  *    die Gegenprobe zu genau jener Messung.
- * 2. Der Dienst kennt **keine** Angabe für seinen Port (B-1.6 Punkt 1), er
- *    lauscht immer auf 17843. Ein Prüfpfad, der einen Prozess startet, ist
- *    deshalb nicht zweimal gleichzeitig fahrbar und kollidiert mit einer
- *    laufenden Anwendung und mit den End-zu-End-Tests. Der Weg über die echte
- *    Verbindung ist in `proof-addin-wiring.mjs` gebaut und bleibt dort.
+ * 2. No socket, no port collision: this run binds nothing, so it can run next to
+ *    the app, the e2e tests and any other proof run. The shipped service has no
+ *    port setting (B-1.6 point 1); proof runs that start a process take
+ *    TAKT_PROOF_PORT (E-128). `PORT` below only feeds the Host check and stays
+ *    the product value on purpose. The real-socket path lives in
+ *    `proof-addin-wiring.mjs`.
  *
  * Was der Transport zu dieser Eigenschaft beiträgt, ist nichts: Die
  * Entscheidung fällt auf `c.req.path`, und den berechnet Hono aus dem `Request`
@@ -92,6 +93,7 @@ import ts from 'typescript';
 import { paketQuelle } from './source-resolve.mjs';
 
 import { compose } from '../src/composition.ts';
+import { createLogger } from '../src/logger.ts';
 import {
   ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES,
   ADDIN_ATTACHMENT_MAX_BODY_BYTES,
@@ -548,7 +550,7 @@ try {
     check('das Todo ist noch da', survives.status === 200, `Status ${survives.status}`);
   }
 
-  section('3  Die fünf Routen, die das Add-in wirklich braucht, bleiben offen');
+  section('3  Die vier Routen, die das Add-in wirklich braucht, bleiben offen');
   {
     const context = await call('/addin/context', { token: addinToken });
     check(
@@ -614,11 +616,13 @@ try {
         method: 'POST', token: addinToken, body: largeMail });
       check('Wiederholung der großen Mail-Ergänzung erzeugt keine Dublette',
         repeated.status === 200 && repeated.body?.data?.outcome === 'already_present', repeated.text.slice(0, 240));
-      for (const path of [`/addin/todos/${addinTodoId}/time-entries`, `/addin/todos/${addinTodoId}/mails/extra`]) {
+      for (const path of [`/addin/todos/${addinTodoId}/mails/extra`]) {
         const limited = await call(path, { method: 'POST', token: addinToken, body: largeMail });
         check(`Nachbarroute ${path} behält die allgemeine Rumpfgrenze`, limited.status === 413, limited.text.slice(0, 240));
       }
 
+      // E-120: the add-in no longer books. A valid add-in token must get 404,
+      // not 401 — only then does the answer speak about the route itself.
       const booked = await call(`/addin/todos/${addinTodoId}/time-entries`, {
         method: 'POST',
         token: addinToken,
@@ -629,8 +633,8 @@ try {
         },
       });
       check(
-        'POST /addin/todos/{id}/time-entries bucht weiterhin Zeit',
-        booked.status === 201,
+        'POST /addin/todos/{id}/time-entries gibt es nicht mehr (E-120) — 404 mit gültigem Add-in-Token',
+        booked.status === 404,
         `Status ${booked.status}: ${booked.text.slice(0, 240)}`,
       );
     } else {
@@ -685,14 +689,9 @@ try {
   const addinSurface = own.filter((r) => r.path.startsWith(ADDIN_PATH_PREFIX));
   const shared = own.filter((r) => !r.path.startsWith(ADDIN_PATH_PREFIX));
 
-  // **Vier**, nicht fünf, und die Zahl ist die Zusage und nicht ihre
-  // Buchhaltung. Bis T-247 stand hier eine 5: PR #16 hatte
-  // `POST /addin/todos/{todoId}/attachments` neben die vier gestellt, damit
-  // der Aufgabenbereich den Deep-Link auf die geöffnete Outlook-Nachricht
-  // anhängen konnte. Das widersprach dem Wortlaut von A-19.19 („Über das
-  // Outlook-Add-in entstehen **keine** Anhänge"), und E-100 hat den
-  // Widerspruch zugunsten der Anforderung entschieden: Die Route ist
-  // gefallen, A-19.19 steht unverändert.
+  // Four routes: context, todo-matches, todos, todos/{id}/mails. The count is
+  // the promise, not bookkeeping. The attachment route fell with E-100
+  // (T-247), the booking route with E-120 (T-389).
   //
   // Wer diese Zahl anhebt, öffnet dem **dauerhaften** Token eine weitere
   // Tür. Dafür braucht es eine Entscheidung, nicht eine Codezeile — und
@@ -716,8 +715,8 @@ try {
   // eine fünfte Tür auf einem Pfad aufgeht, den `ADDIN_FLAECHE` gar nicht
   // kennt.
   check(
-    `die Add-in-Fläche sind genau fünf Routen (${addinSurface.length})`,
-    addinSurface.length === 5,
+    `die Add-in-Fläche sind genau vier Routen (${addinSurface.length})`,
+    addinSurface.length === 4,
     addinSurface.map((r) => `${r.method} ${r.path}`).join(', '),
   );
   check(
@@ -849,7 +848,7 @@ try {
       [`${API_BASE_PATH}/healthy`, 'session'],
       [`${API_BASE_PATH}/addin`, 'any'],
       [`${API_BASE_PATH}/addin/context`, 'any'],
-      [`${API_BASE_PATH}/addin/todos/x/time-entries`, 'any'],
+      [`${API_BASE_PATH}/addin/todos/x/mails`, 'any'],
       [`${API_BASE_PATH}/addintern`, 'session'],
       [`${API_BASE_PATH}/addin-extra/context`, 'session'],
       // Roh, also so, wie der Adaptor-Server ihn durchreicht, wenn der
@@ -933,6 +932,74 @@ try {
       base64(knappDarueber) < ADDIN_ATTACHMENT_MAX_BODY_BYTES,
       `base64(${knappDarueber}) = ${base64(knappDarueber)} >= ${ADDIN_ATTACHMENT_MAX_BODY_BYTES}`,
     );
+  }
+
+  section('9  app.onError logs kind and code, never the message (T-394, T-388, A-A-58)');
+  {
+    /*
+     * A second service with a capturing logger and two probe routes that throw. The first
+     * throws what Node really throws on a broken body: `JSON.parse` quotes its input. The
+     * second is an own throw carrying a key in `code` and the marker in message and cause.
+     * Measured is the real `app.onError` of `src/app.ts`, through the full middleware chain.
+     */
+    // Short on purpose: V8 quotes at most ten characters of a broken JSON body.
+    const MARKE = 'MuellerQ7';
+    const lines = [];
+    const probeDir = await mkdtemp(join(tmpdir(), 'takt-proof-onerror-'));
+    const probe = compose({
+      port: PORT,
+      store: memoryStore(),
+      sessionSecret,
+      windowsUser: 't.beispiel',
+      databaseLocation: join(probeDir, 'takt.db'),
+      appDataDir: probeDir,
+      logger: createLogger((line) => lines.push(line)),
+    });
+    try {
+      await probe.database.migrations.migrateToLatest();
+      probe.app.post(`${API_BASE_PATH}/__probe/json`, async (c) => JSON.parse(await c.req.text()));
+      probe.app.post(`${API_BASE_PATH}/__probe/own`, () => {
+        throw Object.assign(new Error(`probe ${MARKE}`, { cause: MARKE }), { code: 'PROBE_CODE' });
+      });
+
+      let quoted = false;
+      try {
+        JSON.parse(MARKE);
+      } catch (error) {
+        quoted = String(error?.message).includes(MARKE);
+      }
+      check('Gegenprobe: JSON.parse quotes the marker in its message, so the probe has teeth', quoted);
+
+      const send = async (path) => {
+        const response = await probe.app.fetch(
+          new Request(`http://${HOST}${API_BASE_PATH}${path}`, {
+            method: 'POST',
+            headers: { Host: HOST, 'X-Takt-Token': sessionSecret, 'Content-Type': 'application/json' },
+            body: MARKE,
+          }),
+        );
+        return { status: response.status, text: await response.text() };
+      };
+      const parsed = await send('/__probe/json');
+      const own = await send('/__probe/own');
+
+      check('both probes answer 500', parsed.status === 500 && own.status === 500, `${parsed.status}, ${own.status}`);
+      check('no response carries the marker', !parsed.text.includes(MARKE) && !own.text.includes(MARKE));
+
+      const reasons = lines.map((line) => JSON.parse(line).reason).filter((reason) => reason !== undefined);
+      check(
+        'lower bound (A-A-58): both throws reached the log as a reason line',
+        reasons.includes('internal_error kind=syntaxerror') && reasons.includes('internal_error kind=error code=probe_code'),
+        reasons.join(' | ') || `${lines.length} lines, no reason`,
+      );
+      check(
+        `none of ${lines.length} log lines carries the marker (no message, stack or cause)`,
+        lines.length > 0 && lines.every((line) => !line.includes(MARKE)),
+      );
+    } finally {
+      probe.database.close();
+      await rm(probeDir, { recursive: true, force: true });
+    }
   }
 
 } finally {

@@ -1080,9 +1080,21 @@ derselbe, der Fehler entfällt.
 | `404` | Nicht vorhanden |
 | `413` | Anfragerumpf über 1 MB |
 | `415` | Kein `application/json` auf einer zustandsändernden Route. Geprüft vor dem Lesen des Rumpfs |
-| `409` | Widerspruch zum Zustand: `timer_already_running`, `time_entry_locked`, `tag_folder_cycle`, `tag_folder_not_empty`, `tag_in_use`, `export_status_not_settable`, `export_nothing_to_do`, `status_in_use` |
-| `422` | Wohlgeformt, aber fachlich unzulässig: `validation_error`, `export_source_forbidden`, `export_directory_missing` |
-| `500` | Unerwartet. Immer derselbe Text, nie Innenleben |
+| `409` | Conflicts with the current state: `timer_already_running`, `timer_stop_end_required`, `time_entry_locked`, `tag_folder_cycle`, `tag_folder_not_empty`, `tag_in_use`, `export_status_not_settable`, `time_entry_no_export`, `export_nothing_to_do`, `status_in_use` |
+| `422` | Well-formed but not allowed: `validation_error`, `time_entry_too_long`, `export_source_forbidden`, `export_directory_missing` |
+| `500` | Unexpected. Always the same text, never internals. The log line carries only the class name and a `code` of the form `^[A-Z0-9_]{1,32}$` through `reason` — never message, stack or cause (T-394, T-388) |
+
+**The 24-hour limit (A-28.6, E-124 point 3).** `MAX_TIME_ENTRY_SECONDS` and
+`exceedsMaximumDuration` live in `packages/domain/src/time-entry.ts`. The SQLite adapter applies
+them at every write that creates or closes a booking: `timeEntries.create` and `update` (start or
+end changed) answer `time_entry_too_long`; `timer.stop` and a displacing `timer.start` answer
+`timer_stop_end_required`, so every stop path — direct stop, displacement, orphan resolution,
+`beginIdle` without keeping the timer — is covered below the use cases. `POST /timer/stop` and
+`POST /timer/orphaned/resolve` accept an optional `endedAt`. Two places check before the write
+instead: `beginIdle` rejects an active part over 24 hours (a rejection at the later return would
+leave no way out), and `resolveIdle` names the offending `allocations.<n>.seconds`. Not covered:
+`timer.separateIdle` at the return of an idle phase that was begun before this rule existed.
+Foreign imports skip and count such entries; the own archive keeps them and warns.
 
 **`400` gegen `422`:** `400` bedeutet, der Dienst konnte die Anfrage nicht lesen; `422`, er hat
 sie gelesen und für unzulässig befunden. Die Unterscheidung ist beim Add-in nützlich, weil sie
@@ -2218,7 +2230,7 @@ A-10.11–A-10.15 erlauben das Ergänzen vorhandener Todos über einen strikten 
 Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelten nun für
 **nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
 Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
-Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+Exportdaten. Die vier erlaubten Add-in-Routen (seit E-120 ohne Buchungsroute) werden weiter als feste Menge geprüft.
 Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
 konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
 
@@ -2234,10 +2246,82 @@ und das getrennte HTTPS-Ergebnis. Details: [Zertifikatseinrichtung](outlook-cert
 
 ### NoExport (A-26, Migration 0026)
 
-`todo.no_export` ist ein Boolean mit Standard 0 und CHECK (0, 1). Die
-Exportkandidatensicht filtert es aus; `recordRun` prüft es beim Festschreiben erneut.
-Die Zeitbuchung bleibt unverändert. `/time-entries` schließt NoExport vor Sortierung,
-Zählung und Seitenauswahl aus. Aufgabenansicht und Zeiterfassung fragen bewusst mit
-`includeNoExport=true`; Buchungsübersicht und Export tun dies nicht.
-Datenarchiv 8 trägt die Spalte; Archive 1–7 ergänzen false. Das Flag ersetzt keine
-historischen Exportmarkierungen und verändert keine bereits erzeugte Datei.
+`todo.no_export` is a boolean with default 0 and CHECK (0, 1). The export candidate view filters
+it out; `recordRun` checks it again when the run is written. The booking itself stays unchanged.
+`/time-entries` excludes NoExport before sorting, counting and paging. The todo view and time
+tracking ask on purpose with `includeNoExport=true`; the booking overview and the export do not.
+Data archive 8 carries the column; archives 1–7 add false. The flag replaces no historical export
+mark and changes no file already written.
+
+"Not billed" (E-047) is refused for a booking of a NoExport todo with `409 time_entry_no_export`
+(A-26.3, E-133 point 5). The rule is `checkNotBilled` in `packages/domain/src/export-status.ts`:
+the booking is already outside every export, and the mark would keep it locked after NoExport is
+switched off. The backward migration 0026 names its consequence in its header: every open
+booking of a former NoExport todo becomes exportable again.
+
+### Data archive import checks (T-411a)
+
+- Display names are checked on the stored value, not a trimmed copy (N-2, E-136 point 2): edge
+  whitespace or a BOM is rejected, and the message names `table.column`, never the value.
+- The archive must hold exactly one `app_setting` row with `id = 1` (N-6); otherwise nothing is
+  written, because every later `GET /settings` would fail.
+- `todo_mail.metadata` passes `isMailEntry` (domain) and must name its own row;
+  `addin_mail_receipt.response` must name the todo of its row and a known outcome. The storage
+  adapter reads stored mail entries through the same guard instead of a type assertion.
+- A-28.1 keeps the archived version check switch, but when the archive turns off a check that
+  was on here, the import summary says so (R-38).
+
+## Wave 18b additions to the local service (T-397)
+
+### Exit codes per start cause (A-28.10)
+
+`EXIT_CODES` in `apps/local-api/src/main.ts`, values after `sysexits.h`. The shell
+(`apps/desktop/src-tauri/src/sidecar.rs`) maps the same numbers to a cause and self-help (A-28.5):
+
+| Code | Cause | Log key |
+|---|---|---|
+| 78 | handover of the session: no start secret, or no usable Windows user name on stdin | `handshake_rejected reason=…` |
+| 73 | application data directory not set, or cannot be created | `appdata_missing reason=…`, `appdata_unusable [code=…]` |
+| 66 | the database could not be opened | key from `describeStoreOpenFailure` |
+| 65 | the migration failed | key from `bringDatabaseUpToDate` |
+| 74 | the API port is in use or cannot be bound | `port_in_use port=…` |
+
+78 and 74 keep their earlier meaning; 73, 66 and 65 were 78 before T-397.
+
+### The version check switch (A-28.1)
+
+The user's switch is the one stored value that may decide whether a request goes out. It enters
+the checker as a synchronous port (`enabled.isEnabled`), because the request body must not wait on
+anything but the request itself (`proof:release-safety` 6g). `run()` asks it before every
+request, `current()` before every answer; off means no request, no connection, `unknown`. A switch
+that throws counts as off for that tick and costs one log line. A missing settings row reads as
+on in both the port and `GET /settings` (E-132 point 4); only a stored 0 turns the check off. `proof:release-safety` pins the
+new key, the port literal and the adapter statement character by character.
+
+### Windows user without domain (A-28.4)
+
+`userNameWithoutDomain` in `packages/domain/src/export.ts` turns `DOMAIN\user` and
+`user@domain` into `user`. The service applies it at the handshake, so settings, export file and
+export log carry the same bare name, whether or not the shell already strips the domain.
+
+### Global search with origins (C-22, E-122 point 1)
+
+`GET /search` looks into title, call number and — through `TodoFilter.searchIncludesNote`, only
+here — the internal note. Each todo hit is the flat todo plus `origins`
+(`title` | `call_number` | `todo_note`, fixed order), decided in SQL by `TodoPort.matchOrigins`.
+No note text enters the answer. Service texts are filtered in SQL over all bookings
+(`TimeEntryFilter.noteContains`) instead of the 200 newest in memory. That filter ignores case
+beyond ASCII (E-132 point 2): SQLite's `LIKE` and `lower()` fold ASCII only, so every connection
+registers `takt_fold` (`foldForSearch` in `packages/storage/src/sqlite/database.ts`, NFC plus
+`toLocaleLowerCase('de')`), and the adapter compares `takt_fold(note) LIKE <folded term>` before
+counting and paging. The function is deterministic and `directOnly`, so no trigger, view or
+archived schema can call it. Since T-411a the todo search — title, call number and internal note,
+in `TodoPort.search` and `matchOrigins` — folds the same way, before counting and paging
+(E-135 point 3), so both searches behave alike. The route stays a session
+route; the billing export does not read `todo_note` (`v_export_candidate` unchanged).
+
+### Task pane server (A-28.11, O-AR a)
+
+Port 17844 uses the same `headersTimeout`, `requestTimeout` and `connectionsCheckingInterval` as
+the API port and no longer serves `.map` files — the extension is not in the allow list, so a
+source map in the bundle folder answers 403.

@@ -1,4 +1,4 @@
-import { waitForPortFree } from './port-probe.mjs';
+import { proofPort, waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis, dass ein neuer Tagname beim Anlegen eines Todos **ein** Tag
  * ergibt und nicht zwei (T-058).
@@ -71,7 +71,7 @@ import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
-import { dienstEinstieg, migrationsVerzeichnis } from './source-resolve.mjs';
+import { migrationsVerzeichnis } from './source-resolve.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 /**
@@ -85,11 +85,11 @@ const { normalizeTagName, tagNameKey } = await import('@takt/domain');
 const { loadMigrations } = await import('@takt/storage');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
-const ENTRY = dienstEinstieg();
+/* The proof entry runs the same main() as src/index.ts, on TAKT_PROOF_PORT and without network (E-128). */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
 /* Über die Ausfuhrtabelle von @takt/storage, mit Untergrenze (T-249-1). */
 const MIGRATIONS = migrationsVerzeichnis({ mindestens: 12 });
-const PORT = 17843;
+const PORT = proofPort();
 
 /** Die Herkunft der Oberfläche im Entwicklungsbetrieb (config.ts). */
 const UI_ORIGIN = 'http://127.0.0.1:5173';

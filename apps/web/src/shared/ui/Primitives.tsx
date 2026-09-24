@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
 import { runAreaSurface } from "./ScreenBody";
+import { labels } from "../../lib/labels";
 
 /* Knopf                                                                */
 
@@ -381,7 +382,7 @@ export function InlineMessage({
            Der Wert ist ein **zugaenglicher Name** und damit vertraglich
            (E-076 Punkt 3) — gemessen kommt er in `tests/**` nicht vor, aber
            unit-tester und e2e-tester ziehen in der naechsten Welle nach. */
-        <IconButton label="Meldung schließen" icon="x" size="sm" onClick={onDismiss} />
+        <IconButton label={labels().dismissMessage} icon="x" size="sm" onClick={onDismiss} />
       ) : null}
     </div>
   );

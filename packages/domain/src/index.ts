@@ -29,6 +29,6 @@ export * from './version.ts';
 // Datei aendert.
 export type * from './todo.ts';
 export type * from './settings.ts';
-export { DESIGN_THEMES } from './settings.ts';
+export { DESIGN_THEMES, MOTION_INTENSITIES, UI_LANGUAGES } from './settings.ts';
 
 export * from './mail-entry.ts';

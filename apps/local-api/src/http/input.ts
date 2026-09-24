@@ -12,14 +12,16 @@ import {
   MAX_ATTACHMENT_TITLE_CHARACTERS,
   MAX_NAME_LENGTH,
   MAX_TITLE_CHARACTERS,
+  isExactTimestamp,
   type TaktFieldError,
 } from '@takt/domain';
 import { MAX_PAGE_SIZE } from '@takt/storage';
 
-/** Ein Zeitstempel in der einen Form, die das Schema annimmt. */
+/** A timestamp in the one form the schema accepts, and a real calendar instant (N-3). */
 export const timestampSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/, 'Erwartet wird YYYY-MM-DDTHH:MM:SSZ.');
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/, 'Erwartet wird YYYY-MM-DDTHH:MM:SSZ.')
+  .refine(isExactTimestamp, 'Diesen Zeitpunkt gibt es nicht.');
 
 /** Ein Kalendertag in Ortszeit. */
 export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Erwartet wird YYYY-MM-DD.');

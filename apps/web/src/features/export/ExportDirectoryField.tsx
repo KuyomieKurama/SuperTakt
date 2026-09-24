@@ -10,6 +10,7 @@ import type { ExportDirectoryState, ExportDirectoryTrait } from "../../api/types
 import { TextField } from "../../shared/ui/FormDialog";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, InlineMessage, type MessageTone } from "../../shared/ui/Primitives";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — die Wahl des Exportordners in S-09 (Befund S-04, B-5.1 bis B-5.3).
@@ -71,7 +72,7 @@ export function ExportDirectoryConcernList({
         <InlineMessage key={concern.kind} tone={CONCERN_TONE[concern.verdict]} title={concern.title}>
           <p>{concern.body}</p>
           <p className="dirconcerns__evidence">
-            <span className="dirconcerns__evidence-label">Gefunden im Pfad</span>
+            <span className="dirconcerns__evidence-label">{exportTexts().foundInPath}</span>
             <span className="mono">{concern.evidence}</span>
           </p>
         </InlineMessage>
@@ -82,11 +83,6 @@ export function ExportDirectoryConcernList({
 
 /* Was das Betriebssystem über den Ordner sagt (T-039)                  */
 
-interface TraitText {
-  readonly title: string;
-  readonly body: string;
-  readonly tone: "info" | "warning";
-}
 
 /**
  * Die vier belegbaren Befunde.
@@ -96,27 +92,11 @@ interface TraitText {
  * nennt ihren Beleg im Pfad; diese Liste sagt „ist" und beruft sich auf die
  * Auskunft des Betriebssystems (`%OneDrive%`, `%SystemRoot%`, `statfs`).
  */
-const TRAIT_TEXT: Readonly<Record<ExportDirectoryTrait, TraitText>> = {
-  unc: {
-    title: "Der Ordner ist eine Netzfreigabe",
-    body: "Der Pfad ist in UNC-Schreibweise geschrieben. Der Export schreibt dann über das Netz: Ist die Freigabe weg, schlägt der Lauf fehl — vollständig, ohne halbe Datei (A-8.8).",
-    tone: "info",
-  },
-  network: {
-    title: "Der Ordner liegt auf einem Netzdateisystem",
-    body: "Belegt über die Art des Dateisystems, nicht über den Namen. Dasselbe gilt wie bei einer Freigabe: Ohne Verbindung kein Lauf.",
-    tone: "info",
-  },
-  sync_folder: {
-    title: "Der Ordner gehört einem Synchronisierungsdienst",
-    body: "Sein Client meldet ihn selbst so — auch wenn der Ordner umbenannt wurde. Die Exportdatei enthält lesbare Kundennotizen (A-8.9); hier verlässt sie diesen Rechner, sobald sie geschrieben ist.",
-    tone: "warning",
-  },
-  system_dir: {
-    title: "Der Ordner ist ein Systemverzeichnis",
-    body: "So benennt das Betriebssystem ihn selbst, unabhängig davon, auf welchem Laufwerk Windows liegt. Dorthin gehört nichts, was SuperTakt schreibt.",
-    tone: "warning",
-  },
+const TRAIT_TONE: Readonly<Record<ExportDirectoryTrait, "info" | "warning">> = {
+  unc: "info",
+  network: "info",
+  sync_folder: "warning",
+  system_dir: "warning",
 };
 
 export interface ExportDirectoryTraitListProps {
@@ -151,15 +131,16 @@ export function ExportDirectoryTraitList({
   className,
 }: ExportDirectoryTraitListProps) {
   if (state === null || state === "not_set") return null;
+  const words = exportTexts();
 
   return (
     <div className={cx("dirtraits", className)}>
       {traits.map((trait) => {
-        const text = TRAIT_TEXT[trait];
+        const text = words.traits[trait];
         return (
-          <InlineMessage key={trait} tone={text.tone} title={text.title}>
+          <InlineMessage key={trait} tone={TRAIT_TONE[trait]} title={text.title}>
             <p>{text.body}</p>
-            <p className="dirtraits__source">Belegt vom Betriebssystem, nicht aus dem Pfad gelesen.</p>
+            <p className="dirtraits__source">{words.traitSource}</p>
           </InlineMessage>
         );
       })}
@@ -167,14 +148,13 @@ export function ExportDirectoryTraitList({
       <p className="dirtraits__limit">
         <Icon name="info" size={14} />
         <span>
-          {traits.length === 0
-            ? "Am eingestellten Ordner ist nichts belegt worden. Das ist keine Entwarnung, sondern eine Nichtaussage: "
-            : "Geprüft wurde außerdem: "}
-          Ein <strong>zugeordnetes Netzlaufwerk</strong> wie <span className="mono">Z:\</span>{" "}
-          erkennt SuperTakt nicht — die Auskunft dazu bekommt der Dienst vom Betriebssystem nicht.
-          {state === "unreachable"
-            ? " Und weil dieser Ordner gerade nicht antwortet, konnte auch das Dateisystem nicht befragt werden; ob er im Netz liegt, ist damit offen."
-            : ""}
+          {traits.length === 0 ? words.nothingProven : words.alsoChecked}
+          {words.mappedDriveBefore}
+          <strong>{words.mappedDriveStrong}</strong>
+          {words.mappedDriveMiddle}
+          <span className="mono">Z:\</span>
+          {words.mappedDriveAfter}
+          {state === "unreachable" ? words.unreachableOpen : ""}
         </span>
       </p>
     </div>
@@ -191,12 +171,14 @@ export function ExportDirectoryTraitList({
  * und nicht zweimal gelesen wird.
  */
 export function Base64Notice({ className }: { readonly className?: string }) {
+  const text = exportTexts();
   return (
     <p className={cx("base64note", className)}>
       <Icon name="lock" size={14} />
       <span>
-        Die Exportdatei enthält <strong>lesbare Kundennotizen</strong>. Base64 ist eine Kodierung,
-        keine Verschlüsselung — wer die Datei öffnen kann, kann sie lesen.
+        {text.base64Before}
+        <strong>{text.base64Strong}</strong>
+        {text.base64After}
       </span>
     </p>
   );
@@ -217,16 +199,6 @@ export function Base64Notice({ className }: { readonly className?: string }) {
  */
 const SHELL_ANSWER_GRACE_MS = 2_000;
 
-const DIRECTORY_STATE_TEXT: Readonly<Record<Exclude<ExportDirectoryState, "ok">, string>> = {
-  not_set: "Noch nicht gewählt. Ohne Exportordner ist kein Export möglich.",
-  missing: "Dieser Ordner ist nicht erreichbar. SuperTakt legt ihn nicht von sich aus an.",
-  not_writable: "Dieser Ordner ist da, aber SuperTakt darf nicht hineinschreiben.",
-  not_a_directory: "Dieser Pfad zeigt auf eine Datei, nicht auf einen Ordner.",
-  // T-039: nicht als abwesend belegt, sondern ohne Antwort. Der Satz nennt
-  // deshalb den anderen Handgriff.
-  unreachable:
-    "Dieser Ordner hat nicht innerhalb von drei Sekunden geantwortet. Das ist kein Beleg dafür, dass es ihn nicht gibt — bei einem Netzlaufwerk fehlt meist nur die Verbindung.",
-};
 
 export interface ExportDirectoryFieldProps {
   /** Der Pfad, wie er im Formular steht. Leer heißt: noch keiner. */
@@ -263,6 +235,7 @@ export function ExportDirectoryField({
   disabled = false,
 }: ExportDirectoryFieldProps) {
   const labelId = useId();
+  const text = exportTexts();
   const pathId = `${labelId}-path`;
   const hintId = `${labelId}-hint`;
 
@@ -305,9 +278,7 @@ export function ExportDirectoryField({
       if (!live) return;
       setShell((current) => {
         if (current !== null) return current;
-        setPickerFailure(
-          "Die Anwendungshülle hat auf die Frage nach dem Ordnerauswahldialog nicht geantwortet.",
-        );
+        setPickerFailure(exportTexts().shellNoAnswer);
         return false;
       });
     }, SHELL_ANSWER_GRACE_MS);
@@ -346,12 +317,12 @@ export function ExportDirectoryField({
         if (choice.outcome === "chosen") {
           setPickerFailure(null);
           onChange(choice.path);
-          setAnnouncement(`Ordner gewählt: ${choice.path}. Zum Übernehmen speichern.`);
+          setAnnouncement(exportTexts().folderChosen(choice.path));
           return;
         }
         if (choice.outcome === "cancelled") {
           setPickerFailure(null);
-          setAnnouncement("Auswahl abgebrochen. Der bisher eingestellte Ordner bleibt.");
+          setAnnouncement(exportTexts().pickCancelled);
           return;
         }
         // Der Grund geht **nur** in die Meldung darunter. Beide zu setzen
@@ -385,24 +356,24 @@ export function ExportDirectoryField({
   const serviceProblem =
     serviceState === null || serviceState === "ok" || unsaved
       ? null
-      : DIRECTORY_STATE_TEXT[serviceState];
+      : text.directoryState[serviceState];
 
   return (
     <div className="dirfield">
       {useTextField ? (
         <TextField
-          label="Exportordner"
+          label={text.exportFolder}
           value={value}
           onChange={onChange}
           disabled={disabled}
-          placeholder="z. B. C:\Takt\Export"
-          hint="Vollständiger Pfad. Die geschriebene Datei liegt immer innerhalb dieses Ordners — SuperTakt schreibt niemals daneben."
+          placeholder={text.folderPlaceholder}
+          hint={text.folderHintTyped}
           {...(serviceProblem === null ? {} : { error: serviceProblem })}
         />
       ) : (
         <div className="field">
           <span className="field__label" id={labelId}>
-            Exportordner
+            {text.exportFolder}
           </span>
           {/* Eine Gruppe und kein `<output>`: Ein `output` ist von sich aus
               ein Meldebereich und liest jede Aenderung vor — der gewaehlte
@@ -414,7 +385,7 @@ export function ExportDirectoryField({
               id={pathId}
               {...(value.length === 0 ? {} : { title: value })}
             >
-              {value.length === 0 ? "Noch nicht gewählt" : value}
+              {value.length === 0 ? text.notChosen : value}
             </span>
             <Button
               variant="secondary"
@@ -431,13 +402,11 @@ export function ExportDirectoryField({
               aria-describedby={`${pathId} ${hintId}`}
               onClick={pick}
             >
-              {value.length === 0 ? "Ordner wählen …" : "Anderen Ordner wählen …"}
+              {value.length === 0 ? text.chooseFolder : text.chooseOtherFolder}
             </Button>
           </div>
           <p className="field__hint" id={hintId}>
-            Der Ordner wird im Dialog des Betriebssystems gewählt und nicht getippt. Die
-            geschriebene Datei liegt immer innerhalb dieses Ordners — SuperTakt schreibt niemals
-            daneben.
+            {text.folderHintPicked}
           </p>
           {/*
             Dieselbe Meldefläche wie im `TextField` des anderen Zweiges — und
@@ -466,22 +435,21 @@ export function ExportDirectoryField({
       </p>
 
       {pickerFailure === null ? null : (
-        <InlineMessage tone="info" title="Der Ordnerauswahldialog steht hier nicht zur Verfügung">
-          {pickerFailure} Tragen Sie den vollständigen Pfad von Hand ein — SuperTakt prüft ihn genauso.
+        <InlineMessage tone="info" title={text.pickerUnavailable}>
+          {pickerFailure} {text.typeByHand}
         </InlineMessage>
       )}
 
       {shell === false ? (
-        <InlineMessage tone="info" title="SuperTakt läuft gerade ohne seine Anwendungshülle">
-          Im Browser allein gibt es keinen Ordnerauswahldialog des Betriebssystems. In der
-          installierten Anwendung wird der Ordner ausgewählt statt eingetippt.
+        <InlineMessage tone="info" title={text.noShellTitle}>
+          {text.noShellBody}
         </InlineMessage>
       ) : null}
 
       {unsaved && value.trim().length > 0 && advice.verdict !== "reject" ? (
         <p className="dirfield__pending">
           <Icon name="info" size={14} />
-          <span>Noch nicht übernommen — mit „Speichern“ wird dieser Ordner eingestellt.</span>
+          <span>{text.notSavedYet}</span>
         </p>
       ) : null}
 
@@ -504,8 +472,7 @@ export function ExportDirectoryField({
             Ordnung" — was am Ordner sonst noch dranhängt, steht darüber, und
             was Takt nicht sehen kann, steht dort ebenfalls (T-039).
           */}
-          <Icon name="check-circle" size={12} /> Der Ordner ist vorhanden und beschreibbar —
-          soeben geprüft. Vor jedem Exportlauf wird er erneut geprüft.
+          <Icon name="check-circle" size={12} /> {text.folderOk}
         </p>
       ) : null}
 

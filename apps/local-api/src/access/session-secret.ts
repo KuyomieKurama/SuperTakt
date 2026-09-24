@@ -54,7 +54,7 @@
 
 import type { Readable } from 'node:stream';
 
-import { hasForbiddenNameCharacter } from '@takt/domain';
+import { MAX_WINDOWS_USER_CHARACTERS, hasForbiddenNameCharacter, userNameWithoutDomain } from '@takt/domain';
 
 export type StartupHandshake =
   | { readonly ok: true; readonly secret: string; readonly windowsUser: string }
@@ -71,7 +71,7 @@ const MIN_SECRET_LENGTH = 32;
  * SAM-Konto zu, ein UPN darf länger sein; 256 ist reichlich und begrenzt
  * zugleich, was ein Aufrufer überhaupt einschleusen kann.
  */
-const MAX_USER_LENGTH = 256;
+const MAX_USER_LENGTH = MAX_WINDOWS_USER_CHARACTERS;
 
 /** Gesamtgrenze über beide Zeilen. Verhindert unbegrenztes Puffern. */
 const MAX_HANDSHAKE_BYTES = 8192;
@@ -227,7 +227,8 @@ export function readStartupHandshake(input: Readable, timeoutMs: number): Promis
         return;
       }
 
-      finish({ ok: true, secret, windowsUser });
+      // A-28.4: the export carries the name without domain. The shell may already send it bare.
+      finish({ ok: true, secret, windowsUser: userNameWithoutDomain(windowsUser) });
     };
 
     const onEnd = (): void =>

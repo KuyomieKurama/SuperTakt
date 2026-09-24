@@ -842,6 +842,26 @@ export function createPoolPort(
       return ok(updated);
     },
 
+    async reorder(order, now) {
+      const known = conn.prepare('SELECT id FROM pool').all().map((row) => text(row, 'id'));
+      const given = new Set<string>(order);
+      if (given.size !== order.length || order.length !== known.length || known.some((id) => !given.has(id))) {
+        return err(
+          taktError('validation_error', 'Die Reihenfolge muss alle Regeln genau einmal nennen. Teilstücke sind nicht zulässig.'),
+        );
+      }
+      // Two passes inside one savepoint: first all positions negative, then the final ones, so
+      // `ux_pool_position` never sees two rules on the same place (same as the status order).
+      const outcome = attemptAtomically(conn, 'takt_pool_reorder', () => {
+        const shift = conn.prepare('UPDATE pool SET position = ? WHERE id = ?');
+        order.forEach((id, index) => shift.run(-(index + 1), id));
+        const settle = conn.prepare('UPDATE pool SET position = ?, updated_at = ? WHERE id = ?');
+        order.forEach((id, index) => settle.run(index + 1, now, id));
+      });
+      if (!outcome.ok) return err(outcome.error);
+      return ok(await this.list('all'));
+    },
+
     async remove(id) {
       if (loadOne(id) === null) return err(taktError('not_found', 'Diesen Pool gibt es nicht.'));
       const outcome = attempt(() => conn.prepare('DELETE FROM pool WHERE id = ?').run(id));

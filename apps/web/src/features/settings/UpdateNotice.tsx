@@ -4,6 +4,7 @@ import { Icon } from "../../shared/ui/Icon";
 import { Button, IconButton } from "../../shared/ui/Primitives";
 import { UpdateDialog } from "./UpdateDialog";
 import type { UpdateNoticeApi } from "./useUpdateNotice";
+import { settingsTexts } from "./texts";
 
 /**
  * A-27.12: Automatische Hinweise sind nicht modal. Der Benutzer öffnet
@@ -43,14 +44,15 @@ export function UpdateNotice({ api }: { readonly api: UpdateNoticeApi }) {
             Neues da ist, muss dafür keinen Dialog öffnen — A-18.6 verlangt,
             dass Takt die Fassung **anzeigt**.
           */}
-          Eine neuere Fassung von SuperTakt ist verfügbar: <strong>{view.available}</strong>. Installiert
-          ist {view.installed}.
+          {settingsTexts().newerAvailableBefore}
+          <strong>{view.available}</strong>
+          {settingsTexts().installedIs(view.installed)}
         </p>
         <Button variant="secondary" size="sm" onClick={() => setOpened(true)}>
-          Ansehen
+          {settingsTexts().view}
         </Button>
         <IconButton
-          label="Hinweis auf die neue Fassung schließen"
+          label={settingsTexts().closeUpdateNotice}
           icon="x"
           size="sm"
           onClick={() => setDismissed(true)}

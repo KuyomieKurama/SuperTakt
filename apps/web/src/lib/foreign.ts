@@ -1,6 +1,7 @@
 import { quoteName, visibleText } from "@takt/domain";
 
 import type { ForeignText } from "../api/types";
+import { getLanguage } from "./language";
 
 /**
  * Takt — fremder Text, der nur als Zeichenkette möglich ist (E-063, O-AH,
@@ -42,7 +43,9 @@ import type { ForeignText } from "../api/types";
  * Punkt 4 und die Behandlung aus E-063.
  */
 export function quotedName(name: ForeignText): string {
-  return quoteName(visibleText(name));
+  // German keeps the domain's form (E-058 point 4); English uses “…” (welle-18.md 2.2).
+  if (getLanguage() === "de") return quoteName(visibleText(name));
+  return `“${visibleText(name)}”`;
 }
 
 /**

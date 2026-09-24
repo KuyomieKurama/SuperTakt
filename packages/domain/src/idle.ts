@@ -1,4 +1,4 @@
-import { err, ok, taktError, type Timestamp, type TodoId } from './kernel.ts';
+import { earlierOf, err, ok, taktError, type Timestamp, type TodoId } from './kernel.ts';
 
 /** A-24: eine Pause erzeugt keine Buchung; alle Abschnitte sind disjunkt. */
 export interface IdleAllocation {
@@ -63,4 +63,21 @@ export function planIdlePeriods(periods: readonly { startedAt: Timestamp; return
     }
   }
   return ok(result);
+}
+
+/**
+ * Where the allocation window of an idle phase ends when the phase was already open at service
+ * start or arrived with an archive (B-5, R-35, E-036): at most the last heartbeat of its entry,
+ * never after the return. Without a heartbeat after the phase start nothing is witnessed and the
+ * answer is `null` — the window is empty, not the wall clock of another run.
+ */
+export function witnessedIdleEnd(input: {
+  readonly startedAt: Timestamp;
+  readonly returnedAt: Timestamp;
+  readonly heartbeatAt: Timestamp | null;
+}): Timestamp | null {
+  if (input.heartbeatAt === null) return null;
+  const end = earlierOf(input.heartbeatAt, input.returnedAt);
+  if (end === null || !(Date.parse(end) > Date.parse(input.startedAt))) return null;
+  return end;
 }

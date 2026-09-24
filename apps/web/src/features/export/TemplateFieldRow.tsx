@@ -13,6 +13,7 @@ import {
 } from "./exportTemplateModel";
 import { quotedName } from "../../lib/foreign";
 import type { DraftField } from "./TemplateFields";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — eine Feldzeile der Vorlagenliste, ihre Quellenauswahl und ihre
@@ -65,6 +66,7 @@ export function TemplateFieldRow({
   onDragEnd,
   onDropHere,
 }: TemplateFieldRowProps) {
+  const text = exportTexts();
   const id = useId();
   const { field } = entry;
   const nameId = `${id}-name`;
@@ -146,7 +148,7 @@ export function TemplateFieldRow({
           <Icon name={readOnly ? "lock" : "drag"} size={14} />
         </span>
         <span className="tfield__position tabular">
-          <span className="visually-hidden">Position </span>
+          <span className="visually-hidden">{text.positionPrefix}</span>
           {index + 1}
         </span>
       </div>
@@ -155,7 +157,7 @@ export function TemplateFieldRow({
         <div className="tfield__row">
           <div className="field tfield__name">
             <label className="field__label" htmlFor={nameId}>
-              Schlüssel
+              {text.key}
             </label>
             <input
               id={nameId}
@@ -176,7 +178,7 @@ export function TemplateFieldRow({
 
           <Select<ExportSourcePath>
             className="tfield__source"
-            label="Quelle"
+            label={text.source}
             value={field.source}
             disabled={readOnly}
             options={sourceOptions(catalog)}
@@ -191,7 +193,7 @@ export function TemplateFieldRow({
 
           <Select<ExportTransformation>
             className="tfield__transformation"
-            label="Transformation"
+            label={text.transformation}
             value={field.transformation}
             disabled={readOnly}
             options={catalog.transformations.map((entryInfo) => ({
@@ -210,7 +212,7 @@ export function TemplateFieldRow({
 
         <p className="tfield__hint" id={hintId}>
           {catalog.sourceInfo(field.source)?.description ??
-            "Diese Quelle steht nicht mehr auf der Auswahlliste des Dienstes."}{" "}
+            text.sourceGone}{" "}
           {catalog.transformationInfo(field.transformation)?.effect ?? ""}
         </p>
 
@@ -235,9 +237,9 @@ export function TemplateFieldRow({
           {emptyName || duplicate || rowError !== undefined ? (
             <p className="tfield__error" id={errorId}>
               {emptyName
-                ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
+                ? text.keyEmpty
                 : duplicate
-                  ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
+                  ? text.keyDuplicate(quotedName(field.name))
                   : rowError}
             </p>
           ) : null}
@@ -259,29 +261,29 @@ export function TemplateFieldRow({
         Quellenname — die wichtigste Angabe der Zeile — wird abgeschnitten.
       */}
       {readOnly ? null : (
-        <div className="tfield__tools" role="group" aria-label={`Feld ${String(index + 1)}`}>
+        <div className="tfield__tools" role="group" aria-label={text.fieldNumber(String(index + 1))}>
           <IconButton
-            label={`Feld ${quotedName(field.name)} nach oben`}
+            label={text.fieldUp(quotedName(field.name))}
             icon="arrow-up"
             size="sm"
             disabled={index === 0}
             onClick={() => onMoveBy(-1)}
           />
           <IconButton
-            label={`Feld ${quotedName(field.name)} nach unten`}
+            label={text.fieldDown(quotedName(field.name))}
             icon="arrow-down"
             size="sm"
             disabled={index === total - 1}
             onClick={() => onMoveBy(1)}
           />
           <IconButton
-            label={`Feld ${quotedName(field.name)} verdoppeln`}
+            label={text.fieldDuplicate(quotedName(field.name))}
             icon="copy"
             size="sm"
             onClick={() => onDuplicate(entry.key)}
           />
           <IconButton
-            label={`Feld ${quotedName(field.name)} entfernen`}
+            label={text.fieldRemove(quotedName(field.name))}
             icon="trash"
             size="sm"
             className="tfield__remove"
@@ -365,6 +367,7 @@ function ConditionEditor({
   onToggle,
   onChange,
 }: ConditionEditorProps) {
+  const text = exportTexts();
   const toggleId = `${idPrefix}-condition`;
 
   return (
@@ -377,13 +380,13 @@ function ConditionEditor({
           disabled={readOnly}
           onChange={(event) => onToggle(event.target.checked)}
         />
-        <span>Nur unter einer Bedingung ausgeben</span>
+        <span>{text.onlyWithCondition}</span>
       </label>
 
       {condition === null ? null : (
         <div className="tfield__condition-body">
           <Select<ExportSourcePath>
-            label="Geprüfte Quelle"
+            label={text.checkedSource}
             value={condition.source}
             disabled={readOnly}
             options={sourceOptions(catalog)}
@@ -391,7 +394,7 @@ function ConditionEditor({
           />
 
           <Select<ExportConditionOperator>
-            label="Vergleich"
+            label={text.comparison}
             value={condition.op}
             disabled={readOnly}
             options={catalog.conditionOperators.map((operator) => ({
@@ -402,8 +405,7 @@ function ConditionEditor({
           />
 
           <p className="tfield__condition-hint">
-            Trifft die Bedingung nicht zu, fehlt der Schlüssel in dieser Zeile vollständig. Er
-            steht dort nicht leer.
+            {text.conditionHint}
           </p>
         </div>
       )}

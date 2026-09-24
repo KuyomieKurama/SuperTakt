@@ -2047,6 +2047,16 @@ const ADAPTER_ANWEISUNGEN = new Map([
     'recordCheck',
     "async recordCheck ( at : Timestamp ) : Promise < void > { conn . prepare ( 'UPDATE app_setting SET last_version_check_at = ? WHERE id = 1' ) . run ( at ) ; }",
   ],
+  /*
+   * A-28.1 (E-120, F-18): the one sanctioned switch. The user may turn the
+   * check off; the adapter reads exactly that column and nothing else. Only a
+   * stored 0 reads as "off"; a missing row reads as "on", the same as
+   * `GET /settings` (E-132 point 4, T-412). Any other statement here is a finding.
+   */
+  [
+    'isEnabled',
+    "isEnabled ( ) : boolean { const row = conn . prepare ( 'SELECT version_check_enabled FROM app_setting WHERE id = 1' ) . get ( ) ; return row ?. [ 'version_check_enabled' ] !== 0 ; }",
+  ],
 ]);
 
 /**
@@ -2096,6 +2106,8 @@ const ADAPTER_ANWEISUNGEN = new Map([
  */
 const PORTLITERAL_ANWEISUNGEN = new Map([
   ['store.write', 'write : ( at : Date ) => versionCheckState . recordCheck ( toTimestamp ( at ) )'],
+  // A-28.1: the user's switch, passed through unchanged (see ADAPTER_ANWEISUNGEN).
+  ['enabled.isEnabled', 'isEnabled : ( ) => versionCheckState . isEnabled ( )'],
 ]);
 
 /**
@@ -2328,6 +2340,13 @@ const CHECKER_CALL_KEYS = new Map([
     },
   ],
   ['store', { formen: [ts.SyntaxKind.ObjectLiteralExpression], satz: 'ein Objektliteral' }],
+  /*
+   * A-28.1 (E-120, F-18): the user's stored switch is the one value from the
+   * database that may decide whether a request goes out — decided by the
+   * client, not added by a developer. Its port literal and adapter are pinned
+   * character by character (PORTLITERAL_ANWEISUNGEN, ADAPTER_ANWEISUNGEN).
+   */
+  ['enabled', { formen: [ts.SyntaxKind.ObjectLiteralExpression], satz: 'ein Objektliteral' }],
 ]);
 
 /** Knoten, die eine Verzweigung über dem Aufruf bedeuten. */

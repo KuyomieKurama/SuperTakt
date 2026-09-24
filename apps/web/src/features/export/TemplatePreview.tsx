@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import { listTimeEntries } from "../bookings/api";
 import { previewExportDraft } from "./api";
 import {
@@ -28,6 +28,9 @@ import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
 import { RefreshHint } from "../../shared/ui/ScreenHeader";
 import { BookingFormDialog } from "../bookings/BookingDialogs";
 import { quotedName } from "../../lib/foreign";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — die Vorschau des Vorlageneditors (S-14, A-8.7, E-005, E-031, E-034).
@@ -103,15 +106,6 @@ const ENTRY_PAGE_SIZE = 200;
  */
 const DRAFT_DEBOUNCE_MS = 400;
 
-/**
- * Woher die Vorschau kommt — **eine** Fassung fuer alle drei Faelle und fuer
- * die Karte darum (T-181, ST-07).
- *
- * Bis dahin standen vier Abschriften desselben Satzes untereinander und
- * nebeneinander. Zwei Abschriften laufen auseinander, sobald eine gepflegt
- * wird; vier laufen schneller auseinander.
- */
-const PREVIEW_SOURCE = "Vorschau anhand Ihrer offenen Buchungen.";
 
 export interface TemplatePreviewProps {
   /** Die Felder, die der Benutzer gerade vor sich hat. Sie werden gerendert. */
@@ -128,7 +122,7 @@ export interface TemplatePreviewProps {
 type DraftOutcome =
   | { readonly kind: "idle" }
   | { readonly kind: "ready"; readonly preview: ExportPreview }
-  | { readonly kind: "failed"; readonly message: string };
+  | { readonly kind: "failed"; readonly message: string; readonly fromService: boolean };
 
 export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePreviewProps) {
   const { version, bump } = useRefresh();
@@ -210,7 +204,7 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           if (live) setOutcome({ kind: "ready", preview });
         })
         .catch((cause: unknown) => {
-          if (live) setOutcome({ kind: "failed", message: errorMessage(cause) });
+          if (live) setOutcome({ kind: "failed", message: errorMessage(cause), fromService: isServiceError(cause) });
         })
         .finally(() => {
           if (live) setPending(false);
@@ -271,11 +265,14 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
     });
   }, []);
 
+  const text = exportTexts();
+  const previewSource = text.previewSource;
+
   return (
     <div className="tpreview">
       <details className="export-legend">
-        <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
-        <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen. Betroffene Tagesgruppen bleiben offen; der übrige Export läuft weiter.</p>
+        <summary><Icon name="info" size={14} /><span>{text.legend}</span><Icon name="chevron-down" size={12} /></summary>
+        <p><strong>{text.legendNoteMissing}</strong>{text.legendNoteMissingLong}</p>
       </details>
       <div className="tpreview__banner">
         {/*
@@ -294,17 +291,17 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           <Icon name={stale || unsaved ? "pencil" : "check-circle"} size={14} />
           <span>
             {unsaved
-              ? `Noch nicht gespeicherter Entwurf. ${PREVIEW_SOURCE}`
+              ? text.unsavedDraft(previewSource)
               : stale
-                ? `Geänderter Stand, noch nicht gespeichert — die Vorschau speichert nichts. ${PREVIEW_SOURCE}`
-                : PREVIEW_SOURCE}
+                ? text.changedNotSaved(previewSource)
+                : previewSource}
           </span>
         </p>
       </div>
 
       <AsyncBoundary
         state={data.state}
-        label="Offene Buchungen für die Vorschau werden geladen"
+        label={text.previewBookingsLoading}
         rows={3}
         onRetry={data.reload}
       >
@@ -314,11 +311,11 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
               <EmptyState
                 compact
                 icon="clock"
-                title="Keine offenen Buchungen"
-                description="Die Vorschau läuft auf echten Daten und erfindet keine. Sobald eine Zeit erfasst und noch nicht exportiert ist, steht hier, was diese Vorlage daraus macht."
+                title={text.noOpenTitle}
+                description={text.noOpenBody}
                 action={
                   <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
-                    Zur Zeiterfassung
+                    {text.toTimeTracking}
                   </Button>
                 }
               />
@@ -330,8 +327,8 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
               <EmptyState
                 compact
                 icon="inbox"
-                title="Noch kein Feld, also keine Zeile"
-                description="Eine Vorlage ohne Feld erzeugt keine Datei — der Dienst nimmt sie nicht an. Fügen Sie links das erste Feld hinzu; die Vorschau zieht sofort nach."
+                title={text.noFieldNoRowTitle}
+                description={text.noFieldNoRowBody}
               />
             );
           }
@@ -340,7 +337,7 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
             return (
               <InlineMessage
                 tone="danger"
-                title="Diese Vorlage lässt sich so nicht rendern"
+                title={text.cannotRender}
                 action={
                   <Button
                     size="sm"
@@ -349,13 +346,12 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
                     loading={pending}
                     onClick={retry}
                   >
-                    Erneut versuchen
+                    {labels().retry}
                   </Button>
                 }
               >
-                {outcome.message} Geprüft hat das dieselbe Stelle, die auch beim Speichern prüft —
-                so wie es hier steht, ließe sich die Vorlage also auch nicht speichern. Geschrieben
-                wurde nichts; die gespeicherte Fassung ist unverändert.
+                <ServiceText text={outcome.message} fromService={outcome.fromService} />{" "}
+                {text.cannotRenderTail}
               </InlineMessage>
             );
           }
@@ -363,8 +359,8 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           if (outcome.kind !== "ready") {
             return (
               <p className="tpreview__scope" role="status" aria-live="polite">
-                <Spinner size={13} label="Vorschau wird erzeugt" />
-                <span>Der Dienst rendert Ihren Stand …</span>
+                <Spinner size={13} label={text.previewPending} />
+                <span>{text.previewPendingLong}</span>
               </p>
             );
           }
@@ -374,8 +370,8 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
               <EmptyState
                 compact
                 icon="inbox"
-                title="Diese Vorlage erzeugt keine Zeile"
-                description="Der Dienst hat den Entwurf angenommen, aber aus den offenen Buchungen entsteht damit keine Zeile. Prüfen Sie die Bedingungen an den Feldern."
+                title={text.noRowTitle}
+                description={text.noRowBody}
               />
             );
           }
@@ -383,14 +379,14 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           return (
             <>
               <p className="tpreview__scope" role="status" aria-live="polite">
-                {plural(groups.length, "Tagesgruppe", "Tagesgruppen")} aus{" "}
-                {plural(value.total, "offenen Buchung", "offenen Buchungen")}
-                {value.total > groups.length
-                  ? " — neueste zuerst."
-                  : "."}{" "}
+                {text.groupsFromBookings(
+                  plural(groups.length, text.dayGroup, text.dayGroups),
+                  plural(value.total, text.openBooking, text.openBookings),
+                  value.total > groups.length,
+                )}{" "}
                 {outcome.preview.templateSource === "draft"
-                  ? "Aktueller Entwurf."
-                  : `Gerendert aus der gespeicherten Vorlage ${quotedName(outcome.preview.templateName ?? "")}.`}
+                  ? text.currentDraft
+                  : text.renderedFromSaved(quotedName(outcome.preview.templateName ?? ""))}
                 <RefreshHint active={pending} />
               </p>
 
@@ -420,8 +416,8 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           todoId={editEntry.todoId}
           todoTitle={
             data.state.status === "ready"
-              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? "diesem Todo")
-              : "diesem Todo"
+              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? text.thisTodo)
+              : text.thisTodo
           }
           onClose={() => {
             setEditEntry(null);

@@ -32,16 +32,9 @@ import { useToasts } from "../../app/ToastContext";
 import { useMutation } from "../../app/useAsync";
 import { flatFolders } from "../../lib/folderPaths";
 import { plural } from "../../lib/format";
-import {
-  POOL_AXIS_NEUTRAL_HINT,
-  POOL_COMPLETION_LABEL,
-  POOL_EXPORT_LABEL,
-  POOL_EXPORT_NOT_BILLED_HINT,
-  POOL_MATCH_MODE_HINT,
-  POOL_MATCH_MODE_LABEL,
-  POOL_PLACEMENT_LABEL,
-  POOL_STATUS_LABEL,
-} from "../../lib/labels";
+import { labels } from "../../lib/labels";
+import { useLanguage } from "../../lib/language";
+import { structureTexts } from "./texts";
 import {
   axesOf,
   describeRule,
@@ -122,12 +115,6 @@ import { folderIdsOf, sameTerms, tagIdsOf, toggleFolder, withTagIds } from "./ru
  */
 const SPEAK_DELAY_MS = 500;
 
-const PLACEMENT_HINT: Readonly<Record<PoolPlacement, string>> = {
-  pool: "Die Regel steht im Pool-Bereich und in den Filtern. Auf dem Board erscheint sie nicht.",
-  board:
-    "Die Regel ist eine Spalte des Kanban-Boards. In der Pool-Liste und in den Filtern erscheint sie nicht.",
-  both: "Dieselbe Regel an zwei Stellen: als Pool und als Spalte des Boards.",
-};
 
 /* Bausteine des Formulars                                              */
 
@@ -264,7 +251,7 @@ export function PoolFormDialog({
     // Die Vorgabe ist `any` und bleibt es — Punkt 1 im Kopf dieser Datei.
     setMatchMode(pool?.matchMode ?? "any");
     setIncludeSubfolders(pool?.includeSubfolders ?? true);
-    setRule(pool?.rule ?? []);
+    setRule(pool?.requiredTags ?? []);
     setExcludedTags(pool?.excludedTags ?? []);
     setStatusIds(pool?.statusIds ?? []);
     setCompletion(pool?.completion ?? "any");
@@ -273,10 +260,12 @@ export function PoolFormDialog({
 
   const trimmed = name.trim();
   /* Grundform aus T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). */
-  const nameError = nameTouched && trimmed.length === 0 ? "Name fehlt." : undefined;
+  const nameError = nameTouched && trimmed.length === 0 ? labels().nameMissing : undefined;
 
   const isBoardColumn = placement !== "pool";
-  const surface = isBoardColumn ? "Spalte" : "Pool";
+  const language = useLanguage();
+  const text = structureTexts();
+  const shared = labels();
 
   const axes = useMemo<RuleAxes>(
     () => ({ matchMode, includeSubfolders, rule, excludedTags, statusIds, completion, exportState }),
@@ -301,7 +290,8 @@ export function PoolFormDialog({
         folder: (id) => folders.find((entry) => entry.id === id)?.path,
         status: (id) => statuses.find((entry) => entry.id === id)?.name,
       }),
-    [axes, folders, statuses, structure],
+    // `language`: the description carries words of the UI language.
+    [axes, folders, statuses, structure, language],
   );
 
   const conditions = countPoolRuleConditions(axes);
@@ -333,7 +323,7 @@ export function PoolFormDialog({
   const savedReach = useMemo<RuleReach | null>(() => {
     if (pool === undefined) return null;
     if (includeSubfolders !== pool.includeSubfolders) return null;
-    if (!sameTerms(rule, pool.rule)) return null;
+    if (!sameTerms(rule, pool.requiredTags)) return null;
     return describeRuleReach(description, pool.resolved);
   }, [pool, rule, includeSubfolders, description]);
 
@@ -397,15 +387,16 @@ export function PoolFormDialog({
       title={
         pool === undefined
           ? defaultPlacement === "pool"
-            ? "Neuen Pool anlegen"
-            : "Neue Board-Spalte anlegen"
-          : `${quotedName(pool.name)} bearbeiten`
+            ? text.newPool
+            : text.newColumn
+          : text.editTitle(quotedName(pool.name))
       }
-      description="Eine Regel nennt Bedingungen. Jede engt weiter ein: Erforderliche Tags müssen da sein, ausgeschlossene dürfen es nicht, und Status, Erledigt und Exportstatus grenzen weiter ab. Was auf „Alle“ steht, schränkt nicht ein."
-      submitLabel={pool === undefined ? "Anlegen" : "Speichern"}
+      description={text.formLead}
+      submitLabel={pool === undefined ? text.create : text.save}
       submitDisabled={trimmed.length === 0}
       busy={mutation.busy}
       error={mutation.error}
+      errorFromService={mutation.errorFromService}
       onSubmit={() => {
         void mutation.run(async () => {
           const body = {
@@ -413,7 +404,7 @@ export function PoolFormDialog({
             matchMode,
             includeSubfolders,
             placement,
-            rule,
+            requiredTags: rule,
             excludedTags,
             statusIds,
             completion,
@@ -451,18 +442,19 @@ export function PoolFormDialog({
             }),
             saved.resolved,
           );
+          const words = structureTexts();
           const title =
             pool === undefined
               ? isBoardColumn
-                ? "Spalte angelegt."
-                : "Pool angelegt."
-              : "Regel geändert.";
+                ? words.columnCreated
+                : words.poolCreated
+              : words.ruleChanged;
 
           if (savedFault.kind === "empty-folder") {
             toasts.show({
               tone: "warning",
               title,
-              body: `${quotedName(saved.name)} trifft zurzeit nichts: In ${emptyFolderNames(savedFault.folders)} liegt kein Tag. Legen Sie dort ein Tag an, dann füllt sich ${isBoardColumn ? "die Spalte" : "der Pool"} von selbst.`,
+              body: words.savedEmptyFolder(quotedName(saved.name), emptyFolderNames(savedFault.folders), isBoardColumn),
             });
           } else {
             toasts.show({
@@ -470,8 +462,12 @@ export function PoolFormDialog({
               title,
               body:
                 conditions === 0
-                  ? `${quotedName(saved.name)} nennt noch keine Bedingung und bleibt deshalb leer. Ergänzen Sie eine, dann füllt sie sich von selbst.`
-                  : `${quotedName(saved.name)} — ${plural(conditions, "Bedingung", "Bedingungen")}, Anzeigeort: ${POOL_PLACEMENT_LABEL[saved.placement]}.`,
+                  ? words.savedNoCondition(quotedName(saved.name))
+                  : words.savedSummary(
+                      quotedName(saved.name),
+                      plural(conditions, words.condition, words.conditions),
+                      labels().poolPlacement[saved.placement],
+                    ),
             });
           }
           onSaved?.(saved);
@@ -481,31 +477,31 @@ export function PoolFormDialog({
       onCancel={onClose}
     >
       <TextField
-        label="Name"
+        label={text.name}
         value={name}
         onChange={setName}
         onTouched={() => setNameTouched(true)}
         required
         maxLength={MAX_NAME_LENGTH}
-        placeholder={isBoardColumn ? "z. B. Wartet auf Rückmeldung" : "z. B. Kunden Nord"}
+        placeholder={isBoardColumn ? text.columnPlaceholder : text.poolPlaceholder}
         {...(nameError === undefined ? {} : { error: nameError })}
       />
 
       <Select
-        label="Anzeigeort"
+        label={text.placement}
         value={placement}
         onChange={(next) => setPlacement(next as PoolPlacement)}
         options={[
-          { value: "pool", label: POOL_PLACEMENT_LABEL.pool },
-          { value: "board", label: POOL_PLACEMENT_LABEL.board },
-          { value: "both", label: POOL_PLACEMENT_LABEL.both },
+          { value: "pool", label: shared.poolPlacement.pool },
+          { value: "board", label: shared.poolPlacement.board },
+          { value: "both", label: shared.poolPlacement.both },
         ]}
-        hint={PLACEMENT_HINT[placement]}
+        hint={text.placementHint[placement]}
       />
 
       <FormSection
-        title="Erforderliche Tags"
-        lead="Was ein Todo tragen muss, damit es dazugehört. Ein genannter Ordner steht für die Tags, die in ihm liegen."
+        title={text.requiredTags}
+        lead={text.requiredTagsLead}
       >
         {/*
           Vier Bedienelemente, vier Namen (S-7 aus R-2, SC 1.3.1). Bis T-091
@@ -516,35 +512,33 @@ export function PoolFormDialog({
           Die Ueberschrift bleibt: Sie ist die Gliederung fuer Sehende.
         */}
         <TagInput
-          label="Erforderliche Tags"
+          label={text.requiredTags}
           hideLabel
           value={tagIdsOf(rule)}
           onChange={(next) => setRule((current) => withTagIds(current, next))}
-          placeholder="Tag suchen und hinzufügen"
-          hint="Ein genanntes Tag trifft jedes Todo, das es trägt."
+          placeholder={text.requiredTagsPlaceholder}
+          hint={text.requiredTagsHint}
         />
 
         <RadioRow
-          label="Wie viele davon müssen zutreffen?"
+          label={text.howMany}
           value={matchMode}
           onChange={setMatchMode}
           options={[
-            { value: "any", label: POOL_MATCH_MODE_LABEL.any, hint: POOL_MATCH_MODE_HINT.any },
-            { value: "all", label: POOL_MATCH_MODE_LABEL.all, hint: POOL_MATCH_MODE_HINT.all },
+            { value: "any", label: shared.poolMatchMode.any, hint: shared.poolMatchModeHint.any },
+            { value: "all", label: shared.poolMatchMode.all, hint: shared.poolMatchModeHint.all },
           ]}
         />
 
         {modeChanged ? (
-          <InlineMessage tone="warning" title="Diese Regel trifft danach andere Todos">
-            {pool?.matchMode === "any"
-              ? "Bisher genügte eines der genannten Tags. Mit „Alle davon“ muss ein Todo ab dem Speichern jeden davon tragen — die Regel trifft dann weniger."
-              : "Bisher mussten alle genannten Tags zutreffen. Mit „Mindestens eines davon“ genügt ab dem Speichern eines — die Regel trifft dann mehr."}
+          <InlineMessage tone="warning" title={text.modeChangedTitle}>
+            {pool?.matchMode === "any" ? text.modeChangedToAll : text.modeChangedToAny}
           </InlineMessage>
         ) : null}
 
         <FolderPicker
-          label="Erforderliche Ordner"
-          hint="Ein Ordner steht für alles, was in ihm liegt."
+          label={text.requiredFolders}
+          hint={text.requiredFoldersHint}
           source={folderSource}
           onRetry={structure.reload}
           selected={requiredFolderIds}
@@ -553,21 +547,21 @@ export function PoolFormDialog({
       </FormSection>
 
       <FormSection
-        title="Ausgeschlossene Tags"
-        lead="Was ein Todo nicht tragen darf. Keines davon — dafür gibt es keine Einstellung, „ausgeschlossen“ heißt immer „keines davon“."
+        title={text.excludedTags}
+        lead={text.excludedTagsLead}
       >
         <TagInput
-          label="Ausgeschlossene Tags"
+          label={text.excludedTags}
           hideLabel
           value={tagIdsOf(excludedTags)}
           onChange={(next) => setExcludedTags((current) => withTagIds(current, next))}
-          placeholder="Tag suchen und ausschließen"
-          hint="Trägt ein Todo eines dieser Tags, gehört es nicht dazu — auch wenn alles andere passt."
+          placeholder={text.excludedTagsPlaceholder}
+          hint={text.excludedTagsHint}
         />
 
         <FolderPicker
-          label="Ausgeschlossene Ordner"
-          hint="Ein ausgeschlossener Ordner schließt jedes Tag darin aus."
+          label={text.excludedFolders}
+          hint={text.excludedFoldersHint}
           source={folderSource}
           onRetry={structure.reload}
           selected={excludedFolderIds}
@@ -584,8 +578,8 @@ export function PoolFormDialog({
         und keine Erklaerung.
       */}
       <FormSection
-        title="Ordnertiefe"
-        lead="Eine Einstellung für beide Listen — erforderliche wie ausgeschlossene Ordner."
+        title={text.folderDepth}
+        lead={text.folderDepthLead}
       >
         <label className="checkbox-row">
           <input
@@ -594,18 +588,15 @@ export function PoolFormDialog({
             onChange={(event) => setIncludeSubfolders(event.target.checked)}
           />
           <span>
-            Unterordner einschließen
-            <span className="checkbox-row__hint">
-              Ein genannter Ordner steht dann auch für alles, was tiefer liegt — beliebig tief.
-              Ohne Haken zählen nur die Tags unmittelbar im Ordner.
-            </span>
+            {text.includeSubfolders}
+            <span className="checkbox-row__hint">{text.includeSubfoldersHint}</span>
           </span>
         </label>
       </FormSection>
 
       <FormSection
-        title="Weitere Bedingungen"
-        lead="Drei Bedingungen, die keine Tags brauchen. Jede steht auf „Alle“, solange sie nicht einschränken soll."
+        title={text.moreConditions}
+        lead={text.moreConditionsLead}
       >
         <StatusPicker
           source={statusSource}
@@ -614,59 +605,59 @@ export function PoolFormDialog({
           onChange={setStatusIds}
           hint={
             statusIds.length === 0
-              ? `Nichts gewählt heißt „${POOL_STATUS_LABEL.any}“ — ${POOL_AXIS_NEUTRAL_HINT.toLowerCase()}.`
-              : `${plural(statusIds.length, "Status gewählt", "Status gewählt")} — ein Todo genügt mit einem davon; es trägt immer genau einen.`
+              ? text.statusNothing(shared.poolStatus.any, shared.poolAxisNeutralHint.toLowerCase())
+              : text.statusChosenTail(plural(statusIds.length, text.statusChosen, text.statusChosen))
           }
         />
 
         <RadioRow
-          label="Erledigt"
+          label={text.completion}
           value={completion}
           onChange={setCompletion}
-          neutralNote={POOL_AXIS_NEUTRAL_HINT.toLowerCase()}
+          neutralNote={shared.poolAxisNeutralHint.toLowerCase()}
           options={[
             {
               value: "any",
-              label: POOL_COMPLETION_LABEL.any,
+              label: shared.poolCompletion.any,
               neutral: true,
-              hint: "Erledigt entscheidet nicht über die Zugehörigkeit. Ob erledigte Karten zu sehen sind, sagt dann wie bisher der Schalter „Erledigte einblenden“.",
+              hint: text.completionAny,
             },
             {
               value: "done",
-              label: POOL_COMPLETION_LABEL.done,
-              hint: "Nur erledigte Todos. Diese Regel hat das letzte Wort — die Karten erscheinen auch dann, wenn erledigte sonst ausgeblendet sind. Hebt ein Timerstart das Kennzeichen auf, verlässt die Karte diese Spalte und steht wieder in ihrem Pool.",
+              label: shared.poolCompletion.done,
+              hint: text.completionDone,
             },
             {
               value: "open",
-              label: POOL_COMPLETION_LABEL.open,
-              hint: "Nur unerledigte Todos. Hebt ein Timerstart das Kennzeichen auf, kehrt das Todo ohne Zutun hierher zurück.",
+              label: shared.poolCompletion.open,
+              hint: text.completionOpen,
             },
           ]}
         />
 
         <RadioRow
-          label="Exportstatus"
+          label={text.exportState}
           value={exportState}
           onChange={setExportState}
-          neutralNote={POOL_AXIS_NEUTRAL_HINT.toLowerCase()}
+          neutralNote={shared.poolAxisNeutralHint.toLowerCase()}
           options={[
             {
               value: "any",
-              label: POOL_EXPORT_LABEL.any,
+              label: shared.poolExport.any,
               neutral: true,
-              hint: "Der Exportstatus entscheidet nicht über die Zugehörigkeit.",
+              hint: text.exportAny,
             },
             {
               value: "open",
-              label: POOL_EXPORT_LABEL.open,
-              hint: "Todos mit mindestens einer abgeschlossenen, offenen Buchung — die Antwort auf „was habe ich noch nicht abgerechnet“.",
+              label: shared.poolExport.open,
+              hint: text.exportOpen,
             },
             {
               value: "exported",
-              label: POOL_EXPORT_LABEL.exported,
+              label: shared.poolExport.exported,
               // Punkt 4 im Kopf dieser Datei, an der Stelle, an der gewaehlt
               // wird: Der Exportstatus haengt an der Buchung, nicht am Todo.
-              hint: `Todos mit mindestens einer exportierten Buchung. Nicht „vollständig abgerechnet“: Ein Todo mit einer offenen und einer exportierten Buchung erfüllt beide Bedingungen und steht in beiden Spalten. ${POOL_EXPORT_NOT_BILLED_HINT}`,
+              hint: text.exportExported(shared.poolExportNotBilledHint),
             },
           ]}
         />
@@ -685,31 +676,24 @@ export function PoolFormDialog({
         <InlineMessage
           tone="warning"
           title={
-            savedReach.folders.length === 1
-              ? "Der geforderte Ordner enthält kein Tag"
-              : "Die geforderten Ordner enthalten kein Tag"
+            savedReach.folders.length === 1 ? text.emptyFolderTitleOne : text.emptyFolderTitleMany
           }
         >
-          In {emptyFolderNames(savedReach.folders)} liegt zurzeit kein Tag. Eine Bedingung, die auf
-          keinen Tag zeigt, kann <strong>kein Todo</strong> erfüllen — die Regel trifft damit
-          nichts, auch wenn die übrigen Bedingungen stehen und auch dann, wenn daneben ein Tag oder
-          ein gefüllter Ordner genannt ist. Legen Sie ein Tag in{" "}
-          {savedReach.folders.length === 1 ? "diesem Ordner" : "diesen Ordnern"} an oder nennen Sie
-          hier einen anderen. Ausgeschlossene Ordner sind davon nicht betroffen: Was leer ist,
-          schließt nichts aus.
+          {text.emptyFolderBefore(emptyFolderNames(savedReach.folders))}
+          <strong>{text.emptyFolderStrong}</strong>
+          {text.emptyFolderAfter(savedReach.folders.length === 1)}
         </InlineMessage>
       ) : null}
 
       {excludedWithoutEffect ? (
-        <InlineMessage tone="info" title="Ein Ausschluss bleibt ohne Wirkung">
-          Mindestens einer der ausgeschlossenen Ordner enthält zurzeit kein Tag. „Keiner davon“
-          über nichts schließt nichts aus — dieser Teil der Regel lässt alles durch, und sie trifft
-          genau dasselbe wie ohne ihn. Das ist <strong>kein Fehler</strong>: Sobald ein Tag in dem
-          Ordner liegt, greift der Ausschluss von selbst.
+        <InlineMessage tone="info" title={text.exclusionNoEffectTitle}>
+          {text.exclusionNoEffectBefore}
+          <strong>{text.exclusionNoEffectStrong}</strong>
+          {text.exclusionNoEffectAfter}
         </InlineMessage>
       ) : null}
 
-      <FormSection title="Diese Regel trifft" lead="So liest sie sich, sobald sie gespeichert ist.">
+      <FormSection title={text.ruleMatches} lead={text.ruleMatchesLead}>
         <RuleSummary
           description={description}
           showNeutral
@@ -723,7 +707,7 @@ export function PoolFormDialog({
           showAxisNotes={false}
           size="md"
           {...(savedReach === null ? {} : { reach: savedReach })}
-          emptyText={`Keine Bedingung — diese Regel trifft nichts. ${surface === "Spalte" ? "Die Spalte" : "Der Pool"} bleibt leer, bis eine Bedingung dazukommt.`}
+          emptyText={text.noConditionPreview(isBoardColumn)}
         />
 
         {/*
@@ -748,11 +732,11 @@ export function PoolFormDialog({
       {conditions === 0 ? (
         <InlineMessage
           tone="warning"
-          title={isBoardColumn ? "Diese Spalte bleibt leer" : "Dieser Pool bleibt leer"}
+          title={isBoardColumn ? text.columnStaysEmpty : text.poolStaysEmpty}
         >
-          Es ist noch keine Bedingung gewählt. Eine Regel ohne Bedingung trifft <strong>nichts</strong>{" "}
-          — nicht alles. Anlegen lässt sie sich trotzdem: Sie bleibt leer, bis Sie eine Bedingung
-          ergänzen, und füllt sich dann von selbst.
+          {text.noConditionBefore}
+          <strong>{text.noConditionStrong}</strong>
+          {text.noConditionAfter}
         </InlineMessage>
       ) : null}
 

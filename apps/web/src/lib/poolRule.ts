@@ -1,6 +1,5 @@
 import {
   countPoolRuleConditions,
-  enumerateGerman,
   poolRuleIsEmpty,
   type PoolRuleAxes,
 } from "@takt/domain";
@@ -11,12 +10,10 @@ import type {
   PoolResolution,
   PoolRuleTerm,
 } from "../api/types";
-import { formatCount } from "./format";
+import { formatCount, formatList } from "./format";
 import { foreignText, quotedName } from "./foreign";
 import {
-  POOL_EXPORT_EXPORTED_NOTE,
-  POOL_EXPORT_LABEL,
-  POOL_MATCH_MODE_PREFIX,
+  labels,
   type PoolCompletionFilter,
   type PoolExportFilter,
 } from "./labels";
@@ -200,11 +197,6 @@ export interface RuleAxes extends PoolRuleAxes {
 
 /* Beschreiben                                                          */
 
-/** Der Text der Erledigt-Achse, wenn sie einschränkt. */
-const COMPLETION_TEXT: Readonly<Record<Exclude<PoolCompletionFilter, "any">, string>> = {
-  done: "Nur erledigte",
-  open: "Nur unerledigte",
-};
 
 /*
  * Hier stand bis T-094 `EXPORT_TEXT` — „Mit offener Buchung" / „Mit
@@ -232,14 +224,14 @@ function chipsOf(
     if (term.kind === "tag") {
       const info = lookup.tag(term.tagId);
       return info === undefined
-        ? { kind: "tag", label: "Unbekannter Tag", path: [], missing: true }
+        ? { kind: "tag", label: labels().rule.unknownTag, path: [], missing: true }
         : { kind: "tag", label: info.name, path: info.path };
     }
     const path = lookup.folder(term.folderId);
     return path === undefined
       ? {
           kind: "folder",
-          label: "Unbekannter Ordner",
+          label: labels().rule.unknownFolder,
           path: [],
           withSubfolders: includeSubfolders,
           folderId: term.folderId,
@@ -263,62 +255,63 @@ function chipsOf(
  * Vorbild, an dem der Auftraggeber das Formular gemessen sehen will (E-055).
  */
 export function describeRule(axes: RuleAxes, lookup: RuleLookup): RuleDescription {
+  const text = labels();
   const constraining: RuleAxis[] = [];
   const neutral: NeutralAxis[] = [];
 
-  if (axes.rule.length === 0) neutral.push({ id: "required", label: "Erforderliche Tags" });
+  if (axes.rule.length === 0) neutral.push({ id: "required", label: text.rule.requiredTags });
   else {
     constraining.push({
       id: "required",
-      label: POOL_MATCH_MODE_PREFIX[axes.matchMode],
+      label: text.poolMatchModePrefix[axes.matchMode],
       chips: chipsOf(axes.rule, axes.includeSubfolders, lookup),
       text: null,
     });
   }
 
   if (axes.excludedTags.length === 0) {
-    neutral.push({ id: "excluded", label: "Ausgeschlossene Tags" });
+    neutral.push({ id: "excluded", label: text.rule.excludedTags });
   } else {
     constraining.push({
       id: "excluded",
-      label: "Ohne",
+      label: text.rule.without,
       chips: chipsOf(axes.excludedTags, axes.includeSubfolders, lookup),
       text: null,
     });
   }
 
-  if (axes.statusIds.length === 0) neutral.push({ id: "status", label: "Status" });
+  if (axes.statusIds.length === 0) neutral.push({ id: "status", label: text.rule.status });
   else {
     constraining.push({
       id: "status",
       // „Einer von" und nicht „alle von": Ein Todo trägt genau einen Status.
       // Ein „alle davon" über zwei Status wäre nicht streng, sondern
       // unerfüllbar (T-076, Abschnitt 2).
-      label: axes.statusIds.length === 1 ? "Status" : "Status — einer von",
+      label: axes.statusIds.length === 1 ? text.rule.status : text.rule.statusOneOf,
       chips: axes.statusIds.map(
-        (id): RuleChip => ({ kind: "status", label: lookup.status(id) ?? "Unbekannter Status", path: [] }),
+        (id): RuleChip => ({ kind: "status", label: lookup.status(id) ?? text.rule.unknownStatus, path: [] }),
       ),
       text: null,
     });
   }
 
-  if (axes.completion === "any") neutral.push({ id: "completion", label: "Erledigt" });
+  if (axes.completion === "any") neutral.push({ id: "completion", label: text.rule.completion });
   else {
     constraining.push({
       id: "completion",
-      label: "Erledigt",
+      label: text.rule.completion,
       chips: [],
-      text: COMPLETION_TEXT[axes.completion],
+      text: text.rule.completionText[axes.completion],
     });
   }
 
-  if (axes.exportState === "any") neutral.push({ id: "export", label: "Exportstatus" });
+  if (axes.exportState === "any") neutral.push({ id: "export", label: text.rule.exportState });
   else {
     constraining.push({
       id: "export",
-      label: "Exportstatus",
+      label: text.rule.exportState,
       chips: [],
-      text: POOL_EXPORT_LABEL[axes.exportState],
+      text: text.poolExport[axes.exportState],
       /*
         Nur bei „Abgerechnet" (W-7 aus R-2a). „Noch nicht abgerechnet" trägt
         keinen Widerspruch in sich: Was darin steht, heißt an der Buchung
@@ -326,7 +319,7 @@ export function describeRule(axes: RuleAxes, lookup: RuleLookup): RuleDescriptio
         Achse. Ein Satz an jeder der beiden Wahlen wäre die Sorte Hinweis, die
         man nach dem dritten Mal überliest.
       */
-      ...(axes.exportState === "exported" ? { note: POOL_EXPORT_EXPORTED_NOTE } : {}),
+      ...(axes.exportState === "exported" ? { note: text.poolExportExportedNote } : {}),
     });
   }
 
@@ -475,6 +468,28 @@ export function describeRuleReach(
 }
 
 /**
+ * The same answer for a **stored** rule, read from the service's single reason
+ * (`matchesNothingReason`, O-J, T-397) instead of being pieced together here.
+ *
+ * Only for surfaces that show the saved state (board column, rule list, board setup). The
+ * form keeps {@link describeRuleReach}: a draft may already name a condition while the
+ * stored state still says `empty`.
+ */
+export function describeStoredRuleReach(
+  description: RuleDescription,
+  resolved: PoolResolution,
+): RuleReach {
+  switch (resolved.matchesNothingReason) {
+    case "unresolved_required":
+      return { kind: "empty-folder", folders: emptyFoldersOf(description, resolved) };
+    case "empty":
+      return { kind: "no-condition" };
+    case "none":
+      return { kind: "reachable" };
+  }
+}
+
+/**
  * Die leeren Ordner mit ihren Namen — in der Reihenfolge, die der Dienst
  * vorgibt, und das ist die Reihenfolge der Regel im Formular.
  */
@@ -524,10 +539,11 @@ export function emptyFolderNames(folders: readonly EmptyRuleFolder[]): string {
     .filter((folder) => folder.label !== null)
     .map((folder) => quotedName(folder.label ?? ""));
   const unnamed = folders.length - named.length;
-  if (unnamed === 0) return enumerateGerman(named);
-  return enumerateGerman([
+  if (unnamed === 0) return formatList(named);
+  const rule = labels().rule;
+  return formatList([
     ...named,
-    unnamed === 1 ? "einem unbekannten Ordner" : `${formatCount(unnamed)} unbekannten Ordnern`,
+    unnamed === 1 ? rule.oneUnknownFolder : rule.manyUnknownFolders(formatCount(unnamed)),
   ]);
 }
 
@@ -536,7 +552,7 @@ export function axesOf(pool: Pool): RuleAxes {
   return {
     matchMode: pool.matchMode,
     includeSubfolders: pool.includeSubfolders,
-    rule: pool.rule,
+    rule: pool.requiredTags,
     excludedTags: pool.excludedTags,
     statusIds: pool.statusIds,
     completion: pool.completion,
@@ -582,13 +598,11 @@ export function axesOf(pool: Pool): RuleAxes {
  * trifft. Wer zuhört, erfährt danach, warum sie es nicht tut.
  */
 export function ruleSpoken(description: RuleDescription, reach: RuleReach | null): string {
-  const fault =
-    reach?.kind === "empty-folder"
-      ? ` Kein Tag in ${emptyFolderNames(reach.folders)} — diese Regel trifft deshalb nichts.`
-      : "";
+  const rule = labels().rule;
+  const fault = reach?.kind === "empty-folder" ? rule.spokenEmptyFolder(emptyFolderNames(reach.folders)) : "";
 
   if (description.isEmpty) {
-    return `Diese Regel nennt keine Bedingung und trifft nichts.${fault}`;
+    return rule.spokenNoCondition(fault);
   }
 
   const conditions = description.axes
@@ -600,7 +614,7 @@ export function ruleSpoken(description: RuleDescription, reach: RuleReach | null
   const neutral =
     description.neutral.length === 0
       ? ""
-      : ` Ohne Einschränkung: ${description.neutral.map((axis) => axis.label).join(", ")}.`;
+      : rule.spokenNeutral(description.neutral.map((axis) => axis.label).join(", "));
 
-  return `Diese Regel trifft: ${conditions}.${neutral}${fault}`;
+  return rule.spokenMatches(conditions, neutral, fault);
 }

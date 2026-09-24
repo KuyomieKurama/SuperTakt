@@ -58,7 +58,7 @@
  * Stelle. Neu ist hier allein, **wer fragt**.
  */
 
-import { err, ok, planIdlePeriods, taktError, type IdleAllocation, type Result, type TaktError, type TimeEntryId, type Timestamp } from '@takt/domain';
+import { err, exceedsMaximumDuration, exceedsMaximumSeconds, isExactTimestamp, ok, planIdlePeriods, taktError, witnessedIdleEnd, type IdleAllocation, type Result, type TaktError, type TimeEntryId, type Timestamp } from '@takt/domain';
 import type { IdleSession, UnitOfWork } from '@takt/storage';
 import { now, type AppContext, type UseCaseResult } from '../../context.ts';
 import { bookingEndOf, foundAtServiceStart } from './timer.ts';
@@ -91,45 +91,48 @@ async function transaction<T>(context: AppContext, work: (unit: UnitOfWork) => P
   catch (error) { if (error instanceof IdleWriteFailure) return err(error.problem); throw error; }
 }
 
-function validInstant(value: string): boolean {
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) && new Date(ms).toISOString().replace('.000Z', 'Z') === value;
+/**
+ * Was this open idle phase already open at service start, or did it arrive with an archive?
+ * Then its window is capped at what a heartbeat witnessed (B-5, R-35), as E-036 caps the entry.
+ * Without a recovery snapshot every phase counts as found — the cheap direction, as in
+ * `foundAtServiceStart`.
+ */
+function idleFoundAtServiceStart(context: AppContext, sessionId: TimeEntryId): boolean {
+  return context.timerRecovery === undefined || context.timerRecovery.idleSessionId === sessionId;
 }
 
-async function completeReturn(context: AppContext, unit: UnitOfWork, pending: IdleSession, end: Timestamp, timestamp: Timestamp): Promise<void> {
-  const running = await unit.timer.running();
-  if (running !== null && running.id === pending.id) {
-    /*
-     * Wo die aktive Zeit endet — der Wunsch ist der Beginn der Abwesenheit,
-     * mehr ist es nie (T-371).
-     *
-     * Für einen Timer **dieses** Laufs kommt `pending.startedAt` unverändert
-     * zurück, und das Verhalten aus A-24 ist zeichengleich: getrennt wird
-     * sekundengenau am Beginn der Abwesenheit, fortgeführt bei der Rückkehr,
-     * ohne Überlappung.
-     *
-     * Für einen **vorgefundenen** Eintrag ist `pending.startedAt` dagegen eine
-     * Ortsangabe über einen fremden Lauf: Er kann von der Uhr des
-     * Quellrechners stammen oder schlicht elf Stunden nach dem letzten
-     * Lebenszeichen liegen. Dann wird bis zum Lebenszeichen geschlossen —
-     * dieselbe Zahl, die `GET /timer/orphaned` nennt. Fehlt es ganz, gibt
-     * `bookingEndOf` den Startzeitpunkt zurück, und `separateIdle` räumt die
-     * Zeile ab, statt eine Buchung über 0 Sekunden anzulegen; auch das ist
-     * derselbe Ausgang wie im Dialog.
-     */
-    const continued = requireSuccess(
-      await unit.timer.separateIdle(running.id, await bookingEndOf(context, unit, running, pending.startedAt), end, timestamp),
-    );
-    await unit.heartbeat.touch(continued.id, timestamp);
-  } else if (running !== null && Date.parse(running.startedAt) < Date.parse(end)) {
-    throw new IdleWriteFailure(taktError('conflict', 'Der Timer wurde während der inaktiven Zeit geändert.'));
+async function completeReturn(context: AppContext, unit: UnitOfWork, pending: IdleSession, end: Timestamp): Promise<void> {
+  // A return only freezes the absence. The active timer portion is deliberately
+  // not booked here: it is committed together with the user's allocation choice.
+  await closeIdleWindow(context, unit, pending, end);
+}
+
+/**
+ * Freezes the allocation window at the return (A-24.6).
+ *
+ * A phase found at service start or brought in by an archive ends at most at its last heartbeat
+ * (B-5, R-35): measured before T-388, an archive offered 42 000 s of another computer's wall
+ * clock for allocation. When nothing after the phase start is witnessed, the open period is
+ * dropped instead of leaving an empty window that `resolveIdle` could never accept.
+ */
+async function closeIdleWindow(context: AppContext, unit: UnitOfWork, pending: IdleSession, end: Timestamp): Promise<void> {
+  if (!idleFoundAtServiceStart(context, pending.id)) {
+    await unit.idle.returned(pending.id, end);
+    return;
   }
-  await unit.idle.returned(pending.id, end);
-  // Bei gespeicherten Sitzungen der Vorversion war der Timer bereits gestoppt.
-  if (running === null && (await unit.settings.load()).idleKeepTimerRunning) {
-    const continued = requireSuccess(await unit.timer.start(pending.todoId, false, end));
-    await unit.heartbeat.touch(continued.started.id, timestamp);
+  const windowEnd = witnessedIdleEnd({
+    startedAt: pending.startedAt,
+    returnedAt: end,
+    heartbeatAt: await unit.heartbeat.lastSeen(pending.id),
+  });
+  if (windowEnd !== null) {
+    await unit.idle.returned(pending.id, windowEnd);
+    return;
   }
+  const previous = pending.previousPeriods ?? [];
+  const last = previous.at(-1);
+  if (last === undefined) await unit.idle.clear(pending.id);
+  else await unit.idle.replace({ ...last, previousPeriods: previous.slice(0, -1) });
 }
 
 export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; startedAt: Timestamp; returnedAt?: Timestamp }): Promise<UseCaseResult<IdleView | null>> {
@@ -137,11 +140,8 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
   return transaction(context, async unit => {
     const existing = await unit.idle.pending();
     if (existing !== null) {
-      if ([...(existing.previousPeriods ?? []), existing].some(period => period.id === input.entryId)) return ok(await view(unit));
-      if (existing.returnedAt === null) return err(taktError('conflict', 'Die Rückkehr der letzten inaktiven Zeit ist noch offen.'));
-      if ((existing.previousPeriods?.length ?? 0) >= 127 || Date.parse(input.startedAt) < Date.parse(existing.returnedAt)) {
-        return err(taktError('validation_error', 'Die neue inaktive Zeit überschneidet eine vorhandene Phase oder die Sammlung ist voll.'));
-      }
+      if (existing.returnedAt === null && existing.id === input.entryId) return ok(await view(unit));
+      return err(taktError('conflict', 'Ordnen Sie zuerst die inaktive Zeit zu. Der Timer ist bis dahin angehalten.'));
     }
     const settings = await unit.settings.load();
     if (!settings.idleDetectionEnabled) return err(taktError('conflict', 'Die Inaktivitätserkennung ist ausgeschaltet.'));
@@ -165,26 +165,19 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
     }
     const start = Date.parse(input.startedAt);
     const end = Date.parse(input.returnedAt ?? timestamp);
-    if (!validInstant(input.startedAt) || (input.returnedAt !== undefined && !validInstant(input.returnedAt)) ||
+    if (!isExactTimestamp(input.startedAt) || (input.returnedAt !== undefined && !isExactTimestamp(input.returnedAt)) ||
         start < Date.parse(running.startedAt) || end > Date.parse(timestamp) ||
         end - start < settings.idleThresholdMinutes * 60_000) {
       return err(taktError('validation_error', 'Die inaktive Zeit liegt nicht innerhalb des laufenden Timers oder ist kürzer als die eingestellte Schwelle.'));
     }
-    const pending: IdleSession = { id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: null, note: running.note };
-    // Zweite Wand, absichtlich doppelt (T-371): Die Abweisung oben macht diese
-    // Zeile für einen vorgefundenen Eintrag unerreichbar — aber eine
-    // Schreibstelle, die ihre Frage einer `if`-Bedingung weiter oben
-    // überläßt, ist genau die Bauart, an der T-363 gescheitert ist. Für einen
-    // Timer dieses Laufs gibt `bookingEndOf` `input.startedAt` unverändert
-    // zurück; die Zeile kostet also nichts und hält, wenn jemand die
-    // Abweisung entfernt. `proof:layers` Abschnitt 7 mißt sie mit.
-    if (!settings.idleKeepTimerRunning) requireSuccess(await unit.timer.stop(running.note, await bookingEndOf(context, unit, running, input.startedAt)));
-    if (existing === null) await unit.idle.begin(pending);
-    else {
-      const { previousPeriods: previous = [], ...last } = existing;
-      await unit.idle.replace({ ...pending, previousPeriods: [...previous, last] });
+    // A-28.6: the active part before the absence becomes a booking. Rejected before any write,
+    // so the stop with a named end stays open; rejecting later at the return would be a dead end.
+    if (exceedsMaximumDuration(running.startedAt, input.startedAt)) {
+      return err(taktError('timer_stop_end_required', 'Der Timer läuft seit mehr als 24 Stunden. Stoppen Sie ihn mit dem tatsächlichen Ende.'));
     }
-    if (input.returnedAt !== undefined) await completeReturn(context, unit, pending, input.returnedAt, timestamp);
+    const pending: IdleSession = { id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: null, note: running.note };
+    await unit.idle.begin(pending);
+    if (input.returnedAt !== undefined) await completeReturn(context, unit, pending, input.returnedAt);
     return ok(await view(unit));
   });
 }
@@ -197,10 +190,10 @@ export function returnFromIdle(context: AppContext, id: TimeEntryId, returnedAt?
     if (pending.id !== id) return err(taktError('conflict', 'Diese inaktive Zeit wurde bereits bearbeitet.'));
     if (pending.returnedAt !== null) return ok(await view(unit));
     const end = returnedAt ?? timestamp;
-    if (!validInstant(end) || Date.parse(end) <= Date.parse(pending.startedAt) || Date.parse(end) > Date.parse(timestamp)) {
+    if (!isExactTimestamp(end) || Date.parse(end) <= Date.parse(pending.startedAt) || Date.parse(end) > Date.parse(timestamp)) {
       return err(taktError('validation_error', 'Der Rückkehrzeitpunkt ist ungültig.'));
     }
-    await completeReturn(context, unit, pending, end, timestamp);
+    await completeReturn(context, unit, pending, end);
     return ok(await view(unit));
   });
 }
@@ -213,12 +206,33 @@ export function resolveIdle(context: AppContext, input: { id: TimeEntryId; alloc
     if (pending === null) return ok({ recordedSeconds: 0, breakSeconds: 0, resumed: false, alreadyResolved: true });
     if (pending.id !== input.id) return err(taktError('conflict', 'Es wartet inzwischen eine andere inaktive Zeit auf Zuordnung.'));
     if (pending.returnedAt === null) return err(taktError('conflict', 'Bestätigen Sie zuerst Ihre Rückkehr.'));
+    const running = await unit.timer.running();
+    if (running === null || running.id !== pending.id) {
+      return err(taktError('conflict', 'Der angehaltene Timer wurde inzwischen geändert. Bitte erneut prüfen.'));
+    }
     const planned = planIdlePeriods([...(pending.previousPeriods ?? []), pending], input.allocations);
     if (!planned.ok) return planned;
+    // A-28.6, E-124 point 3: every worked section is a booking of at most 24 hours.
+    const tooLong = input.allocations.flatMap((part, index) =>
+      part.todoId !== null && exceedsMaximumSeconds(part.seconds)
+        ? [{ field: `allocations.${index}.seconds`, code: 'time_entry_too_long', message: 'Ein Abschnitt dauert höchstens 24 Stunden.' }]
+        : []);
+    if (tooLong.length > 0) {
+      return err({ code: 'time_entry_too_long', message: 'Eine Zeitbuchung dauert höchstens 24 Stunden. Teilen Sie den Zeitraum auf.', details: tooLong });
+    }
     // Check every target before the first mutation; later errors still roll back.
     for (const part of planned.value) {
       if (part.todoId !== null && await unit.todos.load(part.todoId) === null) return err(taktError('not_found', 'Eine ausgewählte Aufgabe gibt es nicht mehr.'));
     }
+    // The timer row reserves the single-timer slot while the dialog is open.
+    // Only this explicit resolve action turns its active portion into a booking.
+    requireSuccess(await unit.timer.separateIdle(
+      running.id,
+      await bookingEndOf(context, unit, running, pending.startedAt),
+      pending.returnedAt,
+      timestamp,
+    ));
+    requireSuccess(await unit.timer.stop('', pending.returnedAt));
     let recordedSeconds = 0;
     let breakSeconds = 0;
     for (const part of planned.value) {

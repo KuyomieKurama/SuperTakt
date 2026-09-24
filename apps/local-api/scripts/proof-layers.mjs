@@ -781,6 +781,19 @@ section('6  Gegenproben — jede eingesetzte Verletzung muß auffallen');
   );
 }
 
+/**
+ * A reference to the timer port that is not a direct `.timer.<method>(` call:
+ * `const p = unit.timer`, `const { stop } = unit.timer`, `unit.timer['stop']`,
+ * `const { timer } = unit`, `unit['timer']`, or the port handed on as a value.
+ */
+function versteckterPortzugriff(zeile) {
+  return (
+    /\.timer\b(?!\s*\.\s*\w+\s*\()/u.test(zeile) ||
+    /\{[^}]*\btimer\b[^}]*\}\s*=/u.test(zeile) ||
+    /\[\s*['"`]timer['"`]\s*\]/u.test(zeile)
+  );
+}
+
 section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Frage');
 /*
  * ===========================================================================
@@ -818,13 +831,23 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
  *
  * Eine achte Tür ist damit rot, **bevor** jemand sie mißt — und eine Ausnahme,
  * die niemand mehr trifft, ebenfalls (E-103, zweiseitig wie in Abschnitt 5).
+ *
+ * Measured set since T-388 (A-A-131, T-381 §47.3): **every** file under `src/`,
+ * entry files and routes included, not only use cases; SQL without regard to case
+ * or column order; and any reference to the timer port that is not a direct
+ * `.timer.<method>(` call — alias, destructuring, bracket access, passing the port
+ * on — is red, because the calls behind it cannot be measured (E-121 point 10).
+ * Named limits: SQL assembled from pieces (`'UPDATE time_entry SET ' + column`),
+ * the dynamic `timeEntries.update` (measured closed on running entries, T-381
+ * §47.1), and writes from outside `@takt/local-api` and `@takt/storage`.
  */
 {
   const STORAGE_DATEIEN = quellbaum('@takt/storage', 'src', {
     mindestens: 10,
     endungen: new Set(['.ts']),
   });
-  const SET_ENDED_AT = /UPDATE\s+time_entry\s+SET\s+ended_at/g;
+  // Any column order and any case: `update time_entry set note = ?, ended_at = ?` counts (A-A-131).
+  const SET_ENDED_AT = /UPDATE\s+time_entry\s+SET\s[^;'"`]*?\bended_at\s*=/gi;
 
   const schreibstellen = STORAGE_DATEIEN.flatMap((pfad) => {
     const text = readFileSync(pfad, 'utf8');
@@ -884,6 +907,19 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
         '`bookingEndOf` geschlossen (`closedBeforeStart`); dann verdrängt dieser Aufruf nichts mehr. ' +
         'Sonst schließt der Port einen Timer **dieses** Laufs bei „jetzt" — die Wanduhr ist dort richtig.',
     },
+    {
+      zeile: 'requireSuccess(await unit.timer.separateIdle(',
+      grund:
+        'resolveIdle: Der Zeitpunkt steht als nächstes Argument ausdrücklich in `bookingEndOf`; ' +
+        'die Zeile selbst kann ihn wegen der mehrzeiligen Argumentliste nicht tragen. Dieser Weg ' +
+        'läuft ausschließlich nach der bewussten Zuordnungsentscheidung.',
+    },
+    {
+      zeile: "requireSuccess(await unit.timer.stop('', pending.returnedAt));",
+      grund:
+        'resolveIdle: `separateIdle` hat unmittelbar davor die Fortsetzung bei `pending.returnedAt` ' +
+        'angelegt. Dieser Stopp entfernt genau diese Nullsekunden-Fortsetzung; er kann keine Zeit buchen.',
+    },
   ];
 
   const normal = (z) => z.trim().replace(/\s+/gu, ' ');
@@ -897,7 +933,7 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
    */
   const istProsa = (zeile) => /^(\*|\/\/|\/\*)/u.test(zeile);
 
-  const aufrufe = anwendungsfallNamen.flatMap((n) =>
+  const aufrufe = alleNamen.flatMap((n) =>
     inhaltVon(n)
       .split('\n')
       .map((zeile, i) => ({ datei: n, nr: i + 1, zeile: normal(zeile) }))
@@ -913,6 +949,22 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
   const ausnahmeWortlaut = BEGRUENDETE_AUSNAHMEN.map(({ zeile }) => normal(zeile));
   const ungefragt = aufrufe.filter(
     ({ zeile }) => !zeile.includes('bookingEndOf(') && !ausnahmeWortlaut.includes(zeile),
+  );
+
+  /*
+   * The port only through `.timer.<method>(`. Everything else hides the calls
+   * behind a name this run cannot follow, so it refuses instead of passing.
+   */
+  const unmessbar = alleNamen.flatMap((n) =>
+    inhaltVon(n)
+      .split('\n')
+      .map((zeile, i) => ({ datei: n, nr: i + 1, zeile: normal(zeile) }))
+      .filter(({ zeile }) => !istProsa(zeile) && versteckterPortzugriff(zeile)),
+  );
+  check(
+    `the timer port is used only as a direct \`.timer.<method>(\` call in all ${alleNamen.length} files (no alias, destructuring, bracket access)`,
+    unmessbar.length === 0,
+    unmessbar.map(({ datei, nr, zeile }) => `${datei}:${nr} ${zeile}`).join(' | '),
   );
 
   check(
@@ -931,13 +983,10 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
   );
 
   /*
-   * Der Deckel nach oben ist eine Zusage der Domäne, aber nur so gut wie die
-   * Aufrufer: `decideOrphanedTimer` deckelt auf `min(heartbeatAt, now)` — und
-   * `now` ist freiwillig, weil ein Pflichtfeld sechs vorbestehende Prüffälle
-   * zu `tsc`-Fehlern machte. Hier wird deshalb gemessen, was der Typ nicht
-   * verlangen kann: **jeder** Aufruf im Dienst übergibt den Wert.
+   * `now` is required by the type since T-388; this stays as a second wall
+   * for callers outside `tsc` (for example an `as never` cast).
    */
-  const orphanAufrufe = anwendungsfallNamen.flatMap((n) => {
+  const orphanAufrufe = alleNamen.flatMap((n) => {
     const text = inhaltVon(n);
     return [...text.matchAll(/decideOrphanedTimer\s*\(\{([\s\S]*?)\}\)/gu)].map((treffer) => ({
       datei: n,
@@ -992,11 +1041,38 @@ section('8  Gegenproben zu Abschnitt 7 — jede eingesetzte Tür muß auffallen'
     'Gegenprobe: eine echte Zeile gilt weiterhin als Tür',
     !istProsa(normal('    const result = await unit.timer.stop(note, endsAt);')),
   );
+  const SET_ENDED_AT = /UPDATE\s+time_entry\s+SET\s[^;'"`]*?\bended_at\s*=/iu;
   check(
     'Gegenprobe: `UPDATE time_entry SET ended_at` wird im Text gefunden',
-    /UPDATE\s+time_entry\s+SET\s+ended_at/u.test(
-      "conn.prepare('UPDATE time_entry SET ended_at = ?, updated_at = ? WHERE id = ?')",
-    ),
+    SET_ENDED_AT.test("conn.prepare('UPDATE time_entry SET ended_at = ?, updated_at = ? WHERE id = ?')"),
+  );
+  check(
+    'Gegenprobe: lower case and another column first are found too (A-A-131)',
+    SET_ENDED_AT.test("conn.prepare('update time_entry set note = ?, ended_at = ? where id = ?')"),
+  );
+  check(
+    'Gegenprobe: `ended_at` in the WHERE clause of another update is not a write',
+    !SET_ENDED_AT.test("conn.prepare('UPDATE time_entry SET note = ? WHERE ended_at IS NULL')"),
+  );
+  check(
+    'Gegenprobe: alias, destructuring and bracket access on the port are refused (A-A-131)',
+    [
+      'const p = unit.timer;',
+      'const { stop } = unit.timer;',
+      'await unit.timer["stop"](note, now);',
+      'const { timer } = unit;',
+      "const port = unit['timer'];",
+      'await closeWith(unit.timer, now);',
+    ].every((zeile) => versteckterPortzugriff(normal(zeile))),
+  );
+  check(
+    'Gegenprobe: a direct call and `context.timerRecovery` are not refused',
+    !versteckterPortzugriff('const result = await unit.timer.stop(note, endsAt);') &&
+      !versteckterPortzugriff('context.timerRecovery.entryId = null;'),
+  );
+  check(
+    'Gegenprobe: entry files and routes are part of the measured set',
+    alleNamen.includes('src/runtime.ts') && alleNamen.includes('src/main.ts') && alleNamen.some((n) => n.endsWith('/routes.ts')),
   );
   check(
     'Gegenprobe: ein `decideOrphanedTimer` ohne `now` wird gefunden',

@@ -1,6 +1,7 @@
 import type { ExportStatus } from "@takt/domain";
 import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
+import { labels } from "../../lib/labels";
 
 /**
  * Exportstatus einer Zeitbuchung — A-6.5 bis A-6.7, A-6.9, A-8.6, E-012,
@@ -112,16 +113,9 @@ export function exportStatusOf(state: ExportDisplayState): ExportStatus {
  */
 export type ExportSummary = Readonly<Record<ExportDisplayState, number>>;
 
-/** Beschriftung der beiden fachlichen Werte — fuer Filter und Auswahllisten. */
-export const EXPORT_STATUS_LABEL: Readonly<Record<ExportStatus, string>> = {
-  open: "Offen",
-  exported: "Exportiert",
-};
 
+/** Label and description come from `labels().exportState` (A-28.2). */
 interface StateDefinition {
-  readonly label: string;
-  /** Langform fuer Hilfsmittel und Erklaertexte. */
-  readonly description: string;
   readonly icon: IconName;
   /**
    * Anhaengsel fuer CSS-Klassen (`badge--not-billed`). Ausgeschrieben und
@@ -137,32 +131,21 @@ interface StateDefinition {
 
 export const EXPORT_STATE: Readonly<Record<ExportDisplayState, StateDefinition>> = {
   open: {
-    label: "Offen",
-    description: "Noch nicht an das Abrechnungstool uebertragen.",
     icon: "circle",
     slug: "open",
     status: "open",
   },
   exported: {
-    label: "Exportiert",
-    description:
-      "Bereits an das Abrechnungstool uebertragen. Gesperrt, solange der Exportstatus nicht zurueckgesetzt wird.",
     icon: "check-circle",
     slug: "exported",
     status: "exported",
   },
   reopened: {
-    label: "Erneut offen",
-    description:
-      "Der Exportstatus wurde zurueckgesetzt. Fachlich ist die Buchung offen; sie war aber schon einmal im Export und geht beim naechsten Export erneut in die Abrechnung.",
     icon: "rotate-ccw",
     slug: "reopened",
     status: "open",
   },
   not_billed: {
-    label: "Nicht abgerechnet",
-    description:
-      "Von Hand ausgebucht: Diese Zeit wird nicht abgerechnet. Eine Exportdatei hat sie nie enthalten. Fachlich ist die Buchung abgeschlossen und damit gesperrt; rueckgaengig geht das ueber das Zuruecksetzen des Exportstatus.",
     icon: "slash-circle",
     slug: "not-billed",
     status: "exported",
@@ -204,8 +187,8 @@ export function ExportStatusBadge({
     >
       <Icon name={definition.icon} size={size === "sm" ? 12 : 14} />
       <span className={cx(iconOnly && "visually-hidden")}>
-        <span className="visually-hidden">Exportstatus: </span>
-        {definition.label}
+        <span className="visually-hidden">{labels().exportStatePrefix}</span>
+        {labels().exportState[state].label}
         {detail !== undefined && !iconOnly ? (
           <span className="badge__detail">{detail}</span>
         ) : null}
@@ -241,7 +224,7 @@ export function ExportStatusMarker({
       aria-hidden={!labelled}
     >
       {labelled ? (
-        <span className="visually-hidden">Exportstatus: {definition.label}</span>
+        <span className="visually-hidden">{labels().exportStatePrefix}{labels().exportState[state].label}</span>
       ) : null}
     </span>
   );

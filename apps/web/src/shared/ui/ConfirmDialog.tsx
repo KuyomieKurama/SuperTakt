@@ -5,6 +5,7 @@ import { touchedOnBlur } from "../../lib/touched";
 import { DialogSurface } from "./DialogSurface";
 import { Icon } from "./Icon";
 import { Button } from "./Primitives";
+import { labels } from "../../lib/labels";
 
 /**
  * Bestaetigungsdialog — Abschnitt 15, E-012, R-10.
@@ -78,7 +79,7 @@ export function ConfirmDialog({
   consequence,
   refusal,
   confirmLabel,
-  cancelLabel = "Abbrechen",
+  cancelLabel = labels().cancel,
   tone = "default",
   acknowledgeLabel,
   reasonLabel,
@@ -242,7 +243,7 @@ export function ConfirmDialog({
               {reasonRequired ? (
                 <>
                   <span aria-hidden> *</span>
-                  <span className="visually-hidden"> (Pflichtfeld)</span>
+                  <span className="visually-hidden">{labels().requiredField}</span>
                 </>
               ) : null}
             </label>
@@ -291,7 +292,7 @@ export function ConfirmDialog({
             <div className="field__live" role="alert">
               {reasonMissing ? (
                 <p className="field__error" id={reasonErrorId}>
-                  {`${reasonLabel} fehlt.`}
+                  {labels().fieldMissing(reasonLabel)}
                 </p>
               ) : null}
             </div>

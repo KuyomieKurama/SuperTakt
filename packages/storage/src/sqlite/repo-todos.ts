@@ -24,12 +24,13 @@ import type {
   TodoCreate,
   TodoFilter,
   TodoId,
+  TodoMatchOrigin,
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
 import { validTodoSchedule, dueComparison, err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
 
-import { chunk, integer, placeholders, text, textOrNull, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
+import { SEARCH_FOLD_FUNCTION, chunk, foldForSearch, integer, placeholders, text, textOrNull, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
 import { toTodo, toTodoNote } from './mappers.ts';
@@ -108,13 +109,20 @@ function buildConditions(
   if (filter.priorityIds?.length) conditions.push({ sql: `t.priority_id IN (${placeholders(filter.priorityIds.length)})`, params: [...filter.priorityIds] });
 
   if (filter.search !== undefined && filter.search.trim() !== '') {
-    // `LIKE` mit umschließenden Prozentzeichen. Die Sonderzeichen `%` und `_`
-    // werden maskiert, sonst wäre eine Suche nach „50%" eine Suche nach allem.
-    const needle = `%${escapeLike(filter.search.trim())}%`;
-    conditions.push({
-      sql: "(t.title LIKE ? ESCAPE '\\' OR (t.call_number IS NOT NULL AND t.call_number LIKE ? ESCAPE '\\'))",
-      params: [needle, needle],
-    });
+    const needle = searchNeedle(filter.search);
+    if (filter.searchIncludesNote === true) {
+      // C-22 (K-4): only the global search reaches into the internal note, through its own flag.
+      // The note body stays in SQL; `matchOrigins` names where a todo matched, never the text.
+      conditions.push({
+        sql: `(${TITLE_MATCHES} OR ${CALL_NUMBER_MATCHES} OR ${NOTE_MATCHES})`,
+        params: [needle, needle, needle],
+      });
+    } else {
+      conditions.push({
+        sql: `(${TITLE_MATCHES} OR ${CALL_NUMBER_MATCHES})`,
+        params: [needle, needle],
+      });
+    }
   }
 
   if (filter.callNumber !== undefined) {
@@ -333,8 +341,37 @@ function translateDueComparison(comparison: DueComparison): Condition {
   }
 }
 
-function escapeLike(value: string): string {
+/**
+ * The same WHERE translation for another table that filters by todo (C-14, time entries).
+ * Never empty: without a condition it is `1 = 1`.
+ */
+export function todoFilterConditions(
+  filter: TodoFilter,
+  resolvedPools: readonly ResolvedPool[],
+): Condition {
+  const conditions = buildConditions(filter, resolvedPools);
+  if (conditions.length === 0) return { sql: '1 = 1', params: [] };
+  return {
+    sql: conditions.map((condition) => condition.sql).join(' AND '),
+    params: conditions.flatMap((condition) => [...condition.params]),
+  };
+}
+
+export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+/*
+ * Todo search (title, call number, internal note) folds both sides with the same SQL function as
+ * the service-text search, so case is ignored beyond ASCII there too (E-135 point 3). It runs in
+ * SQL, before counting and paging. `%` and `_` in the term are escaped, so "50%" stays literal.
+ */
+const TITLE_MATCHES = `${SEARCH_FOLD_FUNCTION}(t.title) LIKE ? ESCAPE '\\'`;
+const CALL_NUMBER_MATCHES = `(t.call_number IS NOT NULL AND ${SEARCH_FOLD_FUNCTION}(t.call_number) LIKE ? ESCAPE '\\')`;
+const NOTE_MATCHES = `EXISTS (SELECT 1 FROM todo_note n WHERE n.todo_id = t.id AND ${SEARCH_FOLD_FUNCTION}(n.body) LIKE ? ESCAPE '\\')`;
+
+function searchNeedle(term: string): string {
+  return `%${escapeLike(foldForSearch(term.trim()))}%`;
 }
 
 /**
@@ -446,6 +483,31 @@ export function createTodoPort(
         );
       }
       return hydrate(rows);
+    },
+
+    async matchOrigins(todoIds, term) {
+      const origins = new Map<TodoId, TodoMatchOrigin[]>();
+      const needle = searchNeedle(term);
+      for (const block of chunk([...new Set(todoIds)])) {
+        const rows = conn
+          .prepare(
+            `SELECT t.id,
+                    ${TITLE_MATCHES} AS in_title,
+                    ${CALL_NUMBER_MATCHES} AS in_call_number,
+                    ${NOTE_MATCHES} AS in_note
+               FROM todo t
+              WHERE t.id IN (${placeholders(block.length)})`,
+          )
+          .all(needle, needle, needle, ...block);
+        for (const row of rows) {
+          const found: TodoMatchOrigin[] = [];
+          if (row['in_title'] === 1) found.push('title');
+          if (row['in_call_number'] === 1) found.push('call_number');
+          if (row['in_note'] === 1) found.push('todo_note');
+          origins.set(text(row, 'id') as TodoId, found);
+        }
+      }
+      return origins;
     },
 
     async search(filter: TodoFilter, pagination?: Pagination): Promise<Page<Todo>> {

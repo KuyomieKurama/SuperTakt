@@ -56,9 +56,10 @@ import { hasForbiddenNameCharacter } from "@takt/domain";
 import type { ForeignText } from "../api/types";
 import type { IdleActivity } from "@takt/desktop/shell";
 import type { Connection } from "../api/client";
-import { waitForService } from "./serviceStartup";
+import { ServiceNotReadyError, waitForService } from "./serviceStartup";
 import { foreignText, foreignTextFrom } from "../lib/foreign";
 import type { ShellStateSnapshot, UserNameFinding } from "./ShellStatus";
+import { appTexts } from "./texts";
 
 /**
  * Das Ergebnis des Ordnerauswahldialogs, unter dem Namen der Hülle.
@@ -86,7 +87,9 @@ export type ConnectionState =
       readonly userName: UserNameFinding;
     }
   | { readonly kind: "no_shell" }
-  | { readonly kind: "failed"; readonly message: string };
+  // `message` comes from the shell or the startup wait (German); null means the UI fallback text.
+  // `notReady`: set only when the service did not confirm readiness in time.
+  | { readonly kind: "failed"; readonly message: string | null; readonly notReady?: true };
 
 interface ShellModule {
   idleActivity(wake?: { enabled: boolean; thresholdMinutes: number }): Promise<IdleActivity>;
@@ -170,12 +173,13 @@ export async function connect(): Promise<ConnectionState> {
     const nativeMessage = foreignTextFrom(cause);
     return {
       kind: "failed",
+      ...(cause instanceof ServiceNotReadyError ? { notReady: true as const } : {}),
       message:
         cause instanceof Error
           ? cause.message
           : nativeMessage !== null && nativeMessage.trim().length > 0
             ? foreignText(nativeMessage)
-            : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
+            : null,
     };
   }
 }
@@ -269,9 +273,7 @@ export async function readShellState(): Promise<ShellStateSnapshot | null> {
 export async function quitApplication(): Promise<void> {
   const shell = await loadShell();
   if (shell === null || !shell.isShellAvailable()) {
-    throw new Error(
-      "SuperTakt läuft hier ohne seine Anwendungshülle. Den Befehl zum Beenden gibt es nur in der SuperTakt-Anwendung.",
-    );
+    throw new Error(appTexts().noShell.quit);
   }
   await shell.quit();
 }
@@ -315,8 +317,7 @@ export async function openReleasePage(version: string): Promise<ReleasePageResul
   if (shell === null || !shell.isShellAvailable()) {
     return {
       outcome: "unavailable",
-      reason:
-        "Die Release-Seite öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.",
+      reason: appTexts().noShell.releasePage,
     };
   }
   return shell.openReleasePage(version);
@@ -349,8 +350,7 @@ export async function chooseExportDirectory(
   if (shell === null || !shell.isShellAvailable()) {
     return {
       outcome: "unavailable",
-      reason:
-        "Der Ordnerauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.",
+      reason: appTexts().noShell.folderPicker,
     };
   }
   return shell.chooseExportDirectory(current);
@@ -358,15 +358,8 @@ export async function chooseExportDirectory(
 
 /* Anhänge (Spezifikation Abschnitt 19, E-072)                          */
 
-/**
- * Der Satz für den reinen Browserbetrieb, an **einer** Stelle.
- *
- * Wortgleich zu dem in `@takt/desktop/shell` — die Hülle antwortet ihn, wenn
- * sie geladen ist und `__TAURI_INTERNALS__` fehlt; hier steht er für den Fall,
- * dass das Modul selbst nicht geladen werden konnte. Zwei Lagen, eine Auskunft.
- */
-const NO_SHELL_FOR_ATTACHMENTS =
-  "Anhänge öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.";
+// Browser-only attachment refusal: `appTexts().noShell.attachments`. The German wording equals the one
+// `@takt/desktop/shell` answers when it is loaded without `__TAURI_INTERNALS__` (two layers, one answer).
 
 /**
  * Öffnet einen Verweis im Browser (A-19.9, A-19.18).
@@ -382,7 +375,7 @@ const NO_SHELL_FOR_ATTACHMENTS =
 export async function openAttachmentLink(url: ForeignText): Promise<AttachmentOpen> {
   const shell = await loadShell();
   if (shell === null || !shell.isShellAvailable()) {
-    return { outcome: "unavailable", reason: NO_SHELL_FOR_ATTACHMENTS };
+    return { outcome: "unavailable", reason: appTexts().noShell.attachments };
   }
   return shell.openAttachmentLink(url);
 }
@@ -397,7 +390,7 @@ export async function openAttachmentLink(url: ForeignText): Promise<AttachmentOp
 export async function openAttachmentFile(path: ForeignText): Promise<AttachmentOpen> {
   const shell = await loadShell();
   if (shell === null || !shell.isShellAvailable()) {
-    return { outcome: "unavailable", reason: NO_SHELL_FOR_ATTACHMENTS };
+    return { outcome: "unavailable", reason: appTexts().noShell.attachments };
   }
   return shell.openAttachmentFile(path);
 }
@@ -417,8 +410,7 @@ export async function chooseAttachmentFile(
   if (shell === null || !shell.isShellAvailable()) {
     return {
       outcome: "unavailable",
-      reason:
-        "Der Dateiauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.",
+      reason: appTexts().noShell.filePicker,
     };
   }
   return shell.chooseAttachmentFile(kind);
@@ -438,6 +430,6 @@ export async function readIdleActivity(wake?: { enabled: boolean; thresholdMinut
 
 export async function confirmOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {
   const shell = await loadShell();
-  if (shell === null) throw new Error("Bitte öffnen Sie die SuperTakt-Desktop-App für die Zertifikatseinrichtung.");
+  if (shell === null) throw new Error(appTexts().noShell.certificate);
   return shell.trustOutlookCertificate(fingerprint);
 }

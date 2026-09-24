@@ -43,7 +43,12 @@ import { fileURLToPath } from 'node:url';
 
 import { errorCodeOf } from '@takt/storage';
 
-import { BIND_ADDRESS } from '../config.ts';
+import {
+  BIND_ADDRESS,
+  CONNECTION_CHECK_INTERVAL_MS,
+  HEADERS_TIMEOUT_MS,
+  REQUEST_RECEIVE_TIMEOUT_MS,
+} from '../config.ts';
 import { taskpaneCertPath, taskpaneKeyPath } from '../access/paths.ts';
 import { loadOrCreateCertificate } from './certificate.ts';
 import type { Logger } from '../logger.ts';
@@ -80,7 +85,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = Object.freeze({
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
-  '.map': 'application/json; charset=utf-8',
+  // No `.map`: source maps of the add-in are never shipped (A-28.11, E-125 point 2).
 });
 
 /**
@@ -181,7 +186,15 @@ export async function startTaskpaneServer(
     );
   }
 
-  const server = createServer({ key: certificate.keyPem, cert: certificate.certPem });
+  // Same deadlines as the API port (O-AR a): a client that trickles its header
+  // or body must not hold a connection open indefinitely.
+  const server = createServer({
+    key: certificate.keyPem,
+    cert: certificate.certPem,
+    headersTimeout: HEADERS_TIMEOUT_MS,
+    requestTimeout: REQUEST_RECEIVE_TIMEOUT_MS,
+    connectionsCheckingInterval: CONNECTION_CHECK_INTERVAL_MS,
+  });
 
   server.on('request', (request, response) => {
     void serve(root, request.url ?? '/', response);

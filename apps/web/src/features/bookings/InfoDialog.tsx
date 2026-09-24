@@ -3,6 +3,7 @@ import { Dialog } from "@ark-ui/react/dialog";
 import { cx } from "../../lib/cx";
 import { DialogSurface } from "../../shared/ui/DialogSurface";
 import { Button, IconButton } from "../../shared/ui/Primitives";
+import { labels } from "../../lib/labels";
 
 /**
  * Takt — der Dialog, der nichts fragt (Abschnitt 15).
@@ -40,7 +41,7 @@ export function InfoDialog({
   title,
   description,
   children,
-  closeLabel = "Schließen",
+  closeLabel = labels().close,
   actions,
   wide = false,
   onClose,
@@ -61,7 +62,7 @@ export function InfoDialog({
           )}
         </div>
         <Dialog.CloseTrigger asChild>
-          <IconButton label="Dialog schließen" icon="x" size="sm" />
+          <IconButton label={labels().formDialog.close} icon="x" size="sm" />
         </Dialog.CloseTrigger>
       </div>
 

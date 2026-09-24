@@ -5,6 +5,9 @@ import { plural } from "../../lib/format";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, InlineMessage, Spinner } from "../../shared/ui/Primitives";
 import { Foreign } from "../../shared/ui/Foreign";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { structureTexts } from "./texts";
 
 /**
  * Takt — die beiden Chip-Auswahlen des Regelformulars (S-11, A-4.4, E-055).
@@ -138,11 +141,11 @@ function PickerField({
           title={errorTitle}
           action={
             <Button size="sm" iconStart="rotate-ccw" onClick={onRetry}>
-              Erneut versuchen
+              {labels().retry}
             </Button>
           }
         >
-          {source.message} Ohne die Liste lässt sich hier nichts wählen.
+          <ServiceText text={source.message} /> {structureTexts().withoutListNothing}
         </InlineMessage>
       ) : (
         <div
@@ -232,10 +235,11 @@ export function FolderPicker({
 
   const withSearch = source.status === "ready" && all.length >= SEARCH_FROM;
 
+  const text = structureTexts();
   const search = withSearch ? (
     <div className="picker-search">
       <label className="visually-hidden" htmlFor={searchId}>
-        {label} durchsuchen
+        {text.searchIn(label)}
       </label>
       <span className="picker-search__icon" aria-hidden>
         <Icon name="search" size={14} />
@@ -245,7 +249,7 @@ export function FolderPicker({
         type="search"
         className="field__input"
         value={query}
-        placeholder="Ordner oder Pfad suchen …"
+        placeholder={text.folderSearchPlaceholder}
         autoComplete="off"
         onChange={(event) => setQuery(event.target.value)}
       />
@@ -260,13 +264,13 @@ export function FolderPicker({
         hint={hint}
         source={source}
         onRetry={onRetry}
-        loadingText="Ordner werden geladen …"
-        errorTitle="Die Ordner ließen sich nicht laden"
-        emptyText="Es gibt noch keinen Ordner."
+        loadingText={text.foldersLoading}
+        errorTitle={text.foldersFailed}
+        emptyText={text.noFolderYet}
         {...(search === null ? {} : { toolbar: search })}
       >
         {shown.length === 0 ? (
-          <p className="field__hint">Kein Ordner passt zu „{query.trim()}“.</p>
+          <p className="field__hint">{text.noFolderMatches(query.trim())}</p>
         ) : (
           shown.map((folder) => {
             const active = selected.has(folder.id);
@@ -288,8 +292,7 @@ export function FolderPicker({
 
       {hidden > 0 ? (
         <p className="field__hint">
-          {plural(hidden, "Weiterer Ordner passt", "Weitere Ordner passen")} ebenfalls. Tippen Sie
-          genauer.
+          {text.typeMorePrecisely(plural(hidden, text.moreFolderMatches, text.moreFoldersMatch))}
         </p>
       ) : null}
     </>
@@ -322,17 +325,18 @@ export interface StatusPickerProps {
 
 export function StatusPicker({ source, onRetry, value, onChange, hint }: StatusPickerProps) {
   const labelId = useId();
+  const text = structureTexts();
 
   return (
     <PickerField
-      label="Status"
+      label={text.status}
       labelId={labelId}
       hint={hint}
       source={source}
       onRetry={onRetry}
-      loadingText="Statuswerte werden geladen …"
-      errorTitle="Die Statuswerte ließen sich nicht laden"
-      emptyText="Es gibt noch keinen Statuswert."
+      loadingText={text.statusesLoading}
+      errorTitle={text.statusesFailed}
+      emptyText={text.noStatusYet}
     >
       {(source.status === "ready" ? source.items : []).map((status) => {
         const active = value.includes(status.id);

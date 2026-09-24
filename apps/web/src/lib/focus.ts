@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 
 /**
  * Fokusfuehrung fuer modale Flaechen.
@@ -130,4 +130,32 @@ export function keepTabInside(
     event.preventDefault();
     first.focus();
   }
+}
+
+/**
+ * Keeps focus on a row that was moved up or down (welle-18.md 4, SC 2.4.3).
+ *
+ * The row's order buttons sit in an element with `data-order-group="<id>"`. Once the list
+ * has re-rendered in its new order, focus stays on the pressed button; if that button is
+ * now disabled (the row reached an end) or focus fell to `<body>`, the other enabled
+ * button of the same row takes it.
+ */
+export function useReorderFocus(list: unknown): (movedId: string) => void {
+  const moved = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = moved.current;
+    if (id === null) return;
+    const group = document.querySelector<HTMLElement>(`[data-order-group="${CSS.escape(id)}"]`);
+    if (group === null) return;
+    moved.current = null;
+    const active = document.activeElement;
+    const focusIsFine =
+      active instanceof HTMLButtonElement && group.contains(active) && !active.disabled;
+    if (!focusIsFine) focusFirstWithin(group);
+  }, [list]);
+
+  return useCallback((movedId: string) => {
+    moved.current = movedId;
+  }, []);
 }

@@ -9,6 +9,7 @@ import {
   plural,
 } from "../../lib/format";
 import type { ExportRunResult } from "./api";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — Ergebnis eines Laufs, einschließlich der ausgelassenen Gruppen
@@ -24,6 +25,7 @@ export function RunResult({
   readonly rowCount: number;
   readonly onDismiss: () => void;
 }) {
+  const text = exportTexts();
   return (
     /*
       Die vollstaendige Fassung steht als **Folge** im Bestaetigungsdialog
@@ -31,36 +33,39 @@ export function RunResult({
       eine Feststellung, und die kommt mit vier Woertern aus (T-181, ST-07).
     */
     <Card
-      title="Export abgeschlossen"
-      description="In einer Transaktion geschrieben."
+      title={text.runDone}
+      description={text.runDoneLead}
       actions={
         <Button size="sm" variant="ghost" onClick={onDismiss}>
-          Ausblenden
+          {text.hide}
         </Button>
       }
     >
       <dl className="facts">
-        <dt>Datei</dt>
+        <dt>{text.file}</dt>
         <dd className="mono">{result.run.filePath}</dd>
-        <dt>Umfang</dt>
+        <dt>{text.scope}</dt>
         <dd>
-          {plural(result.run.entryCount, "Buchung", "Buchungen")} in{" "}
-          {plural(rowCount, "Exportzeile", "Exportzeilen")} ·{" "}
-          {formatQuarters(result.run.totalQuarters)} Stunden · {formatBytes(result.run.bytes)}
+          {text.runScope(
+            plural(result.run.entryCount, text.booking, text.bookings),
+            plural(rowCount, text.exportRow, text.exportRows),
+            formatQuarters(result.run.totalQuarters),
+            formatBytes(result.run.bytes),
+          )}
         </dd>
-        <dt>Prüfsumme</dt>
+        <dt>{text.checksum}</dt>
         <dd className="mono truncate">{result.run.fileSha256}</dd>
       </dl>
 
       {result.skipped.length === 0 ? null : (
         <InlineMessage
           tone="warning"
-          title={`${plural(result.skipped.length, "Tagesgruppe wurde", "Tagesgruppen wurden")} ausgelassen`}
+          title={text.skippedTitle(plural(result.skipped.length, text.groupSkipped, text.groupsSkipped))}
         >
           <p>
-            Ohne Leistungstext nimmt das Abrechnungstool eine Zeile nicht an. Der übrige
-            Export ist durchgelaufen; diese Gruppen sind <strong>weiterhin offen</strong> und
-            erscheinen beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann gehen sie mit.
+            {text.skippedBefore}
+            <strong>{text.skippedStrong}</strong>
+            {text.skippedAfter}
           </p>
           <ul className="skipped-list">
             {result.skipped.map((skipped) => (
@@ -81,11 +86,12 @@ function SkippedRow({ skipped }: { readonly skipped: SkippedExportGroup }) {
     15.4).
   */
   const day = formatDayLabel(skipped.group.day);
+  const text = exportTexts();
   return (
     <li className="skipped-row">
       <span className="skipped-row__day">{day}</span>
       <span className="skipped-row__meta">
-        {plural(skipped.group.entryCount, "Buchung", "Buchungen")} ·{" "}
+        {plural(skipped.group.entryCount, text.booking, text.bookings)} ·{" "}
         {formatDuration(skipped.group.seconds)}
       </span>
       {/*
@@ -101,7 +107,7 @@ function SkippedRow({ skipped }: { readonly skipped: SkippedExportGroup }) {
         iconStart="pencil"
         onClick={() => navigate("todo", skipped.group.todoId)}
       >
-        Leistung nachtragen
+        {text.addNote}
         <span className="visually-hidden">, {day}</span>
       </Button>
     </li>

@@ -1,8 +1,10 @@
 import type { MailEntry } from '@takt/domain';
 import type { Attachment } from './api';
+import { currentLocale } from '../../lib/language';
+import { todoTexts } from './texts';
 
 function mailDate(value: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat(currentLocale(), {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).format(new Date(value));
@@ -18,7 +20,8 @@ export function chronologicalAttachments(attachments: readonly Attachment[], mai
     const mail = attachment.origin === 'email' ? byAttachment.get(attachment.id) : undefined;
     const date = mail?.receivedAt ?? mail?.createdAt ?? attachment.createdAt;
     const message = attachment.origin === 'email' && attachment.displayName === 'Nachricht.eml';
-    const label = `${mail?.kind ?? 'E-Mail'} – ${mailDate(date)}${mail?.receivedAt ? '' : ' (hinzugefügt)'}`;
+    const text = todoTexts();
+    const label = `${mail === undefined ? text.email : text.mailKind[mail.kind]} – ${mailDate(date)}${mail?.receivedAt ? '' : text.addedSuffix}`;
     return {
       attachment: message && !attachment.title ? { ...attachment, title: label } : attachment,
       time: Date.parse(date), group: mail?.identity ?? attachment.id,

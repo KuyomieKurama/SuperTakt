@@ -45,5 +45,11 @@ export function createVersionCheckStatePort(conn: SqlConnection): VersionCheckSt
        */
       conn.prepare('UPDATE app_setting SET last_version_check_at = ? WHERE id = 1').run(at);
     },
+
+    isEnabled(): boolean {
+      const row = conn.prepare('SELECT version_check_enabled FROM app_setting WHERE id = 1').get();
+      // Only an explicit 0 turns the check off; a missing row reads as on, like `toAppSettings` (E-132 point 4, A-28.1).
+      return row?.['version_check_enabled'] !== 0;
+    },
   };
 }

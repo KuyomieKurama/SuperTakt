@@ -1,4 +1,3 @@
-import { isMailMetadata, emailType } from '@takt/domain';
 /**
  * Takt — die vollständige Datensicherung (A-20.1 bis A-20.6, A-24.7).
  *
@@ -29,20 +28,34 @@ import { isMailMetadata, emailType } from '@takt/domain';
  * ergänzt es an der Fläche mit der größten Datenmenge.
  */
 
+import { isAbsolute } from 'node:path';
+
 import {
   IMAGE_SIGNATURE_BYTES,
+  LEGACY_MAX_TITLE_CHARACTERS,
   MAX_ATTACHMENT_IMAGE_BYTES,
+  MAX_ATTACHMENT_TITLE_CHARACTERS,
   MAX_EMAIL_ATTACHMENT_BYTES,
+  MAX_EMAIL_DISPLAY_NAME_CHARACTERS,
+  MAX_NAME_LENGTH,
+  MAX_PRIORITY_NAME_CHARACTERS,
+  MAX_WINDOWS_USER_CHARACTERS,
   decodedBase64ByteLength,
+  earlierOf,
+  exceedsMaximumDuration,
+  hasForbiddenNameCharacter,
   imageMediaTypeOf,
+  isMailEntry,
   taktError,
   type Timestamp,
 } from '@takt/domain';
 import { DATA_ARCHIVE_TABLES } from '@takt/storage';
-import type { ArchiveRow, ArchiveScalar, DataArchiveTables } from '@takt/storage';
+import type { ArchiveRow, ArchiveScalar, DataArchiveTable, DataArchiveTables } from '@takt/storage';
 
 import { DATA_ARCHIVE_MAX_BODY_BYTES } from '../../config.ts';
-import type { AppContext, UseCaseResult } from '../../context.ts';
+import { now, type AppContext, type UseCaseResult } from '../../context.ts';
+// The import asks the same "found at start" question as the service start (E-036, B-5).
+import { observeRecovery } from '../timer/timer.ts';
 
 export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
 
@@ -72,10 +85,13 @@ export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
  * Sie könnte mit den Dateien nichts anfangen und würde Anhänge einspielen,
  * deren Bytes sie wegwirft.
  */
-export const DATA_ARCHIVE_VERSION = 10 as const;
+// Version 11 (T-397, A-28.1, A-28.2): `app_setting` carries `version_check_enabled` and
+// `ui_language`. Version 12 adds the global motion preference; older archives
+// receive the former, subtle behavior instead of an invented animation style.
+export const DATA_ARCHIVE_VERSION = 12 as const;
 
 /** Die Fassungen, die eingelesen werden. Alles andere wird abgewiesen, nicht geraten. */
-const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
 /** Die Fassungen **ohne** `data.files` — sie kennen die Bytes der Anhänge nicht. */
 const VERSIONS_WITHOUT_FILES = Object.freeze([1, 2, 3, 4, 5]);
@@ -127,6 +143,8 @@ export interface ImportSummary {
   readonly sections: number;
   readonly tags: number;
   readonly timeEntries: number;
+  /** Foreign time entries rejected for lasting more than 24 hours (A-28.6). Always 0 for an own archive. */
+  readonly rejectedTimeEntries: number;
   readonly images: number;
   /** Wie viele aus E-Mails übernommene Dateien zurückgeschrieben wurden (A-19.34). */
   readonly files: number;
@@ -187,6 +205,54 @@ function isScalar(value: unknown): value is ArchiveScalar {
   return value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
 }
 
+interface ArchivedNameRule {
+  readonly column: string;
+  readonly maxLength: number;
+  /** `null` or an empty string is allowed (attachment title and display name). */
+  readonly optional: boolean;
+}
+
+/**
+ * Display names in an archive pass the same check as at their door (T-394, E-063, A-A-14):
+ * not empty, at most the door's length, no control or direction character. The check runs on the
+ * stored value itself, not on a trimmed copy (N-2, E-136): the doors trim, so a name with
+ * whitespace or a BOM at its edge never came from this program. An own archive is lossless, so a
+ * violation rejects it instead of cleaning it up.
+ */
+const ARCHIVED_NAME_COLUMNS: Readonly<Partial<Record<DataArchiveTable, readonly ArchivedNameRule[]>>> = {
+  todo: [{ column: 'title', maxLength: LEGACY_MAX_TITLE_CHARACTERS, optional: false }],
+  tag: [{ column: 'name', maxLength: MAX_NAME_LENGTH, optional: false }],
+  tag_folder: [{ column: 'name', maxLength: MAX_NAME_LENGTH, optional: false }],
+  todo_status: [{ column: 'name', maxLength: MAX_NAME_LENGTH, optional: false }],
+  todo_priority: [{ column: 'name', maxLength: MAX_PRIORITY_NAME_CHARACTERS, optional: false }],
+  pool: [{ column: 'name', maxLength: MAX_NAME_LENGTH, optional: false }],
+  export_template: [{ column: 'name', maxLength: MAX_NAME_LENGTH, optional: false }],
+  todo_attachment: [
+    { column: 'title', maxLength: MAX_ATTACHMENT_TITLE_CHARACTERS, optional: true },
+    { column: 'display_name', maxLength: MAX_EMAIL_DISPLAY_NAME_CHARACTERS, optional: true },
+  ],
+  export_run: [{ column: 'windows_user', maxLength: MAX_WINDOWS_USER_CHARACTERS, optional: false }],
+  export_audit: [{ column: 'actor', maxLength: MAX_WINDOWS_USER_CHARACTERS, optional: false }],
+};
+
+function parseJsonOrNull(value: unknown): unknown {
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isValidArchivedName(value: ArchiveScalar | undefined, rule: ArchivedNameRule): boolean {
+  if (value === null || value === undefined) return rule.optional;
+  if (typeof value !== 'string') return false;
+  if (value.length === 0) return rule.optional;
+  // `trim()` also removes U+FEFF, so this rejects a leading BOM as well.
+  if (value !== value.trim()) return false;
+  return value.length <= rule.maxLength && !hasForbiddenNameCharacter(value);
+}
+
 /**
  * Liest und prüft ein Archiv — vollständig, **vor** jeder Transaktion.
  *
@@ -221,7 +287,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
     !READABLE_VERSIONS.includes(version) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 bis 10.') };
+    return { ok: false, error: taktError('validation_error', `Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 bis ${DATA_ARCHIVE_VERSION}.`) };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
@@ -261,14 +327,28 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       if (item === null || !Object.values(item).every(isScalar)) {
         return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ enthält eine ungültige Zeile.`) };
       }
+      for (const rule of ARCHIVED_NAME_COLUMNS[table] ?? []) {
+        // Names table and column, never the value (T-394).
+        if (!isValidArchivedName(item[rule.column] as ArchiveScalar | undefined, rule)) {
+          return { ok: false, error: taktError('validation_error', `Das Datenarchiv enthält in „${table}.${rule.column}“ einen ungültigen Namen.`) };
+        }
+      }
       if (table === 'todo_mail') {
-        let mail: unknown;
-        try { mail = JSON.parse(String(item['metadata'])); } catch { mail = null; }
-        if (!isMailMetadata(mail) || !('todoId' in mail) || mail.todoId !== item['todo_id'] || mail.identity !== item['identity']
-          || !('kind' in mail) || mail.kind !== emailType(mail.subject)
-          || ('attachmentIds' in mail && (!Array.isArray(mail.attachmentIds) || !mail.attachmentIds.every(id => typeof id === 'string')))
-          || !('personalNote' in mail) || typeof mail.personalNote !== 'string' || mail.personalNote.length > 4000) {
+        const mail = parseJsonOrNull(item['metadata']);
+        const matchesRow = isMailEntry(mail) && mail.todoId === item['todo_id'] && mail.identity === item['identity'];
+        if (!matchesRow) {
           return { ok: false, error: taktError('validation_error', 'Das Datenarchiv enthält ungültige Mail-Einträge.') };
+        }
+      }
+      if (table === 'addin_mail_receipt') {
+        // The add-in gets this stored answer back on a repeated request (A-10.13), so it must
+        // name the todo of its own row (E-134 point 6).
+        const answer = record(parseJsonOrNull(item['response']));
+        const answerTodo = record(answer?.['todo']);
+        const outcome = answer?.['outcome'];
+        const outcomeIsKnown = outcome === 'created' || outcome === 'appended' || outcome === 'already_present';
+        if (answerTodo === null || answerTodo['id'] !== item['todo_id'] || !outcomeIsKnown) {
+          return { ok: false, error: taktError('validation_error', 'Das Datenarchiv enthält ungültige Add-in-Belege.') };
         }
       }
       // Defaults are added only for fields missing from the declared version.
@@ -363,6 +443,8 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
          * dieser Schleife steht deshalb als `<` oder `<=`, nie als `!==`.
          */
         if (version < 5) upgraded = { ...upgraded, idle_keep_timer_running: 1 };
+        if (version < 11) upgraded = { ...upgraded, version_check_enabled: 1, ui_language: 'de' };
+        if (version < 12) upgraded = { ...upgraded, motion_intensity: 'subtle' };
         if (version <= 3) {
           upgraded = { ...upgraded, idle_detection_enabled: 1, idle_threshold_minutes: 5 };
         }
@@ -376,6 +458,13 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       checked.push(upgraded as ArchiveRow);
     }
     tables[table] = checked;
+  }
+
+  // The service reads its settings from the single row with id 1; without it every later
+  // `GET /settings` fails, so such an archive must change nothing (N-6, R-38).
+  const settingRows = tables['app_setting'];
+  if (settingRows.length !== 1 || settingRows[0]?.['id'] !== 1) {
+    return { ok: false, error: taktError('validation_error', 'Das Datenarchiv muss genau eine Einstellungszeile mit der Kennung 1 enthalten.') };
   }
 
   const images: ArchivedImage[] = [];
@@ -615,6 +704,40 @@ export function archiveOversizeWarning(embeddedBytes: number): string | null {
 }
 
 /**
+ * An open idle phase whose start lies after this computer's clock is pulled back to now
+ * (A-A-133). Otherwise the return is rejected as "before the start", and stop, orphan dialog and
+ * resolve all wait for that return — a dead end. Earlier periods of the same phase are capped the
+ * same way; one that ends up empty is dropped. `parseArchive` has already checked the shapes.
+ */
+function clampFutureIdlePhase(row: ArchiveRow, wallClock: Timestamp): ArchiveRow {
+  if (row['returned_at'] !== null || typeof row['started_at'] !== 'string') return row;
+  if (!(Date.parse(row['started_at']) > Date.parse(wallClock))) return row;
+  const cap = (value: string): string => earlierOf(value as Timestamp, wallClock) ?? wallClock;
+  const periods = JSON.parse(String(row['previous_periods'])) as { startedAt: string; returnedAt: string }[];
+  const capped = periods
+    .map((period) => ({ ...period, startedAt: cap(period.startedAt), returnedAt: cap(period.returnedAt) }))
+    .filter((period) => Date.parse(period.returnedAt) > Date.parse(period.startedAt));
+  return { ...row, started_at: wallClock, previous_periods: JSON.stringify(capped) };
+}
+
+/**
+ * The export directory from an archive, if it may stay (N-1, E-124 point 9, R-37).
+ *
+ * Kept only when it is an absolute, local, existing directory on this computer; otherwise
+ * `null`. UNC and network paths are recognised by their form first, before anything asks the
+ * file system: on Windows even a check of `\\host\share` sends credentials to that host.
+ */
+async function exportDirectoryHere(context: AppContext, path: ArchiveScalar | undefined): Promise<string | null> {
+  if (typeof path !== 'string' || path.trim() === '' || !isAbsolute(path)) return null;
+  const byForm = await context.directories.describeLocation(path, { mayAskFileSystem: false });
+  if (byForm.includes('unc') || byForm.includes('network')) return null;
+  const byFileSystem = await context.directories.describeLocation(path, { mayAskFileSystem: true });
+  if (byFileSystem.includes('network')) return null;
+  const check = await context.files.checkExportDirectory(path);
+  return check.ok || check.reason === 'not_writable' ? path : null;
+}
+
+/**
  * Spielt ein Archiv ein — es **ersetzt** den Bestand (A-20.5).
  *
  * ===========================================================================
@@ -646,6 +769,30 @@ export async function importDataArchive(
   if (!parsed.ok) return parsed;
 
   const warnings = [...parsed.value.warnings];
+  const wallClock = now(context);
+
+  // A-28.6: an own archive keeps longer entries unchanged, but says so.
+  const longEntries = parsed.value.data.tables.time_entry.filter(
+    (row) => typeof row['started_at'] === 'string' && typeof row['ended_at'] === 'string' &&
+      exceedsMaximumDuration(row['started_at'] as Timestamp, row['ended_at'] as Timestamp),
+  ).length;
+  if (longEntries > 0) {
+    warnings.push(
+      `${longEntries} ${longEntries === 1 ? 'Zeitbuchung dauert' : 'Zeitbuchungen dauern'} länger als 24 Stunden ` +
+        `und ${longEntries === 1 ? 'wurde' : 'wurden'} unverändert übernommen. Prüfen Sie sie vor dem nächsten Export.`,
+    );
+  }
+
+  const settings = parsed.value.data.tables.app_setting.map((row) => ({ ...row }));
+  for (const row of settings) {
+    const directory = row['export_directory'];
+    if (directory === null || directory === undefined) continue;
+    const here = await exportDirectoryHere(context, directory);
+    if (here === null) {
+      row['export_directory'] = null;
+      warnings.push('Der Exportordner aus der Sicherung ist auf diesem Rechner kein lokaler, vorhandener Ordner und wurde nicht übernommen. Wählen Sie ihn in den Einstellungen neu.');
+    }
+  }
 
   /*
    * Die Pfade umschreiben — **vor** `replaceAll`, und ohne das Dateisystem zu
@@ -661,6 +808,8 @@ export async function importDataArchive(
   let foreignPaths = 0;
   const tables: DataArchiveTables = {
     ...parsed.value.data.tables,
+    app_setting: settings,
+    timer_idle: parsed.value.data.tables.timer_idle.map((row) => clampFutureIdlePhase(row, wallClock)),
     todo_attachment: parsed.value.data.tables.todo_attachment.map((row) => {
       if (!isEmailFileRow(row)) return row;
       const name = lastSegmentOf(row['target'] as string);
@@ -783,17 +932,34 @@ export async function importDataArchive(
    *     POST /timer/idle/begin                  409 conflict (T-371)
    *     POST /timer/heartbeat                   schreibt nichts, `seenAt: null`
    *
-   * **Offen und benannt:** Trägt das Archiv eine **offene**
-   * Inaktivitätsphase, bietet der A-24-Dialog nach der Rückkehr ein
-   * Zuordnungsfenster über die Uhrdifferenz an — gemessen 39 000 s. Kein
-   * stiller Weg (der Benutzer müßte die Stunden ausdrücklich auf Todos
-   * verteilen), aber unbewertet; R-34, Nebenpunkt aus T-371.
+   * An open idle phase from the archive is recorded the same way (T-388,
+   * B-5, R-35): its allocation window ends at most at the last heartbeat
+   * (`closeIdleWindow` in `features/timer/idle.ts`), no longer at this
+   * computer's wall clock — measured before T-388: 42 000 s offered, 900 s
+   * witnessed. A phase starting after this computer's clock is pulled back
+   * to now above (A-A-133).
    */
-  const timerAfterImport = await context.transactions.inTransaction(async (unit) => {
+  const { recoveryAfterImport, versionCheckWasEnabled } = await context.transactions.inTransaction(async (unit) => {
+    const settingsBefore = await unit.settings.load();
     await unit.dataArchive.replaceAll(tables);
-    return (await unit.timer.running())?.id ?? null;
+    return {
+      recoveryAfterImport: await observeRecovery(unit),
+      versionCheckWasEnabled: settingsBefore.versionCheckEnabled,
+    };
   });
-  if (context.timerRecovery !== undefined) context.timerRecovery.entryId = timerAfterImport;
+  // A-28.1 keeps the archived value; R-38: switching the check off must not happen silently.
+  const archivedVersionCheck = tables.app_setting[0]?.['version_check_enabled'];
+  if (versionCheckWasEnabled && archivedVersionCheck === 0) {
+    warnings.push(
+      'Die Sicherung schaltet die Versionsprüfung aus, die auf diesem Rechner eingeschaltet war. ' +
+        'Ohne sie erfahren Sie nicht von neuen Fassungen und Sicherheitskorrekturen. ' +
+        'Sie können sie unter Einstellungen wieder einschalten.',
+    );
+  }
+  if (context.timerRecovery !== undefined) {
+    context.timerRecovery.entryId = recoveryAfterImport.entryId;
+    context.timerRecovery.idleSessionId = recoveryAfterImport.idleSessionId;
+  }
 
   let restoredImages = 0;
   for (const image of parsed.value.data.images) {
@@ -884,11 +1050,11 @@ export async function importDataArchive(
       sections: tables.tag_folder.length,
       tags: tables.tag.length,
       timeEntries: tables.time_entry.length,
+      rejectedTimeEntries: 0,
       images: restoredImages,
       files: restoredFiles,
       warnings,
     },
   };
 }
-
 

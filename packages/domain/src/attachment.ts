@@ -362,11 +362,12 @@ export function isUncPath(value: string): boolean {
 }
 
 /**
- * Relative Pfade würden gegen das unbeabsichtigte Arbeitsverzeichnis der Hülle aufgelöst.
- * UNC-Prüfung und Öffnungsrückfrage bleiben zusätzlich nötig.
+ * Relative paths would resolve against the shell's working directory. A Windows path rooted
+ * without a drive (`\temp\x.pdf`) is not absolute either — the shell rejects it (E-126 point 2).
+ * UNC check and the confirmation before opening remain necessary.
  */
 export function isAbsoluteAttachmentPath(value: string): boolean {
-  if (value.startsWith('/') || value.startsWith('\\')) return true;
+  if (value.startsWith('/')) return true;
   return /^[A-Za-z]:[\\/]/.test(value);
 }
 

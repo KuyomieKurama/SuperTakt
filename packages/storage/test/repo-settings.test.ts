@@ -127,6 +127,15 @@ describe('createAppSettingsPort — eine Zeile mit fester Kennung 1 (E-011)', ()
     if (!updated.ok) return;
     expect(updated.value).toMatchObject({ roundingMode: 'nearest', locale: 'de-AT', theme: 'dark' });
   });
+
+  it('speichert die Bewegungsstärke, ohne andere Darstellungseinstellungen zu verändern', async () => {
+    db = openTestDatabase();
+    const updated = await db.unit.settings.update({ motionIntensity: 'expressive', now: NOW });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.value.motionIntensity).toBe('expressive');
+    expect(updated.value.density).toBe('comfortable');
+  });
 });
 
 describe('createDefaultTagPort — Standard-Tags (A-9.1 bis A-9.5)', () => {

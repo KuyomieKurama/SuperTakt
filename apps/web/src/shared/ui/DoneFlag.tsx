@@ -1,5 +1,5 @@
 import { cx } from "../../lib/cx";
-import { DONE_FLAG_LABEL, type DoneFlagState } from "../../lib/labels";
+import { labels, type DoneFlagState } from "../../lib/labels";
 import { Icon } from "./Icon";
 
 /**
@@ -14,7 +14,7 @@ import { Icon } from "./Icon";
  * und A-6.1 am haeufigsten ein Timer gestartet wird: Man startet ihn dort und
  * sieht das Ergebnis woanders (Befund C-23).
  *
- * Ein Baustein, eine Beschriftungstabelle (`DONE_FLAG_LABEL`), fuenf
+ * Ein Baustein, eine Beschriftungstabelle (`labels().doneFlag`), fuenf
  * Ansichten. Die Kanban-Karte behaelt ihre eigene Huelle, weil eine Karte
  * andere Masse hat als eine Zeile — die **Woerter** kommen auch dort aus
  * `lib/labels.ts`.
@@ -51,7 +51,7 @@ export function DoneFlag({ state, className }: DoneFlagProps) {
   return (
     <span className={cx("doneflag", `doneflag--${state}`, className)}>
       <Icon name={FLAG_ICON[state]} size={12} />
-      {DONE_FLAG_LABEL[state]}
+      {labels().doneFlag[state]}
     </span>
   );
 }

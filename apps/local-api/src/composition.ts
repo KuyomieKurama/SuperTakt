@@ -243,6 +243,9 @@ export function compose(options: CompositionOptions): Composition {
           store: {
             write: (at: Date) => versionCheckState.recordCheck(toTimestamp(at)),
           },
+          enabled: {
+            isEnabled: () => versionCheckState.isEnabled(),
+          },
         }),
   });
 

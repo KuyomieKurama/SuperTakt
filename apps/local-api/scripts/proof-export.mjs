@@ -22,9 +22,12 @@
  * sobald eine Prüfung fehlschlägt.
  */
 
-import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { checkNoHardcodedPort } from './port-probe.mjs';
 
 // Kein Auflösungshaken mehr (T-029): Seit `packages/domain` seine internen
 // Importe mit `.ts` schreibt, gibt es im Arbeitsbereich keinen `.js`-Bezeichner
@@ -88,6 +91,10 @@ function section(title) {
 }
 
 // Aufbau
+
+// This run binds no port; the check keeps it that way instead of trusting the header comment.
+section('Kein hartkodierter Port (E-121 Punkt 8, T-397a)');
+await checkNoHardcodedPort(check, [fileURLToPath(import.meta.url)]);
 
 const workDir = await mkdtemp(join(tmpdir(), 'takt-proof-export-'));
 const exportDir = join(workDir, 'exporte');
@@ -171,6 +178,14 @@ async function exportFiles() {
   return (await readdir(exportDir)).filter((name) => name.endsWith('.json'));
 }
 
+/** Everything below the work folder except the SQLite files, as relative paths. */
+function listWorkDir() {
+  return readdirSync(workDir, { recursive: true })
+    .map(String)
+    .filter((name) => !/\.db(-wal|-shm)?$/.test(name))
+    .sort();
+}
+
 async function clearExportDir() {
   for (const name of await readdir(exportDir)) {
     await rm(join(exportDir, name), { force: true });
@@ -213,7 +228,8 @@ try {
     const previewState = await stateOf(context);
     check('Vorschau schreibt nichts', previewState.runCount === 0 && previewState.auditCount === 0);
 
-    const result = await runExport(context, { templateId: null, timeEntryIds: [] });
+    // W-4: a `windowsUser` smuggled into the input must not reach the file (E-010, E-042).
+    const result = await runExport(context, { templateId: null, timeEntryIds: [], windowsUser: 'fremder.name' });
     check('Exportlauf gelingt', result.ok, result.ok ? '' : result.error.code);
 
     const after = await stateOf(context);
@@ -230,8 +246,9 @@ try {
     check('Datei trägt genau eine Zeile', Array.isArray(written) && written.length === 1);
     check('Feld Zeit ist 0.75', written[0]?.Zeit === 0.75, JSON.stringify(written[0]?.Zeit));
     check(
-      'Feld WindowsUser kommt vom System, nicht aus einer Eingabe (E-010, E-042)',
+      'Feld WindowsUser ist der Wert des Systemports, ein mitgeschicktes windowsUser wird nicht übernommen (E-010, E-042)',
       written[0]?.WindowsUser === 't.beispiel',
+      JSON.stringify(written[0]?.WindowsUser),
     );
     check(
       'der interne Vermerk steht nirgends in der Datei (A-7.2, R-06)',
@@ -313,19 +330,31 @@ try {
 
   section('4  ABBRUCH nach der Datei, vor dem Markieren — der teure Fall');
   {
+    // W-3: the hook records that it was reached and what lay in the folder at that moment.
+    // Without this anchor, a throw before the hook (e.g. while checking the folder) would
+    // turn every line below green without a file ever having been written.
+    const ABBRUCH = 'Absichtlicher Abbruch mitten im Exportlauf.';
+    const hook = { reached: false, filesAtHook: [] };
     const { database, context } = await freshContext({
       afterFileWritten: () => {
-        throw new Error('Absichtlicher Abbruch mitten im Exportlauf.');
+        hook.reached = true;
+        hook.filesAtHook = readdirSync(exportDir);
+        throw new Error(ABBRUCH);
       },
     });
 
-    let threw = false;
+    let caught = null;
     try {
       await runExport(context, { templateId: null, timeEntryIds: [] });
-    } catch {
-      threw = true;
+    } catch (error) {
+      caught = error;
     }
-    check('der Lauf bricht ab', threw);
+    check('der Lauf bricht ab, und zwar mit dem absichtlichen Abbruch', caught?.message === ABBRUCH, String(caught));
+    check(
+      'Vorbedingung: der Haken wurde erreicht, und in diesem Moment lag genau eine Exportdatei im Ordner',
+      hook.reached && hook.filesAtHook.length === 1 && hook.filesAtHook[0].endsWith('.json'),
+      JSON.stringify(hook),
+    );
 
     const after = await stateOf(context);
     check('KEINE Buchung ist markiert', after.entries.every((e) => e.status === 'open'), JSON.stringify(after.entries));
@@ -348,19 +377,38 @@ try {
 
   section('5  ABBRUCH nach dem Markieren, vor dem Festschreiben');
   {
+    const ABBRUCH = 'Absichtlicher Abbruch unmittelbar vor dem Festschreiben.';
+    const hook = { reached: false, filesAtHook: [], statusesAtHook: [] };
+    const holder = {};
     const { database, context } = await freshContext({
       beforeCommit: () => {
-        throw new Error('Absichtlicher Abbruch unmittelbar vor dem Festschreiben.');
+        hook.reached = true;
+        hook.filesAtHook = readdirSync(exportDir);
+        // Same connection, same open transaction: the marking must be visible here.
+        hook.statusesAtHook = holder.connection
+          .prepare('SELECT export_status FROM time_entry')
+          .all()
+          .map((row) => row.export_status);
+        throw new Error(ABBRUCH);
       },
     });
+    holder.connection = database.connection;
 
-    let threw = false;
+    let caught = null;
     try {
       await runExport(context, { templateId: null, timeEntryIds: [] });
-    } catch {
-      threw = true;
+    } catch (error) {
+      caught = error;
     }
-    check('der Lauf bricht ab', threw);
+    check('der Lauf bricht ab, und zwar mit dem absichtlichen Abbruch', caught?.message === ABBRUCH, String(caught));
+    check(
+      'Vorbedingung: der Haken wurde erreicht — eine Datei lag im Ordner, alle drei Buchungen waren markiert',
+      hook.reached &&
+        hook.filesAtHook.length === 1 &&
+        hook.statusesAtHook.length === 3 &&
+        hook.statusesAtHook.every((status) => status === 'exported'),
+      JSON.stringify(hook),
+    );
 
     const after = await stateOf(context);
     check('die Markierung ist zurückgenommen', after.entries.every((e) => e.status === 'open'), JSON.stringify(after.entries));
@@ -492,12 +540,15 @@ try {
   section('9  Der Exportordner ist Benutzereingabe (E-011, R-11)');
   {
     const { database, context } = await freshContext();
+    const missingDir = join(workDir, 'gibt-es-nicht');
 
     await context.transactions.inTransaction((unit) =>
-      unit.settings.update({ exportDirectory: join(workDir, 'gibt-es-nicht'), now: clock.now() }),
+      unit.settings.update({ exportDirectory: missingDir, now: clock.now() }),
     );
 
+    const vorher = listWorkDir();
     const result = await runExport(context, { templateId: null, timeEntryIds: [] });
+    const nachher = listWorkDir();
     check(
       'ein verschwundener Ordner wird vor der Transaktion bemerkt',
       !result.ok && result.error.code === 'export_directory_missing',
@@ -507,8 +558,22 @@ try {
     const after = await stateOf(context);
     check('und keine Buchung ist angefasst', after.entries.every((e) => e.status === 'open'));
 
-    const files = await readFile(join(workDir, 'takt-nichts'), 'utf8').catch(() => null);
-    check('es entsteht keine Datei außerhalb des Ordners', files === null);
+    // W-1: compare the whole work folder before and after instead of one invented name.
+    const neu = nachher.filter((name) => !vorher.includes(name));
+    check(
+      'es entsteht nichts im Arbeitsordner, weder Datei noch Ordner — der fehlende Ordner wird nicht angelegt',
+      neu.length === 0 && !nachher.includes('gibt-es-nicht'),
+      `neu: ${JSON.stringify(neu)}`,
+    );
+    // Counter-probe: the listing must see a new nested file, or the line above is blind.
+    await writeFile(join(exportDir, 'w-1-probe.txt'), 'x');
+    const mitProbe = listWorkDir();
+    await rm(join(exportDir, 'w-1-probe.txt'), { force: true });
+    check(
+      `Gegenprobe: die Auflistung sieht eine neue Datei in einem Unterordner (${vorher.length} Einträge vorher)`,
+      mitProbe.includes(join('exporte', 'w-1-probe.txt')) && !vorher.includes(join('exporte', 'w-1-probe.txt')),
+      JSON.stringify(mitProbe),
+    );
 
     database.close();
   }
@@ -623,7 +688,6 @@ try {
     const RUNDEN = 40;
     let fehlgeschlagen = 0;
     let verwaisteZeilen = 0;
-    let falscherSchluessel = 0;
 
     for (let runde = 0; runde < RUNDEN; runde += 1) {
       const { database, context, entries } = await freshContext();
@@ -653,7 +717,6 @@ try {
 
       if (!zweites.ok) {
         fehlgeschlagen += 1;
-        if (zweites.error.code === 'storage_error') falscherSchluessel += 1;
       }
       // Die Zusage: entweder drei Zeilen und 'exported', oder zwei Zeilen und
       // 'open'. Alles dazwischen ist eine Protokollzeile ohne Wirkung.
@@ -674,11 +737,6 @@ try {
       'und in keiner Runde bleibt eine Protokollzeile ohne Statuswechsel zurück (R-10)',
       verwaisteZeilen === 0,
       `${verwaisteZeilen} von ${RUNDEN} mit verwaister Zeile`,
-    );
-    check(
-      'ein Fehlschlag käme als fachlicher Schlüssel und nicht als storage_error',
-      falscherSchluessel === 0,
-      `${falscherSchluessel} von ${RUNDEN}`,
     );
 
     /*
@@ -702,7 +760,9 @@ try {
     );
 
     // Und die Gegenprobe zum Sicherungspunkt: Wer eine bereits offene Buchung
-    // zurücksetzt, bekommt einen Fehlschlag **und** keine Protokollzeile.
+    // zurücksetzt, bekommt einen Fehlschlag **und** keine Protokollzeile. This real
+    // failure also carries the claim that a failure comes as a domain key and not as
+    // storage_error (W-2); the former line judged an empty set when no round failed.
     const { database, context, entries } = await freshContext();
     const offen = entries[1];
     const abgelehnt = await context.transactions.inTransaction((unit) =>
@@ -717,7 +777,7 @@ try {
       unit.export.audit({ timeEntryId: offen }, { limit: 10 }),
     );
     check(
-      'eine bereits offene Buchung zurückzusetzen wird abgewiesen',
+      'eine bereits offene Buchung zurückzusetzen wird abgewiesen, mit fachlichem Schlüssel und nicht als storage_error',
       abgelehnt.ok === false && abgelehnt.error.code === 'export_status_unchanged',
       JSON.stringify(abgelehnt),
     );
@@ -978,9 +1038,11 @@ try {
         entries: [{ timeEntryId, durationSeconds: 600 }],
       });
 
+      // The built-in template, so the only possible rejection is the group index (W-5).
+      const vorlage = await context.transactions.inTransaction((unit) => unit.templates.builtin());
       const abgelehnt = await context.transactions.inTransaction((unit) =>
         unit.export.recordRun({
-          templateId: '01931000-0000-7000-8000-0000000000f1',
+          templateId: vorlage.id,
           templateSnapshot: { fields: [] },
           filePath: join(exportDir, 'niemals.json'),
           fileSha256: 'a'.repeat(64),
@@ -994,8 +1056,10 @@ try {
 
       const zustand = await stateOf(context);
       check(
-        'ein Lauf mit derselben Tagesgruppe zweimal wird abgewiesen',
-        abgelehnt.ok === false,
+        'ein Lauf mit derselben Tagesgruppe zweimal wird abgewiesen, und zwar am Gruppenindex (conflict)',
+        abgelehnt.ok === false &&
+          abgelehnt.error.code === 'conflict' &&
+          abgelehnt.error.message.includes('Dieselbe Tagesgruppe'),
         JSON.stringify(abgelehnt),
       );
       check(

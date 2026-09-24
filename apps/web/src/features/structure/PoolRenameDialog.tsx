@@ -1,6 +1,6 @@
 import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useEffect, useState } from "react";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import { updatePool } from "./api";
 import type { DraftText, Pool } from "../../api/types";
 import { FormDialog, TextField } from "../../shared/ui/FormDialog";
@@ -10,7 +10,9 @@ import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useMutation } from "../../app/useAsync";
 import { quotedName } from "../../lib/foreign";
-import { POOL_PLACEMENT_SHORT } from "../../lib/labels";
+import { labels } from "../../lib/labels";
+import { structureTexts } from "./texts";
+import { useSubmitRefusalShown } from "../../lib/submitAttempt";
 
 /**
  * Takt — eine Regel umbenennen (O-A, A-3.3, A-5.4, I-13, E-054, E-055).
@@ -84,16 +86,6 @@ import { POOL_PLACEMENT_SHORT } from "../../lib/labels";
  * T-091, die auch „Vom Board nehmen" trägt (E-059).
  */
 
-/**
- * Der Hinweis zum Zustand „unverändert" — **einmal**, für zwei Leser.
- *
- * Er stand bis T-220 als Zeichenkette in der Ternärkette von `fieldHint`. Seit
- * die Absage auf einen Absendeversuch denselben Satz weiterführt, hat er zwei
- * Leser, und zwei Abschriften desselben Satzes laufen beim nächsten
- * Sprachdurchgang auseinander — die eine wird geändert, die andere übersehen
- * (T-221 Z-74).
- */
-const UNCHANGED_HINT = "Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog.";
 
 export interface PoolRenameDialogProps {
   readonly open: boolean;
@@ -128,10 +120,12 @@ export function PoolRenameDialog({
   const { bump } = useRefresh();
   const mutation = useMutation();
   const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(pool?.name ?? "");
+    setNameTouched(false);
   }, [open, pool]);
 
   /*
@@ -156,20 +150,17 @@ export function PoolRenameDialog({
       (entry) => entry.id !== pool.id && entry.name.toLocaleLowerCase("de-DE") === key,
     );
 
-  const blocked = trimmed.length === 0 || unchanged || taken;
+  const empty = trimmed.length === 0;
+  const blocked = empty || unchanged || taken;
 
-  const fieldError = taken
-    ? "Diesen Namen trägt bereits eine andere Regel. Zwei Regeln mit demselben Namen wären im Spaltenkopf und in der Pool-Auswahl nicht auseinanderzuhalten."
-    : undefined;
-
-  const fieldHint =
-    fieldError !== undefined
-      ? undefined
-      : trimmed.length === 0
-        ? "Ohne Namen geht es nicht: Er ist das, woran diese Regel auf dem Board und in den Pools erkennbar ist."
-        : unchanged
-          ? UNCHANGED_HINT
-          : "Der neue Name erscheint sofort überall, wo diese Regel genannt wird.";
+  /*
+    Two channels for two lock reasons (textbestand 13.7/13.8, O-KH): an empty
+    name is invalid and answers through the field error after a submit attempt
+    or blur (P-8); an unchanged name is valid and answers through
+    `submitRefusal` below.
+  */
+  const text = structureTexts();
+  const fieldError = taken ? text.nameTaken : nameTouched && empty ? labels().nameMissing : undefined;
 
   /**
    * Die Antwort auf einen Druck, den kein Feld beantwortet (T-211 Abschnitt
@@ -181,8 +172,9 @@ export function PoolRenameDialog({
    *
    *  - **vergeben** — {@link fieldError} steht, das Feld erklärt sich für
    *    ungültig, und der Versuch führt dorthin zurück;
-   *  - **leer** — {@link fieldHint} sagt von der ersten Sekunde an, warum es
-   *    ohne Namen nicht geht. Das ist P-9s zweite Hälfte, zustandsgebunden.
+   *  - **leer** — the hint explains from the first second why a name is
+   *    needed (P-9); a submit attempt adds the field error `Name fehlt.`
+   *    (textbestand 13.8), which leads focus back into the field.
    *
    * Der dritte, **unverändert**, hatte bis hier einen Hinweis und keine Antwort:
    * Wer drückt und denselben Satz wie vorher liest, weiß nicht, ob der Druck
@@ -199,7 +191,7 @@ export function PoolRenameDialog({
    * Satz geht deshalb an {@link FormDialogProps.submitRefusal} und von dort in
    * eine Statusfläche ohne `aria-invalid` (E-093 Punkt 5, T-221 Z-73).
    */
-  const submitRefusal = unchanged ? `Es gibt nichts zu speichern. ${UNCHANGED_HINT}` : undefined;
+  const submitRefusal = unchanged ? text.nothingToSave(text.unchangedHint) : undefined;
 
   /**
    * Der `PATCH` samt Meldung und Rückweg.
@@ -230,15 +222,16 @@ export function PoolRenameDialog({
       Benutzer glaubte, das Umbenennen habe nicht gewirkt.
     */
     bump();
+    const words = structureTexts();
     toasts.show({
       tone: "success",
-      title: restoring ? "Name wiederhergestellt." : "Regel umbenannt.",
-      body: `Aus ${quotedName(target.name)} wurde ${quotedName(saved.name)}. Die Regel selbst ist unverändert; an den Todos ändert sich nichts.`,
+      title: restoring ? words.nameRestored : words.ruleRenamed,
+      body: words.renamedBody(quotedName(target.name), quotedName(saved.name)),
       ...(restoring
         ? {}
         : {
             action: {
-              label: "Rückgängig",
+              label: words.undo,
               onSelect: () => {
                 /*
                   Der Rückweg läuft **außerhalb** von `mutation.run`, weil der
@@ -249,9 +242,8 @@ export function PoolRenameDialog({
                 */
                 void rename(saved, target.name, true).catch((cause: unknown) => {
                   toasts.failure(
-                    "Der alte Name ließ sich nicht wiederherstellen",
-                    errorMessage(cause),
-                  );
+                    structureTexts().restoreFailed,
+                    errorMessage(cause), isServiceError(cause));
                 });
               },
             },
@@ -264,42 +256,32 @@ export function PoolRenameDialog({
   return (
     <FormDialog
       open={open}
-      title={`${quotedName(pool.name)} umbenennen`}
+      title={text.renameTitle(quotedName(pool.name))}
       description={describeSurfaces(pool)}
-      submitLabel="Speichern"
+      submitLabel={text.save}
       submitDisabled={blocked}
       {...(submitRefusal === undefined ? {} : { submitRefusal })}
       busy={mutation.busy}
       error={mutation.error}
+      errorFromService={mutation.errorFromService}
       onSubmit={() => {
         if (blocked) return;
         void mutation.run(() => rename(pool, trimmed));
       }}
       onCancel={onClose}
     >
-      <TextField
-        label="Name"
-        value={name}
+      <RenameNameField
+        name={name}
         onChange={setName}
-        required
-        /*
-         * Die Zahl kommt aus `@takt/domain` und nicht aus dieser Datei (E-063
-         * Punkt 4, T-128). `nameSchema` im lokalen Dienst liest dieselbe
-         * Konstante. Ein hier abgeschriebener Wert wäre entweder strenger als
-         * die Tür — dann ließe sich ein bereits getragener Name nicht mehr
-         * vollständig eintippen — oder großzügiger, und dann wäre er ein
-         * vorbereitetes 422.
-         */
-        maxLength={MAX_NAME_LENGTH}
-        placeholder={pool.placement === "pool" ? "z. B. Kunden Nord" : "z. B. Wartet auf Rückmeldung"}
-        {...(fieldError === undefined ? {} : { error: fieldError })}
-        {...(fieldHint === undefined ? {} : { hint: fieldHint })}
+        onTouched={() => setNameTouched(true)}
+        error={fieldError}
+        empty={empty}
+        unchanged={unchanged}
+        placeholder={pool.placement === "pool" ? text.poolPlaceholder : text.columnPlaceholder}
       />
 
-      <InlineMessage tone="info" title="Es ändert sich nur der Name">
-        Die Regel bleibt, wie sie ist: dieselben erforderlichen und ausgeschlossenen Tags,
-        derselbe Status, dasselbe „Erledigt“ und derselbe Exportstatus. Welche Karten hier
-        stehen, ändert sich dadurch nicht.
+      <InlineMessage tone="info" title={text.onlyNameChanges}>
+        {text.onlyNameChangesBody}
       </InlineMessage>
 
       {/*
@@ -310,13 +292,70 @@ export function PoolRenameDialog({
         Dienst, und sein `409` steht danach im Fehlerbereich dieses Dialogs.
       */}
       {existingKnown ? null : (
-        <InlineMessage tone="warning" title="Die vorhandenen Namen sind gerade nicht bekannt">
-          Ob es diesen Namen schon gibt, lässt sich hier im Moment nicht sagen — die Liste der
-          Regeln ist nicht geladen. Speichern geht trotzdem; ist der Name vergeben, weist der
-          lokale Dienst ihn ab und der Grund steht danach hier.
+        <InlineMessage tone="warning" title={text.namesUnknownTitle}>
+          {text.namesUnknownBody}
         </InlineMessage>
       )}
     </FormDialog>
+  );
+}
+
+interface RenameNameFieldProps {
+  readonly name: string;
+  readonly onChange: (next: string) => void;
+  readonly onTouched: () => void;
+  readonly error: string | undefined;
+  readonly empty: boolean;
+  readonly unchanged: boolean;
+  readonly placeholder: string;
+}
+
+/**
+ * The name field, rendered as a child of `FormDialog` on purpose.
+ *
+ * The "unchanged" hint yields while the dialog shows its refusal, which holds
+ * the same sentence (textbestand 13.7). That condition needs the submit
+ * counter, and only children of the dialog can read it; computing it at the
+ * call site would hide the hint from the first second on (P-9).
+ */
+function RenameNameField({
+  name,
+  onChange,
+  onTouched,
+  error,
+  empty,
+  unchanged,
+  placeholder,
+}: RenameNameFieldProps) {
+  const refusalShown = useSubmitRefusalShown();
+  const text = structureTexts();
+
+  let hint: string | undefined;
+  if (error !== undefined) hint = undefined;
+  else if (empty) hint = text.nameEmptyHint;
+  else if (unchanged) hint = refusalShown ? undefined : text.unchangedHint;
+  else hint = text.nameChangedHint;
+
+  return (
+    <TextField
+      label={text.name}
+      value={name}
+      onChange={onChange}
+      onTouched={onTouched}
+      required
+      /*
+       * Die Zahl kommt aus `@takt/domain` und nicht aus dieser Datei (E-063
+       * Punkt 4, T-128). `nameSchema` im lokalen Dienst liest dieselbe
+       * Konstante. Ein hier abgeschriebener Wert wäre entweder strenger als
+       * die Tür — dann ließe sich ein bereits getragener Name nicht mehr
+       * vollständig eintippen — oder großzügiger, und dann wäre er ein
+       * vorbereitetes 422.
+       */
+      maxLength={MAX_NAME_LENGTH}
+      placeholder={placeholder}
+      {...(error === undefined ? {} : { error })}
+      {...(hint === undefined ? {} : { hint })}
+    />
   );
 }
 
@@ -328,12 +367,14 @@ export function PoolRenameDialog({
  * sie umbenennt — und wer das erst hinterher bemerkt, hält es für einen Fehler.
  */
 function describeSurfaces(pool: Pool): string {
+  const text = structureTexts();
+  const short = labels().poolPlacementShort;
   switch (pool.placement) {
     case "board":
-      return `Anzeigeort: ${POOL_PLACEMENT_SHORT.board}. Der Name steht im Kopf der Spalte; in den Pools erscheint diese Regel nicht.`;
+      return text.surfacesBoard(short.board);
     case "both":
-      return `Anzeigeort: ${POOL_PLACEMENT_SHORT.both}. Der neue Name gilt für die Board-Spalte und für den Pool zugleich — es ist ein Name.`;
+      return text.surfacesBoth(short.both);
     default:
-      return `Anzeigeort: ${POOL_PLACEMENT_SHORT.pool}. Der Name steht in der Pool-Liste und im Pool-Filter der Todo-Liste; auf dem Board erscheint diese Regel nicht.`;
+      return text.surfacesPool(short.pool);
   }
 }

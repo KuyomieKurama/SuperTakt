@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Menu as Ark, useMenu } from "@ark-ui/react/menu";
 import { Portal } from "@ark-ui/react/portal";
 import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "./Foreign";
+import { labels } from "../../lib/labels";
 
 /**
  * Auswahlliste und Kontextmenü — Abschnitt 15, seit T-059 auf Ark UI (E-052).
@@ -64,17 +65,6 @@ export type MenuEntry = MenuAction | MenuSeparator;
 
 function isAction(entry: MenuEntry): entry is MenuAction {
   return entry.kind !== "separator";
-}
-
-/**
- * Escape gehört dem offenen Menü, nicht dem Dialog dahinter.
- *
- * Der Inhalt hängt im Portal am Dokumentkörper, steht im React-Baum aber
- * weiterhin unter seinem Auslöser — und damit unter einem Dialog, falls einer
- * da ist. Ohne diese Bremse schlösse ein Escape beides auf einmal.
- */
-function stopClosingKeys(event: KeyboardEvent<HTMLElement>): void {
-  if (event.key === "Escape" || event.key === "Tab") event.stopPropagation();
 }
 
 function MenuItems({ entries }: { readonly entries: readonly MenuEntry[] }) {
@@ -305,11 +295,7 @@ export function Menu({
       </Ark.Trigger>
       <Portal>
         <Ark.Positioner className="popover-layer">
-          <Ark.Content
-            className="menu"
-            onKeyDown={stopClosingKeys}
-            ref={watchContentFocus}
-          >
+          <Ark.Content className="menu" ref={watchContentFocus}>
             <MenuItems entries={entries} />
           </Ark.Content>
         </Ark.Positioner>
@@ -351,7 +337,7 @@ export function ContextMenu({ state, onClose }: ContextMenuProps) {
       if (!details.open) onClose();
     },
     onSelect,
-    "aria-label": state?.label ?? "Kontextmenü",
+    "aria-label": state?.label ?? labels().contextMenu,
     positioning: { placement: "bottom-start", gutter: 0 },
   });
 
@@ -383,7 +369,7 @@ export function ContextMenu({ state, onClose }: ContextMenuProps) {
     <Ark.RootProvider value={menu}>
       <Portal>
         <Ark.Positioner className="popover-layer">
-          <Ark.Content className="menu menu--context" onKeyDown={stopClosingKeys}>
+          <Ark.Content className="menu menu--context">
             <MenuItems entries={entries} />
           </Ark.Content>
         </Ark.Positioner>

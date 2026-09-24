@@ -15,7 +15,7 @@ import type {
   Todo,
   TodoId,
 } from '@takt/domain';
-import { DUE_STATES, isDueState } from '@takt/domain';
+import { CALL_NUMBER_MAX_LENGTH, DUE_STATES, TODO_TAG_IDS_MAX, TODO_TAG_NAMES_MAX, isDueState } from '@takt/domain';
 
 import type { AppContext } from '../../context.ts';
 import {
@@ -58,21 +58,14 @@ import type { TaktEnv } from '../../http/guards.ts';
 
 const createSchema = z.object({
   title: titleSchema,
-  callNumber: z.string().trim().max(64).nullish(),
+  callNumber: z.string().trim().max(CALL_NUMBER_MAX_LENGTH).nullish(),
   statusId: idSchema.nullish(),
-  tagIds: z.array(idSchema).max(200).default([]),
+  tagIds: z.array(idSchema).max(TODO_TAG_IDS_MAX).default([]),
   /**
-   * Tags über ihren **Namen** statt über eine Kennung (T-058).
-   *
-   * Der Fall aus dem Anlegedialog: Der Benutzer tippt „backend“, und das Tag
-   * gibt es noch nicht. Der Dienst legt es an und hängt das Todo daran — in
-   * derselben Transaktion, siehe `createTodo`.
-   *
-   * Die Obergrenze ist bewusst viel kleiner als die von `tagIds`: Kennungen
-   * kommen aus einer Auswahl, Namen aus einem Eingabefeld. Fünfzig neue Tags in
-   * einer Anfrage sind kein Arbeitsablauf, sondern ein Skript.
+   * Tags by **name** instead of id (T-058): the service creates missing tags and
+   * attaches them in the same transaction, see `createTodo`.
    */
-  tagNames: z.array(nameSchema).max(50).default([]),
+  tagNames: z.array(nameSchema).max(TODO_TAG_NAMES_MAX).default([]),
   /** Der interne Vermerk (A-7.1). Nicht die Leistung einer Buchung (A-7.3). */
   note: textSchema.default(''),
   /**
@@ -93,9 +86,9 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   title: titleSchema.optional(),
-  callNumber: z.string().trim().max(64).nullish(),
+  callNumber: z.string().trim().max(CALL_NUMBER_MAX_LENGTH).nullish(),
   statusId: idSchema.optional(),
-  tagIds: z.array(idSchema).max(200).optional(),
+  tagIds: z.array(idSchema).max(TODO_TAG_IDS_MAX).optional(),
   /**
    * Die Frist ändern **oder entfernen** (A-19.3).
    *

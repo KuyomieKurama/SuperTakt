@@ -17,7 +17,7 @@ import {
   SHOWCASE_TODAY,
   type BoardCard,
 } from "./data";
-import { reactivationTitle, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
+import { reactivationTitle, labels } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -289,11 +289,11 @@ export function BoardSection() {
     <Section
       id="board"
       title="5 — Kanban-Board"
-      lead={`${RULE_IS_A_RULE} Kein Status und kein Ablageort (E-054, E-055). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet.`}
+      lead={`${labels().ruleIsARule} Kein Status und kein Ablageort (E-054, E-055). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet.`}
       refs={["S-04", "S-11", "A-2.4", "A-2.5", "A-5.1", "A-5.3", "A-5.4", "A-5.6", "E-054", "I-03", "I-05"]}
     >
       <InlineMessage tone="info" title="Was an die Stelle des Ziehens getreten ist">
-        {RULE_WHAT_MOVES_A_CARD} Wer eine Karte anderswohin bringen will, ändert am Todo das,
+        {labels().ruleWhatMovesACard} Wer eine Karte anderswohin bringen will, ändert am Todo das,
         wonach die Regel fragt — meist ein Tag, manchmal den Status; das Kartenmenü sagt das
         ausdrücklich. Der Status bleibt dabei eine Eigenschaft des Todos und wird in der Liste und
         in der Detailansicht geändert.
