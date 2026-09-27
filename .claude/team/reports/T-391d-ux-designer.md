@@ -1,9 +1,0 @@
-Aufgabe: T-391d — Y-7 aus T-414: SP-A-27/28 im Textbestand nachziehen
-Status: fertig
-Artefakte: docs/design/textbestand-aufgabenbereich.md (Tabelle Z. 21-22 plus englischer Nachsatz Z. 24-30)
-Zusammenfassung: SP-A-27 lautet jetzt „Das Ergänzen erfasst keine Zeit", SP-A-28 „und lässt erledigte Todos erledigt.". Das ist der Wortlaut aus T-398c, den T-414 unter S-7 freigegeben hat. Ein englischer Nachsatz nennt drei Dinge: Der Satz steht hinter „Die E-Mail wird als Anhang am ausgewählten Todo gespeichert.“. Er liegt im Bündelwert `offerAppendNote` in `texts.ts` und nicht mehr in `DuplicateOffer.tsx`. Er erscheint nur bei `target !== 'new'`.
-Prüfung: Der Wortlaut ist zeichengleich gegen `apps/outlook-addin/src/ui/texts.ts:43` abgeglichen. Die Suche nach dem Altwortlaut im Papier findet keine weiteren Stellen mit den SP-Kennungen außer dem Abschnitt ab Z. 1095. Tests wurden nicht ausgeführt, weil nur ein Dokument geändert ist.
-Annahmen: Die Grenze zwischen SP-A-27 und SP-A-28 habe ich wie in S-7 gezogen. Die bestehende deutsche Tabelle und die Spalte „Bedeutung“ habe ich nicht übersetzt; nur die neue Prosa ist englisch.
-Risiken: Die Abschnitte „Gezielte Änderung SP-A-27/SP-A-28“ und „Präzisierung A-10.16“ (15.09.2026, jetzt ab etwa Z. 1095) zitieren noch „Aufgabe“-Wortlaute. Das sind „erledigte Aufgaben“, „an der ausgewählten Aufgabe“ und „Stattdessen neue Aufgabe erstellen“. Der Nachtrag T-391c (Z. 40) sagt, sie würden „below“ umgeschrieben, das ist aber nicht geschehen. Das liegt außerhalb von Y-7 und ist nicht angefasst.
-Offene Fragen: Soll die Umschreibung der beiden Abschnitte vom 15.09. als Folgeaufgabe laufen, oder genügt ein Verweis auf den Nachsatz?
-Nächster Schritt: Eine kleine Folgeaufgabe für den ux-designer: die Abschnitte vom 15.09. auf „Todo“ bringen und das Versprechen in Z. 40 einlösen. Nicht committet.

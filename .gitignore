@@ -138,3 +138,5 @@ coverage*/
 .claude/team/reports/**/*.jpg
 .claude/team/reports/**/*.webp
 # Reports themselves (.md) are versioned again (E-121 point 12, T-409a H-1).
+.claude
+.claude_old
