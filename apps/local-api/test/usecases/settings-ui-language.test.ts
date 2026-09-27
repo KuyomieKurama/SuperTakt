@@ -11,6 +11,12 @@ import { describe, expect, it } from 'vitest';
 import { call, startService } from '../support/service.ts';
 
 interface SettingsBody {
+  readonly data: {
+    readonly settings: { readonly uiLanguage: string; readonly roundingMode: string };
+  };
+}
+
+interface UpdateSettingsBody {
   readonly data: { readonly uiLanguage: string; readonly roundingMode: string };
 }
 
@@ -20,7 +26,7 @@ describe('A-28.2 — GET/PATCH /settings, uiLanguage', () => {
     try {
       const response = await call(service, 'GET', '/settings');
       expect(response.status, response.text).toBe(200);
-      expect((response.json as SettingsBody).data.uiLanguage).toBe('de');
+      expect((response.json as SettingsBody).data.settings.uiLanguage).toBe('de');
     } finally {
       service.database?.close();
     }
@@ -31,11 +37,10 @@ describe('A-28.2 — GET/PATCH /settings, uiLanguage', () => {
     try {
       const patched = await call(service, 'PATCH', '/settings', { uiLanguage: 'en' });
       expect(patched.status, patched.text).toBe(200);
-      expect((patched.json as SettingsBody).data.uiLanguage).toBe('en');
+      expect((patched.json as UpdateSettingsBody).data.uiLanguage).toBe('en');
 
       const reread = await call(service, 'GET', '/settings');
-      console.log('DEBUG reread', reread.status, reread.text);
-      expect((reread.json as SettingsBody).data.uiLanguage).toBe('en');
+      expect((reread.json as SettingsBody).data.settings.uiLanguage).toBe('en');
     } finally {
       service.database?.close();
     }
@@ -48,7 +53,7 @@ describe('A-28.2 — GET/PATCH /settings, uiLanguage', () => {
       expect(rejected.status, rejected.text).toBe(422);
 
       const stillDefault = await call(service, 'GET', '/settings');
-      expect((stillDefault.json as SettingsBody).data.uiLanguage).toBe('de');
+      expect((stillDefault.json as SettingsBody).data.settings.uiLanguage).toBe('de');
     } finally {
       service.database?.close();
     }
@@ -62,7 +67,7 @@ describe('A-28.2 — GET/PATCH /settings, uiLanguage', () => {
       // A PATCH touching an unrelated field carries no uiLanguage at all.
       const unrelated = await call(service, 'PATCH', '/settings', { roundingMode: 'up' });
       expect(unrelated.status, unrelated.text).toBe(200);
-      expect((unrelated.json as SettingsBody).data.uiLanguage).toBe('en');
+      expect((unrelated.json as UpdateSettingsBody).data.uiLanguage).toBe('en');
     } finally {
       service.database?.close();
     }
