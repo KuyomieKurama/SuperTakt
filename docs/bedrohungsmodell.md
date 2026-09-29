@@ -2339,7 +2339,14 @@ Ordner etwas völlig anderes. Die Regel muss vor diesem Lauf stehen, nicht nach 
 
 **Kein Befund** waren: `apps/outlook-addin/manifest.xml` (erfundene GUID, ausdrücklich als solche
 beschriftet, `ReadItem` als schwächste ausreichende Stufe, ausschließlich `localhost`-Adressen,
-keine Mandantenkennung), die 16 PNG (sämtlich Anwendungssymbole, das Quellsymbol ein blaues „T"),
+keine Mandantenkennung), die 16 PNG (Stand 2026-09-02: sämtlich Anwendungssymbole, das
+Quellsymbol ein blaues „T" — **überholt, berichtigt in T-394 am 2026-09-23:** seit T-377/PR #19
+liegen unter `apps/desktop/src-tauri/icons/` 17 Dateien, 15 PNG samt `icon.ico` und `icon.icns`,
+erzeugt aus `apps/desktop/icons/quelle.png` (1024×1024); das Symbol zeigt die Buchstaben „ST" hell
+auf fast schwarzem abgerundetem Quadrat mit blauem Uhrbogen und Haken. Versioniert sind insgesamt
+23 PNG: diese 15, die Quelle, fünf `takt-*.png` des Aufgabenbereichs und zwei Favicons. Alle 23
+ohne Metadatenblöcke — kein `tEXt`, `iTXt`, `eXIf`, kein `caBX` (C2PA) —, gemessen über die PNG-Blockliste; der Befund „kein
+Befund" bleibt damit bestehen),
 `.claude/team/decisions.md` (die Zitate des Auftraggebers sind fachlich und nennen niemanden),
 und die 68 Dateien unter `.claude/team/` (65 Berichte, rund 23 900 Zeilen).
 
@@ -14622,6 +14629,9 @@ Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelte
 **nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
 Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
 Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+**Berichtigt am 2026-09-24 (T-406a):** Seit E-120/T-389 sind es **vier** Routen — `GET context`,
+`GET todo-matches`, `POST todos`, `POST todos/:todoId/mails`; die Buchungsroute ist gefallen.
+Siehe Nachtrag T-406a.
 Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
 konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
 
@@ -14642,3 +14652,474 @@ einen erfolgreichen HTTPS-Test vortäuschen. Werkzeugprozesse haben Fristen;
 Ausgaben sind begrenzt, Aufrufe benutzen keine Shell. Tests arbeiten ausschließlich
 mit temporären Zertifikaten und Zertifikatsspeichern. Siehe
 [Implementierung und Testgrenzen](outlook-certificate-setup.md).
+
+## Nachtrag: Lokal installierte, nicht versionierte Fremd-Skills als Anweisungsquelle (T-386, 23.09.2026)
+
+Nach E-119 werden die Skills **nicht** versioniert: `.agents/`, `.claude/skills/` und `.hermes/`
+stehen in `.gitignore`, versioniert wird nur `skills-lock.json`; wer klont, installiert lokal nach
+(`npx skills`). Die Weitergabe fremden, großteils unlizenzierten Textes im Repository entfällt
+damit. **Die Bedrohung bleibt:** Agenten laden die lokal installierten Skills (34 aus vier fremden
+Beständen) weiterhin als Anweisung. Keine Laufzeitfläche des Erzeugnisses — kein
+`package.json`-Skript, kein Ablauf unter `.github/**`, keine Vitest-Einbindung führt die Python-
+und `.cjs`-Skripte aus (gemessen T-386). Die Fläche ist die Entwicklungsumgebung.
+
+- **Kein Wächter liest die Skills mehr.** `proof:codepoints` zählt über `git ls-files` samt
+  unversionierter, nicht ausgeschlossener Dateien; was in `.gitignore` steht, bleibt draußen. Die
+  Anpassung aus T-385 ist zurückgenommen. Stand 23.09.2026 gemessen: keine versteckten Zeichen
+  außer 4 × U+200B (`improve-animations/PLAN-TEMPLATE.md`) und 12 × U+FE0F nach Emoji, keine
+  Tag-Zeichen U+E0000–E007F; 68 Verzeichnis-Links, alle der Form
+  `../../.agents/skills/<[a-z0-9-]+>`. Jede Nachinstallation oder Aktualisierung aus
+  `skills-lock.json` holt fremden Text, den niemand im Bestand mehr prüft. Gegenmittel: Skills
+  nur über die Lock-Datei installieren, Änderungen an `skills-lock.json` (Quelle, Hash) im Review
+  wie eine neue Abhängigkeit behandeln.
+- **Anweisungen gegen E-001.** Mehrere Skills schreiben externe Quellen vor (`picsum.photos`,
+  Google Fonts, `cdn.jsdelivr.net`) oder rufen Bilddienste mit Schlüsseln auf (Gemini, Atlas
+  Cloud, MuAPI; Schlüssel aus Umgebung und `~/.claude/.env`). In SuperTakt gehen E-001, die CSP
+  der Hülle und `CLAUDE.md` vor (E-119 Punkt 4); eine Übernahme solcher Vorgaben in Produktcode
+  ist ein Befund.
+- **Schlüssel im Fremdskript.** `design/scripts/logo/generate.py` sendet `MUAPI_API_KEY` an eine
+  Abfrageadresse aus der Antwort des Anbieters (jeder öffentliche HTTPS-Wirt) und behält
+  Kopfzeilen bei Weiterleitungen. Nicht Teil eines Projektablaufs; ohne Anlass nicht mit
+  Schlüsseln ausführen.
+
+## Nachtrag: Prüfung T-394 (2026-09-23) — Weigerungsregel, `app.onError`, Namen im Archiv
+
+Gelesen am Stand `92cfad0`, parallel zu T-388; `data-transfer.ts`, `time-entry.ts` und `app.ts`
+waren beim Lesen unverändert gegenüber `HEAD`. Die Nachweisläufe sind gelesen, **nicht gefahren**:
+zwei davon binden Port 17843, und parallel arbeitet ein zweiter Agent am Dienst. Eine Einzelfrage
+(`proof-export.mjs` Abschnitt 13.4) ist mit einem Wegwerfskript gegen den echten Adapter gemessen.
+
+### Weigerungsregel (E-121 Punkt 10) gegen `proof:export`, `proof:export-api`, `proof:access`
+
+Eine Zeile zählt als Befund, wenn sie `ok` meldet, obwohl der Lauf ihre Aussage nicht herbeiführen
+oder nicht beobachten kann.
+
+| Nr | Stelle | Zusage | Warum ungemessen | Gegenmittel |
+|---|---|---|---|---|
+| W-1 | `proof-export.mjs:510-511` | „es entsteht keine Datei außerhalb des Ordners" | Gelesen wird `workDir/takt-nichts`, ein Name, den kein Code je schreibt. Die Zeile ist grün, solange es diese Datei nicht gibt, also immer. | Inhalt von `workDir` vor und nach dem Lauf vergleichen (ohne `*.db`, `*.db-wal`, `*.db-shm`), dazu nachweisen, dass `gibt-es-nicht` danach weiterhin fehlt, also nicht durch ein rekursives `mkdir` angelegt wurde. |
+| W-2 | `proof-export.mjs:668-682` | „ein Fehlschlag käme als fachlicher Schlüssel und nicht als storage_error" | Gezählt wird nur unter den Fehlschlägen. Die Zeile darüber verlangt null Fehlschläge; ist sie grün, prüft diese Zeile eine leere Menge. | Streichen, weil die Gegenprobe in Zeile 704–728 (`export_status_unchanged`) dasselbe mit einem echten Fehlschlag misst. Oder die Zeile nur urteilen lassen, wenn `fehlgeschlagen > 0`, sonst als ausdrücklich nicht gemessen ausgeben. |
+| W-3 | `proof-export.mjs:314-380` (Abschnitte 4 und 5) | „KEINE Datei bleibt zurück", „die bereits geschriebene Datei ist wieder entfernt" | `threw` wird bei **jedem** Wurf wahr. Wirft `runExport` vor dem Haken, etwa beim Prüfen des Ordners, sind alle Zeilen danach grün, ohne dass eine Datei je geschrieben wurde. Kein Anker zeigt, dass der Haken erreicht wurde. | Im Haken `reached = true` setzen und `readdir(exportDir)` festhalten. Vor den Zeilen danach prüfen: Der Haken wurde erreicht, zu diesem Zeitpunkt lag genau eine Datei vor, und die gefangene Meldung ist die absichtliche. |
+| W-4 | `proof-export.mjs:232-235` | „Feld WindowsUser kommt vom System, nicht aus einer Eingabe (E-010, E-042)" | Verglichen wird mit dem Wert, den der Lauf selbst an `createSystemPort('t.beispiel')` übergibt. Die Herkunft misst die Zeile nicht; sie misst nur, dass der übergebene Wert unverändert ankommt. | Beschriftung auf das Gemessene kürzen („der Wert des Systemports erscheint unverändert"). Die Herkunft misst `proof:access` 0b/0c über den Handschlag; zusätzlich nachweisen, dass `runExport` ein mitgeschicktes `windowsUser` nicht übernimmt. |
+| W-5 | `proof-export.mjs:996-1010` (13.4) | Sicherungspunkt „mitten in der Schleife, nach dem ersten Markieren" | Geprüft wird nur `ok === false`. **Gemessen:** Heute kommt die Ablehnung wirklich vom Gruppenindex (`conflict`, „Dieselbe Tagesgruppe steht zweimal …"), und die Vorlagenkennung ist die mitgelieferte. Eine Ablehnung beim ersten `INSERT` bliebe aber ebenso grün. | Code und Meldung der Ablehnung festhalten. Heute gemessen, deshalb nur **niedrig**. |
+| W-6 | `proof-export-api.mjs:650-653` | „kein Token steht in der Protokollausgabe (B-2.4)" | Der Lauf schreibt das Geheimnis nirgends hin, wo es ins Protokoll gelangen könnte, auch nicht in Pfad oder Abfrage. Der Schwärzer wird nicht gefordert. | Eine Anfrage mit dem Geheimnis im Pfad schicken, die Protokollzeile dieser Anfrage mit der vorhandenen `MARKE`-Einholung abwarten und dann `takt_<geschwaerzt>` darin verlangen und `secret` ausschließen. |
+| W-7 | `proof-access.mjs:332-336` (Abschnitt 0) | „Die Meldung nennt kein Geheimnis" | Gestartet wird **ohne** Geheimnis. Es gibt nichts, was genannt werden könnte. | Streichen oder mit einem geheimnisförmigen, aber abgewiesenen Wert starten und genau diesen Wert in der Ausgabe ausschließen. |
+| W-8 | `proof-access.mjs:1343` (Abschnitt 14) | „Die Meldung nennt den Port, **nicht das Token**" | Geprüft wird nur die erste Hälfte. | `&& !second.output().includes(second.secret) && !SECRET_SHAPE.test(second.output())`. |
+| W-9 | `proof-access.mjs:1033-1052` (Abschnitt 12) | Kein Geheimnis, kein `?token=` in der Protokollausgabe | Abschnitt 8 fordert den Schwärzer, das ist richtig. Es fehlt aber der Nachweis, dass die Zeilen dieser Anfragen angekommen sind: keine Einholung wie `MARKE` in `proof-export-api`, kein Anker. Schweigt das Protokoll für 400-Antworten oder kommt es verzögert an, bleiben alle fünf Zeilen grün. | Einholung wie in `proof-export-api.mjs:628-645`. Danach verlangen, dass die Zeile zu `/api/v1/<token>` mit Status 400 vorliegt und `takt_<geschwaerzt>` trägt, und dass die Zeile zu `?token=` als `/api/v1/health` mit Status 400 vorliegt. |
+| W-10 | `proof-access.mjs:736-756` (Abschnitt 1) | Bindeadresse nur `127.0.0.1` (B-1.1) | (a) Ohne externe IPv4 gibt der Lauf `----` aus und bleibt grün. (b) IPv6 wird nirgends gemessen. (c) „Der Dienst meldet 127.0.0.1" ist die Selbstauskunft des Dienstes. | Unabhängig vom Netz messen: Verbindungen zu `127.0.0.2:17843` (Linux und Windows) und zu `[::1]:17843` müssen abgewiesen werden; ein Platzhalter-Bind nähme beide an. Eine Plattform ohne Messweg meldet **rot mit Grund**, nicht `----`. |
+| W-11 | `proof-access.mjs:919-937` (Abschnitt 7) | „415 — vor jeder Wirkung", „Keine Wirkung eingetreten" | Die Anfragen tragen **kein** Token. Ohne Token gäbe es auch ohne Inhaltstypprüfung keine Wirkung. Die Wirkungszeile misst deshalb die Tokenprüfung, nicht die Inhaltstypprüfung. | Dieselben zwei Anfragen zusätzlich **mit** Sitzungsgeheimnis schicken: 415 und `generation` unverändert. |
+| W-12 | `proof-access.mjs:1297-1309` (Abschnitt 13) | „Die drei Fälle liegen innerhalb von 25 Prozent beieinander" | Der eigene Kommentar in Zeile 1311–1315 sagt, dass die Messung `===` nicht von `timingSafeEqual` unterscheidet. Die Zeile zählt trotzdem als bestanden. | Als Kennzahl ausgeben, nicht als Prüfung zählen. |
+| W-13 | `proof-access.mjs:1218-1231` (Abschnitt 13) | „Kein === auf Tokenmaterial im Nachweispfad" | Gesucht wird nur neben den Namen `presented`, `candidate`, `material` und `secret`. `token === header` fiele durch. Die Sammlung ist doppelt gesichert (A-A-68), das Muster nicht. | Selbstprobe: Eine erfundene Zeile `token === header` muss das Muster treffen. Das Namensmuster um `token` und `credential` erweitern oder die Beschriftung auf die vier Namen einengen. |
+| W-14 | `proof-access.mjs:1016-1020` (Abschnitt 11) | Rechte 0700/0600 | Unter Windows gibt der Lauf „nicht gemessen" aus und bleibt grün. Das ist ehrlich ausgewiesen, nach E-121 Punkt 10 aber eine Weigerung, die grün meldet. | Entscheidung des Orchestrators, siehe Bericht: entweder rot mit Grund unter Windows oder ausdrücklich als plattformgebundene Zusage in E-121 aufnehmen. |
+
+Nicht beanstandet, weil jeweils ein positiver Anker vorhanden ist: der Vermerk (A-A-57) in beiden
+Exportläufen, die Ausgabe-Untergrenze in `proof-export-api` (A-A-58), 0b/0c (Gegenprobe
+vorhanden), 0e/0f (Zeit **und** Mittel gemessen), die Sammlung in Abschnitt 13 (A-A-68),
+Abschnitt 12 in `proof-export` (Fall A und Fall B).
+
+### `app.onError` — darf die Fehlermeldung ins Protokoll?
+
+Heute schreibt `app.ts:410-426` nur Methode und **Routenmuster** (`routePath`, also `/todos/:id`
+und nicht die Kennung) sowie bei Speicherfehlern den Schlüssel. R-34 beklagt zu Recht, dass der
+Grund dabei verloren geht. Die rohe `error.message` darf trotzdem **nicht** ins Protokoll:
+
+- `JSON.parse` in Node 22 zitiert je nach Fehlerart die Eingabe selbst. Gemessen:
+  `Unexpected token 'K', "Kunde Mueller GmbH" is not valid JSON`. Das kann ein Anfragerumpf mit
+  Leistungstext oder Vermerk sein.
+- `fs`-Fehler tragen den vollen Pfad (`ENOENT: …, open '/home/<konto>/…/<Anhangsname>'`), also
+  Kontoname und fremde Dateinamen (A-19.23b). `new URL()` zitiert die Eingabe.
+- Das Protokoll ist kein Kanal mit Leserechten wie die Datenbank. Die Hülle leitet es mit
+  `eprintln!` weiter (`sidecar.rs:227`). Unter Linux landet es beim Start aus der Desktopumgebung
+  im Journal, das nicht nur der Benutzer lesen kann (Gruppe `adm`/`systemd-journal`), und es
+  überdauert Löschungen in SuperTakt.
+- `redactSecrets` schwärzt nur `takt_…`-Geheimnisse, keine Kundendaten.
+
+**Bedingung für domain-dev (T-388):** In die Zeile kommt nur, was aus einem geschlossenen Vorrat
+stammt, und zwar über den vorhandenen `reason`-Parameter samt `REASON_SHAPE`. Gemeint sind
+`errorKindValue(error)` (Klassenname) und, falls `error.code` eine Zeichenkette der Form
+`^[A-Z0-9_]{1,32}$` ist, dieser Code in Kleinbuchstaben, etwa
+`internal_error kind=typeerror code=sqlite_constraint`. Nicht erlaubt sind `message`, `stack` und
+`cause`. Eigene Würfe mit einem fachlichen Schlüssel wie `timer.ts:474` geben den Schlüssel als
+`code`-Eigenschaft mit, nicht als Text in der Meldung. Dazu kommt ein Nachweis: Eine Anfrage, die
+`onError` auslöst und einen Merkstring im Rumpf trägt, darf diesen Merkstring nicht in der Ausgabe
+hinterlassen; die Ausgabe-Untergrenze entspricht A-A-58. Heute provoziert keiner der drei Läufe
+`onError`.
+
+### Namen im Archiv-Import (Triage, `data-transfer.ts:186` am Stand `HEAD`)
+
+**Bestätigt, und zwar weiter als in der Triage beschrieben.** Zeile 186 ist `isScalar`. Mehr
+verlangt `parseArchive` von einer Tabellenzeile nicht (Z. 260), außer bei `todo_mail` und
+`timer_idle`. Nur die **Dateinamen** von `data.images` und `data.files` werden auf ihre Form
+geprüft (`ARCHIVED_IMAGE_NAME`, `ARCHIVED_FILE_NAME`). Für generierte Namen ist das ausreichend
+und richtig. Alle **Anzeigenamen** kommen ungeprüft an: keine Zeichenklasse, keine Länge, keine
+Leerprüfung. Betroffen sind `todo.title`, `tag.name`, `tag_folder.name`, `todo_status.name`,
+`todo_priority.name`, `pool.name`, `export_template.name`, `todo_attachment.title` und
+`display_name`, `export_run.windows_user` und `export_audit.actor`.
+
+- **Folge:** Über das Archiv gelangt ein `U+202E` in Namen, die jede Tür abweist (E-063, A-A-14).
+  Die Anzeige über `Foreign`/`visibleText` entschärft die Darstellung dort, wo sie verwendet wird.
+  Der Name bleibt aber eine Sackgasse: Unverändert zurückgeschickt, antwortet der Dienst mit 422
+  (`characters.ts`). Längen jenseits von `MAX_NAME_LENGTH` und `MAX_TITLE_CHARACTERS` umgehen die
+  Deckel der Oberfläche. Fremdimporte bereinigen dagegen (`foreign.ts:100`, `dropHiddenCharacters`).
+- **Gegenmittel für T-388:** In `parseArchive` ein festes Verzeichnis `Tabelle → Namensspalten`
+  anlegen. Jede dieser Spalten muss Zeichenkette sein, getrimmt nicht leer (außer
+  `title`/`display_name` am Anhang, dort ist `null` erlaubt), und `hasForbiddenNameCharacter`
+  darf nicht anschlagen. Die Länge ist höchstens die Konstante der jeweiligen Tür. Verstöße werden
+  **abgewiesen**, nicht bereinigt: Das eigene Archiv ist verlustfrei, und „ein ungültiges Archiv
+  verändert nichts" gilt weiter (E-063 Punkt 3). Die Meldung nennt Tabelle und Spalte, nicht den
+  Wert. Prüffall: ein Archiv mit `U+202E` in `tag.name` wird mit 422 abgewiesen, und der Bestand
+  ist danach unverändert.
+
+**Neu gefunden beim Lesen — N-1, mittel: Der Exportordner reist mit.**
+`app_setting.export_directory` steht in der Spaltenliste des Archivs (`repo-data-archive.ts:93`)
+und wird unverändert übernommen. Die Rückfrage bei UNC-, Netz-, System- und
+Synchronisierungsordnern (B-5.2) sitzt nur an der **Auswahl** in der Oberfläche; `runExport`
+fragt die Merkmale nicht ab. Ein fremdes Archiv mit `\\wirt.example\freigabe` leitet damit jeden
+**künftigen** Abrechnungsexport auf eine fremde Freigabe um. Das trifft Daten, die es beim
+Einspielen noch gar nicht gab. Unter Windows geht schon die Ordnerprüfung mit Anmeldedaten
+(NTLM) an den fremden Wirt. Das ist dieselbe Lage wie „Der Pfad reist nicht mit" bei
+`todo_attachment.target`. **Gegenmittel:** Beim Einspielen `export_directory` auf `null` setzen,
+wenn der Pfad kein vorhandener lokaler Ordner ist oder `unc`/`network` trägt, und das als Warnung
+melden. Einfacher und ebenso tragfähig ist es, ihn immer auf `null` zu setzen. Es berührt A-20.4
+(Round-Trip), deshalb entscheidet der Orchestrator.
+
+**Am Rand:** Verweise und Dateipfade mit `origin = 'user'` werden beim Einspielen nicht erneut
+gegen `attachment.ts` geprüft. Das ist hinnehmbar, weil die Hülle bei **jedem** Öffnen prüft
+(Abschnitt 19). E-Mail-Dateizeilen mit einem nicht erzeugten Namen behalten ihren fremden Pfad
+(`foreignPaths`) und werden nur gezählt. Die Rückfrage vor dem Öffnen liest dann eine fremde
+Ortsangabe vor. Das ist bekannt und niedrig.
+
+### Urteil T-394
+
+| Punkt | Urteil |
+|---|---|
+| 1 Weigerungsregel | **Nacharbeit**: W-1, W-3, W-6, W-7, W-8, W-9 und W-10 melden grün ohne Messung. W-2 und W-11 bis W-13 überbehaupten. W-4 und W-5 sind niedrig. W-14 braucht eine Entscheidung. |
+| 2 T-377 B-3 | **freigegeben**: Abschnitt 13.4 ist berichtigt, der Metadatenbefund ist neu gemessen. |
+| 3 `app.onError` | **Nacharbeit, bedingt freigegeben**: nur Klassenname und Code über `reason`, keine Meldung. |
+| 4 Namen im Archiv | **bestätigt, Nacharbeit in T-388**. Dazu N-1 (Exportordner) als neuer Befund. |
+
+## Nachtrag: Prüfung T-409b (2026-09-24) — PR #18, #19, #20 außerhalb des Wellenmodells
+
+Gelesen an `f6f4d6d..dd81e4e`, dazu der heutige Arbeitsbaum an den betroffenen Stellen. Der
+Geldpfad, das Archiv und die Suche liegen bei T-406a und werden hier nicht wiederholt.
+Gefahren: Semgrep (`p/default`, `p/secrets`, `p/github-actions`) über 301 geänderte Quelldateien,
+`pnpm audit --prod`, die Vitest-Dateien zu Mail-Zuordnung, Dienststart und Add-in-Client (38 grün)
+und `cargo test --lib outlook_certificate` unter Linux (7 grün, echte `certutil`/`openssl`).
+
+### Mail-Zuordnung (A-10.11 bis A-10.17)
+
+**Der Endpunkt ist eng und hält.** `POST /addin/todos/{todoId}/mails` nimmt einen `.strict()`-Rumpf
+aus `requestId`, `callNumber`, `mail`, `note` und `attachments`. Ein Aufgabenfeld wird mit 422
+abgewiesen (gemessen in `proof-route-policy`). Geschrieben wird nur an eine Aufgabe mit
+**derselben gültigen** Call-Nummer (`mail-assignment.ts`). Mailidentität und Anfragekennung
+liegen gehasht unter Primärschlüsseln (`todo_mail (todo_id, identity)`,
+`addin_mail_receipt.request_key`). Die Schreibwege laufen in einer Transaktion, und ein Fehlschlag
+räumt die geschriebenen Dateien weg. Dass Aufgabe, Vermerk, Tags, Zeit, Timer und Exportzustand
+unverändert bleiben, prüft `mail-assignment.test.ts` an sieben Tabellen. Die erhöhte Rumpfgrenze
+greift nur für genau diese zwei `POST`-Pfade, die Nachbarpfade antworten mit 413 (gemessen). Die
+EML-Datei und die Anhänge laufen durch dieselbe Aufnahme wie bei der Neuanlage: Der Name auf der
+Platte wird erzeugt, der fremde Name bleibt Anzeigename, und vor dem Öffnen kommt die Rückfrage mit
+Absender und Nachbaukennzeichen. R-21 gilt unverändert. Betreff, Absender und Auszug erscheinen nur
+über `<Foreign>`. `outlookLink` ist auf `https://outlook.office(365).com` und `outlook.live.com`
+festgelegt und wird bei jedem Öffnen von der Hülle geprüft.
+
+- **T-409b-1, mittel — Drei Zusagen behaupten noch das Gegenteil.** Der Kopf von
+  `features/todos/email-attachments.ts` sagt: „Es gibt keinen Aufruf, der eine Todo-Kennung
+  entgegennimmt und einen Anhang erzeugt.“ Dasselbe sagt `CLAUDE.md` („Frist und Anhänge“:
+  „strukturell“), und `proof-addin` Abschnitt 18 prüft unter der Kennung „A-A-82“ weiter nur
+  `POST /addin/todos`, während `/mails` auf einer Ausnahmeliste steht. Seit A-10.11 und A-10.16
+  stimmt das nicht mehr: `mail-assignment.ts` reicht eine Closure über `result.todo.id` einer
+  **vorhandenen** Aufgabe an die Aufnahme. Diese Umgehung des Typs ist fachlich gewollt. Der
+  Wächter misst aber die frühere Zusage und nicht die neue. **Gegenmittel:** Den Kopfkommentar
+  auf die neue Grenze umschreiben: Anhänge an vorhandenen Aufgaben entstehen nur über `/mails`,
+  nur bei gleicher gültiger Call-Nummer und nur innerhalb der Transaktion. `proof-addin` 18 auf
+  diese Grenze umstellen und eine Gegenprobe ergänzen: Ein `/mails`-Aufruf mit abweichender
+  Call-Nummer liefert 422, und die Zahl der Zeilen in `todo_attachment` bleibt gleich. Den
+  CLAUDE.md-Punkt berichtigt der Orchestrator.
+- **T-409b-2, niedrig — Der abgelöste Schnellbefehl ist noch gebaut.** A-10.17 ersetzt „Schnell in
+  Inbox“. Das Manifest führt nur noch `ShowTaskpane`, aber `FunctionFile`/`commandsUrl`,
+  `commands.html`, `commands.ts` und `quick-command.ts` werden weiter ausgeliefert. Der einzige
+  Aufrufer des Servermodus `mode: 'auto'` ist dieser tote Code. Dieser Modus hängt die fremde Mail
+  samt Anhängen **ohne Auswahl durch den Benutzer** an die Aufgabe, deren Call-Nummer im Mailtext
+  steht (Akteur A-06). **Gegenmittel:** Die vier Stellen entfernen und den Modus `auto` in Schema und
+  `mail-assignment.ts` streichen, falls kein weiterer Aufrufer entsteht. Wer ihn behalten will,
+  braucht dafür eine Entscheidung.
+
+### Zertifikatsvertrauen unter Linux und macOS (A-23.2 bis A-23.5)
+
+Unter Linux gemessen und belegt:
+- Den Pfad bestimmt die Hülle (`<appdata>/taskpane-cert.pem`). Der Befehl nimmt nur einen
+  64-stelligen Fingerabdruck in Großbuchstaben an.
+- Die Datei wird einmal gelesen und auf 32 KiB begrenzt. Fingerabdruck, Profil und Import beziehen
+  sich auf **dieselben Bytes im Speicher**, zwischen Prüfung und Import kann die Datei also nicht
+  getauscht werden.
+- Das Profil verlangt genau `DNS:localhost` und `IP:127.0.0.1`, `CA:FALSE`, nur `serverAuth`,
+  Selbstsignatur und Gültigkeit. Ein angehängtes zweites PEM wird abgewiesen.
+- Die Werkzeuge liegen auf festen Pfaden (`/usr/bin/certutil`, `/usr/bin/openssl`,
+  `/usr/bin/security`). Es gibt keine Shell und keinen Suchpfad, und die Bytes gehen über stdin
+  an `certutil -A -t "P,,"`.
+- Jeder Werkzeugaufruf hat eine Frist, die Ausgabe ist auf 128 KiB begrenzt, und ein Mutex
+  schließt parallele Läufe aus.
+- Beim bloßen Anzeigen wird nichts importiert. Der Prüffall verlangt, dass danach kein `~/.local`
+  entsteht.
+- Der TLS-Test vergleicht das ausgelieferte Serverzertifikat mit dem Fingerabdruck.
+- Mit Firefox werden nur vorhandene Profile angefasst.
+
+- **T-409b-3, niedrig — Für macOS gibt es keinen einzigen Prüffall.** Das Prüfmodul steht unter
+  `cfg(all(test, target_os = "linux"))`. `release.yml` fährt `cargo test --lib` zwar auf
+  `macos-15`, prüft dort aber nichts vom Schlüsselbundpfad. Der Pfad nutzt
+  `add-trusted-cert -r trustRoot -p ssl -s localhost` im Benutzerschlüsselbund. Die Einschränkung
+  auf SSL und `localhost` sowie die Profilprüfung davor ergeben am Quelltext gelesen die richtige
+  Enge. Gemessen ist das nicht. **Gegenmittel:** Einen macOS-Prüffall mit temporärem Schlüsselbund
+  (`security create-keychain`) ergänzen, der `run_for_home` wie unter Linux fährt: Anzeige ohne
+  Import, falscher Fingerabdruck, CA-Profil.
+- **T-409b-4, niedrig — Bei der Erneuerung bleiben alte Vertrauenseinträge liegen.** Das Zertifikat
+  gilt 825 Tage und wird 14 Tage vor Ablauf erneuert. Jede Bestätigung legt unter Linux einen
+  neuen NSS-Eintrag an (Name enthält den Fingerabdruck), unter macOS einen neuen Eintrag im
+  Schlüsselbund, und keine der beiden Plattformen hat einen Entfernen-Weg. Der alte Schlüssel ist
+  dann überschrieben, die Wirkung also gering. **Gegenmittel:** Beim bestätigten Vertrauen
+  vorhandene Einträge `SuperTakt localhost <anderer Fingerabdruck>` mit `certutil -D` entfernen.
+  Unter macOS dasselbe über den Fingerabdruck (`security delete-certificate -Z`).
+
+### Windows-Dienststart (#20)
+
+`waitForService` prüft nur lesend `/health`, und das mit Sitzungsgeheimnis. Es wiederholt nur bei
+Transportfehlern und Zeitablauf. Bei 401/403 und jeder anderen API-Antwort bricht es ab. Nach
+30 Sekunden ist Schluss, und ein gemeldeter Dienstabbruch führt in den bestehenden
+Wiederherstellungsdialog. Fehlertexte der Hülle erscheinen über `foreignText`. Das Add-in
+wiederholt nach einem fehlgeschlagenen `POST` nichts von selbst. Es prüft nur lesend und fünf
+Sekunden lang, ob der Dienst erreichbar ist, und das nur an der bereits auf Loopback
+eingeschränkten Basisadresse. Beides ist ohne Befund.
+
+Neuer Ablauf `service-startup.yml`: `permissions: contents: read`, alle Actions per SHA gepinnt,
+kein `pull_request_target`, keine Geheimnisse. **Am Rand:** Der Ablauf reagiert noch auf die
+abgeschlossene Branch `fix/windows-service-startup`. `actions/checkout` läuft ohne
+`persist-credentials: false`, was bei einem nur lesenden Token gering wiegt. `CLAUDE.md` nennt
+drei Abläufe, versioniert sind aber vier, und `windows-installer.yml` liegt unversioniert im Baum.
+
+### Nachvollziehbarkeit der Freigaben
+
+- **T-409b-5, mittel — Die Prüfberichte sind nicht im Bestand.** #19 hat 395 Berichte gelöscht und
+  `.claude/team/reports/*` in `.gitignore` gesetzt. E-121 Punkt 12 ordnet an, die Berichte wieder
+  zu versionieren. `.gitignore` steht heute trotzdem unverändert, und `git ls-files` zählt 0
+  Berichte. Die Freigaben aus T-287 bis T-381, auf die dieses Dokument in den Abschnitten 38 bis 47
+  verweist, sind nur noch über `git show 7eeb073:<pfad>` lesbar. Neue Berichte, auch dieser,
+  gehen beim nächsten Klonen verloren. **Gegenmittel (Orchestrator):** In `.gitignore` wieder
+  `.claude/team/reports/*-screens/` eintragen und die Berichte aus `7eeb073` zurückholen.
+
+### Weiteres
+
+- **T-409b-6, niedrig — Die Begründungen in `attachment.rs` sind entfallen.** #19 hat den Kopf der
+  Datei auf fünf Zeilen gekürzt. Die Regeln sind geblieben, ebenso die Prüffälle für `x.lnk.` und
+  `::$DATA` (19 Fundstellen). Verloren gingen aber die Verweise auf A-A-5′ und A-A-28, also der
+  Hinweis, warum `Path::extension()` hier falsch ist. **Gegenmittel:** An den beiden Hilfsfunktionen
+  je eine englische Zeile mit Verweis auf A-A-5′ bzw. A-A-28 ergänzen.
+- Semgrep: 23 Treffer, alle falsch positiv. Das sind `shell: win32` bei festen `pnpm`-Argumenten in
+  Bauskripten, `http://127.0.0.1` in `verify-sidecar.mjs` und nicht-literale reguläre Ausdrücke in
+  Nachweisläufen. `callnumber/pattern.ts` übersetzt das Benutzermuster nur. Ausgeführt wird es
+  längenbegrenzt im Worker mit 100 ms Frist. Keine Geheimnisse. Der Prüfdurchlauf `pnpm audit --prod`
+  fand nichts. Neu in der Lieferkette sind `x509-parser =0.17.0` samt `ring`, `der-parser` und
+  `asn1-rs`. `cargo audit` ist nicht vorhanden, dafür läuft `pruefung.yml`.
+- Bei `dd81e4e` war `POST /addin/todos/{todoId}/time-entries` noch vorhanden, im Widerspruch zu
+  A-10.12 und A-10.16. E-120 streicht die Route, und im Arbeitsbaum ist sie schon entfernt.
+
+### Urteil T-409b
+
+| PR | Urteil |
+|---|---|
+| #18 | **freigegeben** für den Teil, den die Wellenprüfungen T-287 bis T-381 decken (Abschnitte 38 bis 47). Deren offene Auflagen gelten weiter und liegen bei T-406a. |
+| #19 | **Nacharbeit**: T-409b-1 und T-409b-5 (mittel), T-409b-2, -3, -4 und -6 (niedrig). Mail-Endpunkt und Linux-Vertrauen sind in der Sache richtig und gemessen. |
+| #20 | **freigegeben**. Die Randpunkte zum Ablauf sind nicht blockierend. |
+
+## Nachtrag: Prüfung T-406a (2026-09-24) — Dienst- und Add-in-Teil von Welle 18
+
+Geprüft: T-388, T-389, T-397, T-397a, T-397b, T-398, T-398b, T-401, T-401c. Die Oberfläche
+(`apps/web`, `apps/desktop`) ist **nicht** Gegenstand; sie folgt in T-406b. Gemessen am echten
+Zusammenbau über `compose()` und `app.request()` (Meßsonden im Kritzelverzeichnis, nicht im Bestand),
+dazu sieben Nachweisläufe mit `TAKT_PROOF_PORT=20843` und Semgrep über 81 geänderte Quelldateien.
+
+### 1 Geldpfad (R-34, R-35, R-36)
+
+- `earlierOf` liefert bei einer unlesbaren Seite `null`, `decideOrphanedTimer` endet dann am Beginn
+  und verwirft; `decideTimerStop` verwirft eine NaN-Dauer. Die billige Richtung ist eingehalten.
+- 24 h an allen Türen: Die Regel sitzt in `repo-time.ts` an `create`, `update` (nur wenn Beginn oder
+  Ende sich ändern), `stop` und verdrängendem `start` — also unterhalb aller Anwendungsfälle. Gemessen:
+  86 400 s → 201, 86 401 s → 422 `time_entry_too_long`, PATCH auf 24 h + 1 s → 422.
+- Gleichlauf Regel/Speicherung gemessen: `Date.parse` und SQLite `unixepoch` stimmen für zehn
+  GLOB-gültige Grenzformen überein (Überlauf `2026-02-30`, `T24:00:00`, `23:59:60`, Monat 00 usw.).
+  Die 24-h-Regel und die gespeicherte `duration_seconds` rechnen also denselben Wert.
+- Uhrversatz und Zuordnungsfenster (R-35): `clampFutureIdlePhase` und `witnessedIdleEnd`; die Fälle
+  aus `idle-recovery-window.test.ts` sind grün, Archiv- und Absturzweg getrennt.
+- E-127 (`separateIdle` ohne 24-h-Prüfung für Altphasen): hinnehmbar, zeitlich begrenzt, keine
+  neue Phase erreicht die Lücke.
+- **N-3 (niedrig, neu).** `timestampSchema` (`http/input.ts`) prüft nur die Form. Ein kalendarisch
+  unmöglicher Wert wie `2026-01-32T00:00:00Z` erreicht `create`; `exceedsMaximumDuration` antwortet
+  dafür bewusst `false`, SQLite rechnet `duration_seconds = NULL`, und der CHECK
+  `duration_seconds IS NULL OR >= 1` läßt das durch. Abgefangen wird es erst durch einen Wurf beim
+  Zurücklesen: **500** statt 422 (gemessen, dasselbe bei PATCH). Gebucht wird nichts. Ein
+  Überlaufwert wie `2026-02-31T00:00:00Z` wird dagegen **angenommen und als Text gespeichert**
+  (82 800 s, rechnerisch richtig, aber nicht kanonisch; die Tagesgruppierung liest dann einen Tag,
+  den es nicht gibt). Gegenmittel: `isExactTimestamp` in `timestampSchema` — schließt beide Fälle an
+  der Tür, und der CHECK sollte `ended_at IS NULL OR duration_seconds IS NOT NULL` verlangen.
+  Zuständig domain-dev.
+
+**Urteil 1: freigegeben.** R-34, R-35 und R-36 dürfen aus Sicherheitssicht geschlossen werden;
+N-3 ist ein eigener, niedriger Rest und hält die Schließung nicht auf.
+
+### 2 Archiv-Import
+
+- **Namensverzeichnis:** alle elf Spalten aus T-394 stehen in `ARCHIVED_NAME_COLUMNS`, die Meldung
+  nennt Tabelle und Spalte, nicht den Wert; `U+202E` → 422, Bestand unverändert (gemessen).
+- **N-2 (niedrig, neu): geprüft wird der getrimmte Wert, übernommen der ungetrimmte.**
+  `isValidArchivedName` ruft `trim()` vor Länge und `hasForbiddenNameCharacter`. `String.trim` entfernt
+  Tab, Zeilenumbruch, U+2028/2029, U+FEFF und jeden Leerraum — Zeichen, die die Tür abweist bzw.
+  wegtrimmt. Gemessen an `tag.name`: `U+FEFFKunde`, `Kunde\n\n\t`, `U+2028Kunde` und 5 000 Leerzeichen
+  vor `K` werden mit 200 und ohne Warnung **unverändert** gespeichert. Damit ist die Bedingung aus
+  T-394 („abweisen, nicht bereinigen“, Länge der Tür) nur zur Hälfte erfüllt. Die Wirkung ist klein
+  (der Export ist JSON und maskiert Umbrüche; die Tür nimmt denselben Namen getrimmt wieder an), aber
+  `todo.title` und `todo.tags` sind Feldquellen des Exports, und `export_run.windows_user` steht im
+  Verzeichnis. Gegenmittel: Länge und Zeichenprüfung auf dem **ungetrimmten** Wert, und
+  `value !== value.trim()` abweisen. Ein eigenes Archiv enthält solche Werte nie, der Round-Trip
+  verliert nichts. Zuständig domain-dev, Prüffall je eine der vier Formen.
+- **N-1 / R-37:** `exportDirectoryHere` verlangt absolut, prüft die Form **vor** dem Dateisystem
+  (UNC auch als `\\?\UNC\…` und `\\.\…`), dann `statfs`, dann Vorhandensein. Freigegeben. Rest,
+  niedrig und benannt: Ordner mit den Merkmalen `sync_folder` und `system_dir` werden übernommen,
+  obwohl die Oberfläche bei ihrer Auswahl fragt (B-5.2). Ein fremdes Archiv kann damit einen
+  vorhandenen, lokal synchronisierten Ordner vorgeben. Vorschlag: dieselbe Warnung, Ordner verwerfen.
+- **Fassung 11:** 1 bis 11 lesbar, 12 abgewiesen (Prüffall grün). Die Abweisung sagt noch
+  „Fassung 1 bis 10“ (`data-transfer.ts:278`, schon in T-401 gemeldet) — kein Sicherheitsmangel,
+  aber eine falsche Angabe über die Grenze. Fassung 11 trägt `version_check_enabled`; Folge siehe 4.
+
+**Urteil 2: Nacharbeit** (N-2, Meldungstext). N-1 freigegeben, R-37 darf geschlossen werden.
+
+### 3 `app.onError`
+
+`internalErrorReason` baut `internal_error kind=<Klasse>` und hängt `code` nur bei
+`^[A-Z0-9_]{1,32}$` an, klein geschrieben; `REASON_SHAPE` im Logger ist die zweite Schranke.
+`message`, `stack`, `cause` kommen nicht vor. Speicherfehler loggen nur ihren Schlüssel, der Ort ist
+das Routenmuster. Nachweis: `proof:route-policy` Abschnitt 9 (59/0) samt Gegenprobe aus T-388 und
+`on-error-message-scrub.test.ts` (grün). **Urteil 3: freigegeben.**
+
+### 4 A-28.1 Schalter der Versionsprüfung (R-30)
+
+- Ausgeschaltet: `run()` fragt `allowedByUser()` vor jedem Durchgang, auch vor dem ersten;
+  `source.latest` hat genau eine Aufrufstelle dahinter. Ein werfender Schalter gilt als aus, eine
+  fehlende Zeile ebenfalls. Keine Verbindung, auch nicht beim Start (Prüffälle in `checker.test.ts`,
+  `proof:release-safety` 158/0).
+- Ein lokaler Prozeß mit Sitzungsgeheimnis kann den Schalter über `PATCH /settings` umlegen
+  (gemessen 200). Das ist **keine neue Fähigkeit**: dieses Geheimnis erlaubt ohnehin jede Änderung am
+  Bestand. Das Add-in-Token erreicht `/settings` nicht.
+- **N-5 (mittel, neu): Ein Archiv schaltet die Versionsprüfung still ab.** Gemessen: Archiv mit
+  `version_check_enabled = 0` eingespielt → 200, `warnings: []`, danach `GET /settings`
+  `versionCheckEnabled: false` und `GET /version-check` `unknown`. Das ist genau die Bauart aus R-30
+  (ein Wert aus dem Archiv entscheidet über die ausgehende Anfrage), jetzt nicht als Lücke im Wächter,
+  sondern als gewollter Weg: A-28.1 verlangt, daß der Schalter die Datensicherung überlebt. Still ist
+  daran nur das Einspielen. Gegenmittel, verträglich mit A-28.1: Die Importzusammenfassung warnt,
+  wenn das Archiv die Versionsprüfung ausschaltet, die hier eingeschaltet war („Die Sicherung schaltet
+  die Versionsprüfung aus. Sie erhalten keine Hinweise auf neue Fassungen, bis Sie sie in den
+  Einstellungen wieder einschalten.“). Zuständig domain-dev; die sichtbare Anzeige „ausgeschaltet“
+  in den Einstellungen prüft T-406b.
+
+**Urteil 4: Nacharbeit** (N-5). Der Schalter selbst ist freigegeben.
+
+### 5 C-22 Suche im Vermerk
+
+`GET /search` liegt außerhalb `/addin` (Sitzungsroute). `matchOrigins` liefert aus SQL nur drei
+Kennzeichen; der Vermerkstext verläßt die Datenbank nicht (gemessen: zweites Wort des Vermerks nicht
+im JSON). `%`/`_` sind maskiert. Ein Treffer „im Vermerk“ verrät, daß ein Suchwort dort vorkommt —
+wiederholt gefragt ist das ein Teilzeichenketten-Orakel über den ganzen Vermerk. Das verschiebt
+nichts: Derselbe Aufrufer liest den Vermerk über `GET /todos/{id}/note` im Klartext. Die
+Leistungstexte der Buchungen gehen in die Abrechnung und sind ohnehin sichtbar.
+**Urteil 5: freigegeben.**
+
+### 6 Add-in-Rückbau
+
+- `AddinUnit` führt kein `clearDone`, kein `timeEntries.create`, bei Pools nur `list`. `poolMovement`
+  ist aus Dienst, DTO und OpenAPI gefallen.
+- Die Mail-Zuordnung (`mail-assignment.ts`) arbeitet mit dem **vollen** `UnitOfWork`, nicht mit
+  `AddinUnit`; die Enge ist dort Quelltext, nicht Typ. Gelesen: sie berührt `todos.load`,
+  `todos.findByCallNumber`, `mails.*`, `createTodo` und die Anhangsaufnahme — keine Zeit, keinen
+  Timer, kein Erledigt, keinen Exportzustand. Getragen wird das an der **Wirkung** durch
+  `proof:addin` (Rundfahrt über jede Route unter `/addin`: 0 Zeilen `time_entry`, `completed_at`
+  unverändert, samt Gegenprobe `mitBuchung`).
+- **A-A-71 nachgezogen:** Die ausgeschriebene Menge heißt jetzt `GET /addin/context`,
+  `GET /addin/todo-matches`, `POST /addin/todos`, `POST /addin/todos/:todoId/mails` — **vier** Routen,
+  nicht drei. Von den vier Pfaden aus A-A-71 (2026-09-10) bleiben drei, die Buchungsroute ist
+  gefallen; hinzu kam mit A-10.11 die Mail-Route. So stehen sie in `ADDIN_FLAECHE` und in
+  `proof:route-policy` (`addinSurface.length === 4`, 59/0). Die Angabe „fünf“ im Nachtrag
+  Outlook-Mail-Zuordnung ist dort berichtigt.
+
+**Urteil 6: freigegeben.**
+
+### 7 Weigerungsregel (T-397a, T-397b)
+
+Alle vierzehn Zeilen aus T-394 sind umgesetzt und an der Ausgabe nachgelesen: W-1 Vorher/Nachher der
+Ordnerliste, W-3 `hook.reached`, W-4 mitgeschicktes `windowsUser` wird nicht übernommen, W-5 Code und
+Meldung festgehalten, W-6/W-9 Einholung mit `takt_<geschwaerzt>`, W-7 geheimnisförmiger zu kurzer
+Wert, W-8 beide Hälften, W-10 `127.0.0.2` und `[::1]` samt Gegenprobe, W-11 mit Geheimnis, W-12 als
+Kennzahl, W-13 Selbstprobe, W-14 rot unter Linux bei Überspringen. Alle Dienstläufe starten
+`proof-access-entry.ts` mit einer Quelle ohne Netz; kein Nachweisskript startet mehr `src/index.ts`,
+also fragt kein Prüflauf GitHub an. `TAKT_PROOF_PORT` wird nur unter `scripts/` gelesen,
+`src/index.ts` ruft `main()` ohne Argument; das Erzeugnis bleibt auf 17843/17844.
+Gefahren mit 20843: `proof:access` 123/0, `proof:export` 100/0, `proof:export-api` 75/0.
+**Urteil 7: freigegeben.**
+
+### 8 Aufgabenbereich 17844
+
+`headersTimeout` und `requestTimeout` wie auf 17843; `.map` fehlt in der Positivliste (403, der
+Vergleich läuft über `extname(...).toLowerCase()`), und `build-taskpane.mjs` kopiert `.map` nicht.
+`proof:taskpane` 33/0 auf 20944, Prüffall `.js` 200 / `.map` 403 grün. **Urteil 8: freigegeben.**
+
+### Semgrep
+
+`p/default`, `p/typescript`, `p/nodejs`, `p/secrets`, Schwere WARNING und ERROR, über 81 geänderte
+oder neue Quelldateien unter `apps/local-api`, `apps/outlook-addin`, `packages` (ohne `test/`):
+**0 ERROR**, 9 WARNING `detect-non-literal-regexp`, alle in Nachweisskripten mit Mustern aus festen
+Konstanten des Bestands — kein Befund. Zwei Dateien nur teilweise geparst (Werkzeuggrenze).
+
+### Urteil T-406a
+
+| Punkt | Urteil |
+|---|---|
+| 1 Geldpfad | **freigegeben**; R-34, R-35, R-36 schließbar; N-3 niedrig als Rest |
+| 2 Archiv | **Nacharbeit**: N-2 (Trimmen), Meldung „1 bis 10“; N-1 freigegeben, R-37 schließbar |
+| 3 `onError` | **freigegeben** |
+| 4 A-28.1 | **Nacharbeit**: N-5 (Archiv schaltet still ab); Schalter selbst freigegeben |
+| 5 C-22 | **freigegeben** |
+| 6 Add-in | **freigegeben**; A-A-71 auf vier Routen nachgezogen |
+| 7 Weigerungsregel | **freigegeben** |
+| 8 Aufgabenbereich | **freigegeben** |
+
+### Nachtrag T-406a zu T-412 (2026-09-24)
+
+**Fehlende `app_setting`-Zeile gilt jetzt als „an“** (`repo-version-check.ts`, `mappers.ts`, `!== 0`,
+E-132 Punkt 4; Wächterzeile in `proof:release-safety` nachgezogen). **Bestätigt, und zwar als
+Verbesserung gegenüber R-30.** Der Fall ist erreichbar, nicht nur theoretisch: Gemessen wird ein
+Archiv mit `app_setting: []` mit 200 und ohne Warnung eingespielt. Vor T-412 war das ein **zweiter
+stiller Ausschalter** der Versionsprüfung über das Archiv (neben N-5); jetzt fragt der Dienst in
+diesem Fall weiter. A-28.1 („Vorgabe an“) ist damit eingehalten. Ausgeschaltet bleibt nur ein
+ausdrückliches `0`.
+
+**N-6 (mittel, neu): Ein Archiv ohne Einstellungszeile wird angenommen.** Danach antwortet
+`GET /settings` mit **500**, und die Einstellungen sind unbenutzbar, bis wieder eingespielt wird.
+Das bricht „ein ungültiges Archiv verändert nichts“. Gegenmittel: `parseArchive` verlangt in
+`app_setting` genau eine Zeile mit `id = 1`, sonst `validation_error`. Zuständig domain-dev.
+
+**`takt_fold`** (`database.ts`, `DatabaseSync.function`, `deterministic`, `directOnly`):
+- `directOnly` verhindert den Aufruf aus Triggern, Sichten und Indexausdrücken. Ein Schema aus
+  fremder Hand kann die JS-Funktion deshalb nicht erreichen. Das Archiv trägt ohnehin nur Zeilen,
+  kein Schema.
+- Die Eingaben kommen aus dem Bestand (Leistungstexte) und aus dem Suchbegriff.
+  `normalize('NFC')` und `toLocaleLowerCase('de')` werfen für keine Zeichenkette, auch nicht bei
+  einzelnen Ersatzhälften. Ein Nicht-Text ergibt `NULL` und damit keinen Treffer. Es gibt keinen
+  Weg zu Dateisystem, Netz oder Auswertung.
+- Reihenfolge richtig: erst falten, dann `escapeLike`. Gemessen: „ärger“, „ÄRGER“ und die zerlegte
+  Form finden „Ärger mit Kunde 50%“; `%` trifft nur wörtlich, `_` und `\` treffen nichts.
+- Weil die Funktion in keinem Index steht, kann eine andere ICU-Fassung keinen Bestand verderben.
+  Sie ändert höchstens Suchtreffer.
+- Rest, niedrig: Je Zeile ein Aufruf von JS aus SQLite. Das ist nur mit Sitzungsgeheimnis
+  auslösbar, durch die Textlängen begrenzt und nicht gemessen. Außerdem verlangt die Funktion
+  Node 22.13 oder neuer, `engines.node` erlaubt aber 22.5. Unter einer älteren Fassung startet der
+  Dienst nicht; das betrifft die Verfügbarkeit, nicht die Vertraulichkeit. Anheben ist Sache des
+  Orchestrators.
+
+**Urteil zu T-412: freigegeben.** Dazu kommt N-6 als neue Nacharbeit unter Punkt 4.

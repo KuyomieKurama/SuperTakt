@@ -4,6 +4,7 @@ import { cx } from "../../lib/cx";
 import { Button, IconButton } from "../../shared/ui/Primitives";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { timerTexts } from "./texts";
 
 /**
  * Zeiterfassung — A-6.1, A-6.2, A-5.6, A-13.4.
@@ -86,14 +87,15 @@ export function TimerDisplay({
    * beschrifteten Knopf, dessen sichtbares Wort nur „Stoppen" lautet.
    */
   const namedTitle = actionTitle ?? todoTitle;
+  const text = timerTexts();
   const actionLabel =
     namedTitle === undefined
       ? running
-        ? "Timer stoppen"
-        : "Timer starten"
+        ? text.stopTimer
+        : text.startTimer
       : running
-        ? `Timer für ${quotedName(namedTitle)} stoppen`
-        : `Timer für ${quotedName(namedTitle)} starten`;
+        ? text.stopTimerFor(quotedName(namedTitle))
+        : text.startTimerFor(quotedName(namedTitle));
   return (
     <div
       className={cx("timer", `timer--${size}`, running ? "timer--running" : "timer--idle", className)}
@@ -103,7 +105,7 @@ export function TimerDisplay({
         <output
           className="timer__value"
           aria-live={running ? "off" : "polite"}
-          aria-label={running ? `Laufende Zeit ${display}` : `Erfasste Zeit ${display}`}
+          aria-label={running ? text.runningTime(display) : text.recordedTime(display)}
         >
           {display}
         </output>
@@ -139,7 +141,7 @@ export function TimerDisplay({
           aria-label={actionLabel}
           onClick={running ? onStop : onStart}
         >
-          {running ? "Stoppen" : "Starten"}
+          {running ? text.stop : text.start}
         </Button>
       )}
     </div>

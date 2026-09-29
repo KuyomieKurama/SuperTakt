@@ -81,7 +81,7 @@ das beim Verschieben.
 | ID | Anforderung |
 |---|---|
 | A-5.1 | Die Anwendung enthält ein Kanban-Board. |
-| A-5.2 | Todos lassen sich per Drag & Drop zwischen Status-Spalten verschieben. |
+| A-5.2 | ~~Todos lassen sich per Drag & Drop zwischen Status-Spalten verschieben.~~ **Aufgehoben** durch E-054, bestätigt am 2026-09-23 (E-120, O-E): Board-Spalten sind Regeln über Tags und Status; es wird nicht gezogen. |
 | A-5.3 | Beispielspalten: Backlog, In Progress, Waiting, Done. |
 | A-5.4 | Die Statusstruktur ist konfigurierbar. |
 | A-5.5 | Ein Todo lässt sich direkt aus dem Board öffnen und bearbeiten. |
@@ -201,7 +201,8 @@ beim Anlegen aus dem Outlook-Add-in heraus.
 **Nachtrag — A-10.8.** Das Add-in erkennt die Call-Nummer über einen regulären Ausdruck, der in
 den Add-in-Einstellungen konfigurierbar ist und nicht im Code steht.
 
-**Nachtrag — A-10.9.** Existiert bereits ein Todo mit derselben Call-Nummer, **weist das Add-in
+**Nachtrag — A-10.9.** *Ersetzt für die Mail-Zuordnung durch A-10.11 und A-10.16 (Abschnitt 25a,
+15.09.2026); das Buchungsverbot gilt weiter. Klarstellung 2026-09-24, E-133.* Existiert bereits ein Todo mit derselben Call-Nummer, **weist das Add-in
 darauf hin**, bevor ein zweites entsteht. Es bietet am gefundenen Todo **keine Handlung an** —
 weder eine Zeitbuchung noch einen Anhang. Der Benutzer entscheidet daraufhin, ob er das
 vorhandene Todo in SuperTakt selbst weiterbearbeitet oder aus dem Add-in heraus bewußt ein neues
@@ -367,7 +368,7 @@ Struktur daneben.
 | A-19.3 | Die Frist wird beim Anlegen und beim Bearbeiten eines Todos gesetzt, geändert und wieder entfernt. |
 | A-19.4 | Die Frist ist in der Todo-Ansicht sichtbar, ohne dass man das Todo öffnen muss. |
 | A-19.5 | Drei Zustände sind unterscheidbar und benannt: **überfällig**, **heute fällig**, **später fällig**. Ein Todo ohne Frist hat keinen dieser Zustände. |
-| A-19.6 | Die Frist ist ein Tag, keine Uhrzeit. Die drei Zustände aus A-19.5 sind Tagesvergleiche. |
+| A-19.6 | Die Frist ist ein Tag; eine Uhrzeit ist seit A-10.14 und A-27.7 **optional** (Klarstellung 2026-09-23, E-122). Die drei Zustände aus A-19.5 bleiben Tagesvergleiche. |
 | A-19.7 | Die Frist ändert nichts an Pools, Spalten, Zeitbuchungen oder Export. Sie ist eine Eigenschaft des Todos, keine neue Achse. |
 
 ### 19.2 Anhänge
@@ -377,6 +378,7 @@ Struktur daneben.
 | A-19.8 | Ein Todo kann **beliebig viele** Anhänge tragen. |
 | A-19.9 | Es gibt drei Arten: **Verweis** (öffnet im Browser), **Bild** (wird als Vorschaubild angezeigt), **Datei** (öffnet mit der Standardanwendung des Systems). |
 | A-19.10 | Beim Hinzufügen bestimmt die gewählte Art das Eingabefeld: Verweis → **Adresse** (Pflicht) und **Titel** (optional); Bild → **Bild** (Pflicht) und **Titel** (optional); Datei → **Dateipfad** (Pflicht) und **Titel** (optional). |
+| A-19.10a | Die Umleitungsarten aus A-19.23c werden auch beim Anhängen **von Hand** und beim **Fremdimport** als Datei abgewiesen, nicht nur bei Dateien aus einer E-Mail (Klarstellung des gebauten Verhaltens, 2026-09-23, E-122, T-393 CJ-02). |
 | A-19.11 | Anhänge sind unmittelbar am Todo sichtbar und dort verwaltbar: hinzufügen, öffnen, entfernen. |
 | A-19.12 | Bei Verweis und Datei steht der Titel als Bezeichnung; fehlt er, steht dort etwas Lesbares aus Adresse beziehungsweise Pfad und nie eine leere Zeile. |
 | A-19.13 | Ein Bild wird als Vorschaubild dargestellt. |
@@ -399,7 +401,7 @@ Nachtrag des Auftraggebers vom 2026-09-05, als Antwort auf F-20.
 | A-19.16 | Bestehende Todos funktionieren unverändert weiter. Frist und Anhänge sind Ergänzungen, keine Umstellung. |
 | A-19.17 | Die Notiz-Trennung bleibt: Weder Frist noch Anhang gelangen in einen Export. |
 | A-19.18 | Ein Anhang wird **nur auf ausdrückliche Handlung des Benutzers** geöffnet. Nichts öffnet sich beim Anzeigen einer Liste, beim Laden eines Todos oder als Nebenwirkung. |
-| A-19.19 | Über das Outlook-Add-in entstehen Anhänge **ausschließlich beim Anlegen eines neuen Todos aus einer E-Mail** und ausschließlich auf dem in 19.5 beschriebenen Weg. An einem **bereits vorhandenen** Todo entsteht über das Add-in kein Anhang — weder im Duplikatfall (A-10.9) noch sonst. *Bis zum 2026-09-11 lautete diese Anforderung „Über das Outlook-Add-in entstehen **keine** Anhänge"; sie ist durch E-108 ersetzt.* |
+| A-19.19 | Über das Outlook-Add-in entstehen Anhänge **ausschließlich beim Anlegen eines neuen Todos aus einer E-Mail** und ausschließlich auf dem in 19.5 beschriebenen Weg. An einem **bereits vorhandenen** Todo entsteht über das Add-in kein Anhang — weder im Duplikatfall (A-10.9) noch sonst. *Bis zum 2026-09-11 lautete diese Anforderung „Über das Outlook-Add-in entstehen **keine** Anhänge"; sie ist durch E-108 ersetzt.* *Ersetzt für die Mail-Zuordnung durch A-10.11–A-10.17 (Abschnitt 25a, 15.09.2026); Klarstellung 2026-09-24, E-133.* |
 
 ### 19.5 Anhänge aus dem Outlook-Add-in
 
@@ -469,6 +471,7 @@ Nachtrag des Auftraggebers vom 2026-09-08: Umbenennung von Takt in SuperTakt und
 | A-21.3 | Vorhandene Daten, Schnittstellen, Statuskennzeichnungen und Bedienabläufe bleiben kompatibel. |
 | A-21.4 | Unter Einstellungen → Darstellung bleibt das klassische Layout für alle Themes erhalten. Klassisch ist der Standard. Die Auswahl umfasst zusätzlich Arc, Cybr, Dark-base, Dracula, Everfrost, Glass, Lines, Liquid-Glass, Nord-Polar-Night, Nord-Snow-Storm, Plainspace, Rainbow, Zen, Velvet und alle vier Catppuccin-Varianten. Farbmodus und Zeilendichte werden separat gespeichert; feste helle/dunkle Paletten wenden ihren Modus an, ohne die Farbmodus-Vorliebe zu überschreiben. Die alte Auswahl Klar wird klassisch dargestellt. |
 | A-21.5 | Datenarchive enthalten die Darstellungseinstellungen ab Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klassisch und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
+| A-21.6 | Einstellungen → Darstellung enthält die dauerhaft gespeicherte Bewegungsstärke **Reduziert**, **Dezent** (Vorgabe) oder **Ausdrucksstark**. Sie steuert Übergänge, Dialoge und Rückmeldungen in der gesamten Hauptoberfläche, ohne Dauerschleifen oder Bewegung bei häufiger Eingabe. Die Betriebssystemeinstellung „Bewegung reduzieren“ hat stets Vorrang. Bewegungsstärke ist Bestandteil von Datensicherungen ab Schemafassung 12; ältere Archive erhalten **Dezent**. |
 
 ---
 
@@ -509,12 +512,12 @@ angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
 |---|---|
 | A-24.1 | In der Desktop-App wird die systemweite Inaktivität der aktuellen Sitzung verwendet: Windows über GetLastInputInfo, macOS über CoreGraphics, Linux über Wayland ext-idle-notify, GNOME Mutter oder X11 ScreenSaver. Arbeit in anderen Programmen zählt als Aktivität. Keine Eingabeinhalte, Fenstertitel oder Telemetrie. Im Browser und bei fehlender Systemschnittstelle wird keine automatische Erkennung behauptet. XWayland wird nicht als Ersatz für systemweite Wayland-Aktivität verwendet. |
 | A-24.2 | Einstellungen → Timer enthält einen Ein-/Ausschalter und eine Schwelle von 1 bis 120 Minuten, zunächst eingeschaltet mit 5 Minuten. Speicherung in SQLite und Datensicherung. Ausschalten verwirft keine bereits erkannte Phase. |
-| A-24.3 | Bei laufendem Timer und überschrittener Schwelle wird die Abwesenheit vorgemerkt; der Timer läuft weiter. Erst bei der Rückkehr wird die aktive Zeit vor der Abwesenheit abgeschlossen und der Timer atomar ab dem Rückkehrzeitpunkt fortgeführt. Die inaktive Zeit wartet separat auf Zuordnung. Eine Rückkehr, die zwischen Webview-Abfragen liegt, wird aus dem nativen Verlauf erkannt. |
+| A-24.3 | Bei laufendem Timer und überschrittener Schwelle wird die Abwesenheit vorgemerkt. Bei der Rückkehr wird keine Zeit automatisch gebucht: Der Timer pausiert bis zur bewussten Zuordnung. Erst diese Entscheidung schließt die aktive Zeit vor der Abwesenheit ab und schreibt die gewählten Abschnitte atomar. Eine Rückkehr, die zwischen Webview-Abfragen liegt, wird aus dem nativen Verlauf erkannt. |
 | A-24.4 | Bei der Rückkehr erscheint ein Dialog mit Zeitraum und Dauer: als Pause auslassen, auf eine Aufgabe buchen oder in mehrere Aufgaben-/Pausenabschnitte aufteilen. Aufgaben sind suchbar, auch erledigte. Leistungstext ist freiwillig und nachträglich ergänzbar. |
 | A-24.5 | Die Summe muss sekundengenau dem gesamten Zeitraum entsprechen. „Rest übernehmen“ ergänzt einen Abschnitt. Keine negativen/überzähligen Zeiten, keine überlappenden Teilstücke. Alle Buchungen entstehen atomar; ein Fehler erhält den offenen Zustand, Wiederholungen buchen nicht doppelt. Abrechnungsrundung bleibt ausschließlich Sache des Exports. |
-| A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Der Timer läuft während des Dialogs und nach „Später“ weiter. Die Zuordnung verändert keinen inzwischen gewechselten oder manuell gestoppten Timer. Timerwechsel sind nach der Rückkehr auch bei offener Zuordnung möglich. Der Dialog zeigt Dauer und die drei Optionen Pause, Gearbeitet und Aufteilen; weitere Felder erscheinen nur bei Bedarf. |
+| A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Der Timer bleibt während des Dialogs und nach „Später“ pausiert; Timerstart, -stopp und -wechsel sind bis zur Entscheidung gesperrt. „Zeit buchen“ setzt ihn danach frisch fort; „Zeit buchen und Timer stoppen“ bucht die gewählten Zeiten und lässt ihn beendet. Der Dialog zeigt Dauer und die drei Optionen Pause, Gearbeitet und Aufteilen; weitere Felder erscheinen nur bei Bedarf. |
 | A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Ab Archivfassung 4 enthält das Archiv Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. *Die Fassung wird hier nicht mehr beziffert — sie stand am 2026-09-10 auf 4 im Papier und auf 5 im Code (T-245-2). Die führende Angabe ist `DATA_ARCHIVE_VERSION`; was jede Fassung enthält, steht in A-20 und in `docs/datenmodell.md`.* |
-| A-24.8 | Mehrere noch nicht zugeordnete Inaktivitätsphasen werden in einem Dialog gesammelt, auch wenn zwischenzeitlich nur in anderen Anwendungen gearbeitet wurde. Die aktive Zeit zwischen den Phasen bleibt unverändert. Der Dialog öffnet unmittelbar für eine vorgemerkte Phase; bei der Rückkehr aktiviert die native Hülle das Hauptfenster auch aus dem Hintergrund. Ein Hinweis ersetzt den Dialog erst nach „Später“. Tatsächliche Eingabe in der App bestätigt die Rückkehr auch bei verzögerter nativer Erkennung. Frühere Phasen werden zusammen mit der aktuellen Phase dauerhaft gespeichert. |
+| A-24.8 | Solange eine Inaktivitätsphase noch nicht zugeordnet ist, wird keine weitere Phase gesammelt; so bleibt auch die Zeit zwischen Rückkehr und Entscheidung ungebucht. Der Dialog öffnet unmittelbar für eine vorgemerkte Phase; bei der Rückkehr aktiviert die native Hülle das Hauptfenster auch aus dem Hintergrund. Ein Hinweis ersetzt den Dialog erst nach „Später“. Tatsächliche Eingabe in der App bestätigt die Rückkehr auch bei verzögerter nativer Erkennung. |
 
 ---
 
@@ -560,13 +563,14 @@ gelesen.**
 
 Das Timerverhalten bei Inaktivität ist unter Einstellungen → Timer wählbar: Weiterlaufen (Standard) oder bis zur Zuordnung pausieren. Im Pausenmodus bleibt der Timer auch bei „Später“ pausiert und startet nach dem Speichern der Zuordnung wieder.
 
-## 25. Outlook-Angleichung an SP-OutlookBridge (Auftrag vom 15.09.2026)
+## 25a. Outlook-Angleichung an SP-OutlookBridge (Auftrag vom 15.09.2026)
 
 **A-10.11 — verbindlicher Ersatz der bisherigen Hinweisregel.** Bei genau einem
 passenden strukturierten Call ergänzt die geöffnete E-Mail die vorhandene Aufgabe.
-Mehrdeutige Treffer verlangen Auswahl; bewusste Neuanlage bleibt möglich. Ein echter
-Outlook-Funktionsbefehl „Schnell in Inbox“ und „Aufgabe erstellen“ mit Seitenleiste
-verwenden dieselbe Erkennungs- und Speicherlogik. Kein Mail-Auszug im Schnellweg.
+Mehrdeutige Treffer verlangen Auswahl; bewusste Neuanlage bleibt möglich. *Der
+Funktionsbefehl „Schnell in Inbox" ist mit E-134 Punkt 2 (2026-09-24) gefallen; „Aufgabe
+erstellen" mit Seitenleiste ist seitdem der einzige Einstieg und verwendet dieselbe
+Erkennungs- und Speicherlogik.*
 
 **A-10.12 — getrennte Daten und enges Recht.** Mail-Metadaten und optionale Auszüge
 werden getrennt von persönlichen Aufgabenvermerken gespeichert und in SuperTakt
@@ -599,7 +603,7 @@ Nachweispfade: [Outlook-Angleichung](outlook-bridge-alignment.md).
 
 
 **A-10.16 — Korrektur des Add-in-Ablaufs (15.09.2026).** Bei vorhandenen Aufgaben
-bleibt das Neuanlageformular verborgen; erst „Stattdessen neue Aufgabe erstellen“
+bleibt das Neuanlageformular verborgen; erst „Stattdessen neues Todo anlegen“ (Wortlaut nach E-029, 2026-09-24, E-134)
 blendet es ein. Das Add-in hängt die E-Mail als EML (gegebenenfalls Nachbau) an die
 gewählte Aufgabe an. Es bietet keine Zeiterfassung oder Zeitschätzung; die Schätzung
 bleibt in SuperTakt bearbeitbar (ersetzt die Add-in-Formularvorgabe aus A-10.14).
@@ -652,7 +656,7 @@ Die Datumsfilter in Export und Buchungen verwenden eine gemeinsame, im App-Desig
 | A-27.1 | Einstellungen → Prioritäten verwaltet benannte Prioritäten mit frei vergebbarer ganzzahliger Gewichtung. Größere Zahlen bedeuten höhere Wichtigkeit. Auch 0 und negative Werte sind zulässig. Namen sind eindeutig. |
 | A-27.2 | Ein Todo kann genau eine Priorität oder keine haben. Auswahl beim Anlegen und Bearbeiten. Löschen einer Priorität entfernt nach Bestätigung nur die Zuordnung; die Todos bleiben bestehen. |
 | A-27.3 | Kanban filtert nach Priorität oder „Ohne Priorität“. Standard-Sortierung: höchste Gewichtung zuerst, ohne Priorität zuletzt. Alternativ bleibt „Zuletzt geändert“ verfügbar. Filter und Sortierung greifen vor der Seitenbegrenzung; gleiche Gewichte erhalten eine stabile Reihenfolge. |
-| A-27.4 | Kanban fasst Tags wie die Todo-Übersicht als Zähler zusammen. Überfahren, Fokus und Klick öffnen die vorhandene Tag-Fläche einschließlich Ordnerpfaden. |
+| A-27.4 | Kanban fasst Tags wie die Todo-Übersicht als Zähler zusammen. Überfahren und Klick öffnen die vorhandene Tag-Fläche einschließlich Ordnerpfaden; mit der Tastatur öffnet sie Enter oder Leertaste am fokussierten Zähler — Fokus allein öffnet nicht, sonst würde jede Zeile zur Tabulatorfalle (Klarstellung 2026-09-24, E-134). |
 | A-27.5 | Todo-Anlage und -Bearbeitung verwenden die gemeinsame Datumskomponente im App-Design. Leeren entfernt die Frist; Tastaturbedienung und Texteingabe bleiben möglich. |
 | A-27.6 | Prioritäten und Zuordnungen überleben Neustart und Datensicherung. Archive vor Fassung 10 enthalten keine Prioritäten; ihre Todos werden ohne Priorität übernommen. |
 
@@ -667,3 +671,24 @@ Die Datumsfilter in Export und Buchungen verwenden eine gemeinsame, im App-Desig
 **A-27.11:** Die Oberfläche liest das lokale Versionsprüfergebnis in der ersten Minute alle fünf Sekunden, solange noch keines bekannt ist; danach bei unbekanntem Ergebnis minütlich, bei bekanntem Ergebnis alle fünf Minuten. Rückkehr zur sichtbaren Anwendung und wiederhergestellte Netzwerkverbindung aktualisieren den lokalen Stand mit mindestens fünf Sekunden Abstand. Verborgene Fenster pausieren Abfragen; parallele Abfragen und Wirkungen nach dem Schließen sind ausgeschlossen. Ein bereits bekanntes Update bleibt bei vorübergehenden lokalen Fehlern erhalten. Der Dienst behält seinen begrenzten GitHub-Prüftakt; mehrfache Start-Aufrufe setzen ihn nicht zurück.
 
 **A-27.12:** Automatische Update-Hinweise erscheinen auch beim Start ohne modalen Dialog; erst „Ansehen“ öffnet die Details. Übersprungene Versionen werden vor der Anzeige mit den geladenen Einstellungen abgeglichen. Download und Installation erfolgen weiterhin über die offizielle Release-Seite.
+
+---
+
+## 28. Nachträge vom 2026-09-23 (E-120)
+
+*Vom Auftraggeber entschieden am 2026-09-23 und vom Orchestrator in seinem Auftrag wörtlich
+eingetragen. Der zweite Abschnitt „25" heißt seitdem „25a"; die IDs A-10.11 bis A-10.17 bleiben.*
+
+| ID | Anforderung |
+|---|---|
+| A-28.1 | Die Versionsprüfung (Abschnitt 18) ist unter Einstellungen abschaltbar, Vorgabe **an**. Ausgeschaltet findet keine Abfrage und keine Verbindung nach außen statt, auch nicht beim Start. Der Schalter wird im Bestand gespeichert und überlebt Neustart und Datensicherung. |
+| A-28.2 | Die Sprache der Hauptoberfläche ist unter Einstellungen → Darstellung wählbar: **Deutsch** (Vorgabe) oder **Englisch**. Sie gilt für alle Texte der Hauptoberfläche einschließlich Datums- und Zahlformat. Das Outlook-Add-in und die Meldungen des lokalen Dienstes bleiben vorerst deutsch. Die Wahl wird im Bestand gespeichert und überlebt Neustart und Datensicherung. |
+| A-28.3 | Die Pool-Liste unter Einstellungen ist sortierbar, mit denselben Hoch/Runter-Bedienelementen wie die Board-Spalten. Die Reihenfolge gilt überall, wo Pools aufgezählt werden, und überlebt Neustart und Datensicherung. |
+| A-28.4 | Das Exportfeld `WindowsUser` enthält den Benutzernamen **ohne** Domäne. |
+| A-28.5 | Startfehler der Anwendung nennen konkrete Schritte zur Selbsthilfe statt des Verweises „Wenden Sie sich an Ihre Systembetreuung". |
+| A-28.6 | Eine einzelne Zeitbuchung dauert höchstens **24 Stunden**. Eine Buchung von Hand oder eine Bearbeitung darüber hinaus wird mit Meldung abgewiesen. Stoppt der Timer nach mehr als 24 Stunden, fragt die Anwendung nach dem tatsächlichen Ende (Vorgabe: Beginn plus 24 Stunden, änderbar) statt still zu kürzen. Ein Fremdimport weist solche Buchungen ab und zählt sie im Ergebnis; die eigene Datensicherung übernimmt bestehende längere Buchungen unverändert und meldet sie als Warnung. |
+| A-28.7 | Nach einer Buchung von Hand nennt die Rückmeldung Tagesgruppe und gerundeten Exportwert wie nach dem Timer-Stopp. |
+| A-28.8 | Die Einstellungen zeigen eine Warnung, wenn die Dateien des Datenbestands zu offene Zugriffsrechte haben. Ohne Befund wird nichts angezeigt. |
+| A-28.9 | Eine Frist in der Vergangenheit ist beim Anlegen aus dem Add-in erlaubt, wie in der Hauptanwendung. |
+| A-28.10 | Der lokale Dienst beendet sich je Startursache mit einem eigenen Code (Übergabe der Sitzung, Anwendungsdatenverzeichnis, Öffnen des Bestands, Migration), und die Hülle nennt dem Benutzer die jeweilige Ursache samt Selbsthilfe (A-28.5). |
+| A-28.11 | Quellkarten des Outlook-Add-ins werden nicht ausgeliefert. |

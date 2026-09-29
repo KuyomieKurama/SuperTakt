@@ -6,6 +6,7 @@ import { cx } from "../../lib/cx";
 import { formatDateTime } from "../../lib/format";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { exportTexts } from "./texts";
 
 /** Takt — die Vorlagenliste des Editors (S-14). */
 
@@ -25,9 +26,10 @@ export function TemplateList({
   onDelete,
 }: TemplateListProps) {
   const others = templates.filter((template) => !template.isBuiltin);
+  const text = exportTexts();
 
   return (
-    <nav className="tpl-list" aria-label="Exportvorlagen">
+    <nav className="tpl-list" aria-label={text.templatesNav}>
       <ul className="tpl-list__items">
         {templates.map((template) => {
           const current = template.id === selectedId;
@@ -49,19 +51,19 @@ export function TemplateList({
                   </span>
                   <span className="tpl-item__badges">
                     {template.isBuiltin ? (
-                      <span className="tpl-badge tpl-badge--builtin">mitgeliefert</span>
+                      <span className="tpl-badge tpl-badge--builtin">{text.builtInBadge}</span>
                     ) : null}
                     {template.id === activeTemplateId ? (
-                      <span className="tpl-badge tpl-badge--active">aktiv</span>
+                      <span className="tpl-badge tpl-badge--active">{text.activeBadge}</span>
                     ) : null}
                   </span>
                   <span className="tpl-item__meta">
-                    Zuletzt geändert {formatDateTime(template.updatedAt)}
+                    {text.lastChanged(formatDateTime(template.updatedAt))}
                   </span>
                 </a>
                 <div className="tpl-item__tools">
                   <IconButton
-                    label={`Vorlage ${quotedName(template.name)} kopieren`}
+                    label={text.copyTemplate(quotedName(template.name))}
                     icon="copy"
                     size="sm"
                     onClick={() => onCopy(template)}
@@ -69,8 +71,8 @@ export function TemplateList({
                   <IconButton
                     label={
                       template.isBuiltin
-                        ? "Die Standardvorlage lässt sich nicht löschen"
-                        : `Vorlage ${quotedName(template.name)} löschen`
+                        ? text.builtinNotDeletable
+                        : text.deleteTemplate(quotedName(template.name))
                     }
                     icon="trash"
                     size="sm"
@@ -86,8 +88,7 @@ export function TemplateList({
 
       {others.length === 0 ? (
         <p className="tpl-list__empty">
-          Es gibt bisher nur die Standardvorlage. Sie lässt sich nicht ändern, aber kopieren — und
-          die Kopie können Sie beliebig umbauen.
+          {text.onlyBuiltin}
         </p>
       ) : null}
     </nav>

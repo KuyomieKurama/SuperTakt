@@ -19,6 +19,7 @@
  */
 
 import type { ApiError, ApiFieldError, Envelope, ErrorEnvelope, RunningTimeEntry } from "./types";
+import { labels } from "../lib/labels";
 
 /* Fehler                                                               */
 
@@ -66,12 +67,20 @@ export class TaktTransportError extends Error {
   }
 }
 
-/** Deutscher Anzeigetext für einen beliebigen Fehlschlag. */
+/** Display text for any failure: the service's German message or the UI's own sentence. */
 export function errorMessage(cause: unknown): string {
   if (cause instanceof TaktApiError) return cause.message;
   if (cause instanceof TaktTransportError) return cause.message;
   if (cause instanceof Error && cause.message.length > 0) return cause.message;
-  return "Unbekannter Fehler. Bitte versuchen Sie es erneut.";
+  return labels().client.unknownError;
+}
+
+/**
+ * Whether `errorMessage(cause)` was written by the local service. Those stay
+ * German in an English UI and are marked `lang="de"` (A-28.2, E-123 point 5).
+ */
+export function isServiceError(cause: unknown): boolean {
+  return cause instanceof TaktApiError && cause.code !== UNEXPECTED_RESPONSE;
 }
 
 /** Technischer Schlüssel, falls vorhanden — die einzige Größe zum Verzweigen. */
@@ -130,6 +139,9 @@ interface RequestOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Code of the error the UI writes itself when the service answer has no envelope. */
+const UNEXPECTED_RESPONSE = "unexpected_response";
+
 async function readErrorEnvelope(response: Response): Promise<TaktApiError> {
   let parsed: unknown = null;
   try {
@@ -141,8 +153,8 @@ async function readErrorEnvelope(response: Response): Promise<TaktApiError> {
   const error = envelope?.error;
   if (error === undefined) {
     return new TaktApiError(response.status, {
-      code: "unexpected_response",
-      message: `Der lokale Dienst hat unerwartet geantwortet (${String(response.status)}).`,
+      code: UNEXPECTED_RESPONSE,
+      message: labels().client.unexpectedResponse(response.status),
     });
   }
   return new TaktApiError(response.status, error, envelope?.running ?? null);
@@ -156,9 +168,7 @@ async function readErrorEnvelope(response: Response): Promise<TaktApiError> {
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const active = connection;
   if (active === null) {
-    throw new TaktTransportError(
-      "SuperTakt ist noch nicht mit dem lokalen Dienst verbunden.",
-    );
+    throw new TaktTransportError(labels().client.notConnected);
   }
 
   const method = options.method ?? "GET";
@@ -183,10 +193,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
-    throw new TaktTransportError(
-      "Der lokale Dienst antwortet nicht. Läuft SuperTakt noch vollständig?",
-      { cause },
-    );
+    throw new TaktTransportError(labels().client.noAnswer, { cause });
   }
 
   if (!response.ok) throw await readErrorEnvelope(response);

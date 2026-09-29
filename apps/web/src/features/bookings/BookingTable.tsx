@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
 import { cx } from "../../lib/cx";
-import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../../lib/labels";
+import { labels, type TimeEntrySource } from "../../lib/labels";
+import { bookingTexts } from "./texts";
 import {
   EXPORT_STATE,
   exportDisplayState,
@@ -108,20 +108,23 @@ export interface BookingTableProps {
   readonly surface?: RunAreaSurface;
 }
 
-const COLUMNS: ReadonlyArray<{
+function tableColumns(): ReadonlyArray<{
   readonly key: SortColumn | "note" | "call" | "source" | "actions";
   readonly label: string;
   readonly sortable: boolean;
   readonly align?: "end";
-}> = [
-  { key: "state", label: "Status", sortable: true },
-  { key: "call", label: "Call", sortable: false },
-  { key: "period", label: "Zeitraum", sortable: true },
-  { key: "source", label: "Herkunft", sortable: false },
-  { key: "duration", label: "Dauer", sortable: true, align: "end" },
-  { key: "note", label: "Leistung", sortable: false },
-  { key: "actions", label: "Aktionen", sortable: false, align: "end" },
-];
+}> {
+  const text = bookingTexts();
+  return [
+    { key: "state", label: text.columnState, sortable: true },
+    { key: "call", label: text.columnCall, sortable: false },
+    { key: "period", label: text.columnPeriod, sortable: true },
+    { key: "source", label: text.columnSource, sortable: false },
+    { key: "duration", label: text.columnDuration, sortable: true, align: "end" },
+    { key: "note", label: text.columnNote, sortable: false },
+    { key: "actions", label: text.columnActions, sortable: false, align: "end" },
+  ];
+}
 
 /**
  * Zusatz hinter dem Etikett. Er ist je Anzeigezustand ein anderer, weil er
@@ -146,10 +149,10 @@ function badgeDetail(
     return row.exportedAt === undefined ? {} : { detail: row.exportedAt };
   }
   if (state === "not_billed") {
-    return row.exportedAt === undefined ? {} : { detail: `ausgebucht am ${row.exportedAt}` };
+    return row.exportedAt === undefined ? {} : { detail: bookingTexts().writtenOffAt(row.exportedAt) };
   }
   if (state === "reopened") {
-    return { detail: `${row.exportCount}× exportiert` };
+    return { detail: bookingTexts().exportedTimes(row.exportCount) };
   }
   return {};
 }
@@ -168,6 +171,7 @@ export function BookingTable({
   className,
   surface,
 }: BookingTableProps) {
+  const text = bookingTexts();
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const someSelected = rows.some((row) => selectedIds.has(row.id));
 
@@ -180,7 +184,7 @@ export function BookingTable({
             <th scope="col" className="table__select">
               <input
                 type="checkbox"
-                aria-label="Alle sichtbaren Buchungen auswählen"
+                aria-label={text.selectAll}
                 checked={allSelected}
                 ref={(node) => {
                   if (node !== null) node.indeterminate = someSelected && !allSelected;
@@ -188,7 +192,7 @@ export function BookingTable({
                 onChange={onToggleAll}
               />
             </th>
-            {COLUMNS.map((column) => {
+            {tableColumns().map((column) => {
               const isSorted = column.sortable && sort.column === column.key;
               return (
                 <th
@@ -252,7 +256,7 @@ export function BookingTable({
                   <input
                     type="checkbox"
                     checked={selected}
-                    aria-label={`Buchung ${foreignText(row.todoTitle)} auswählen`}
+                    aria-label={text.selectRow(foreignText(row.todoTitle))}
                     onChange={() => onToggleRow(row.id)}
                   />
                 </td>
@@ -264,7 +268,7 @@ export function BookingTable({
                 </td>
                 <td className="table__call">
                   {row.callNumber === null ? (
-                    <span className="muted">— ohne Call —</span>
+                    <span className="muted">{text.noCall}</span>
                   ) : (
                     <span className="mono">{row.callNumber}</span>
                   )}
@@ -275,8 +279,8 @@ export function BookingTable({
                 </td>
                 <td className="table__source">
                   <span className="table__secondary">
-                    <span className="visually-hidden">Herkunft der Buchung: </span>
-                    {TIME_ENTRY_SOURCE_LABEL[row.source]}
+                    <span className="visually-hidden">{text.sourcePrefix}</span>
+                    {labels().timeEntrySource[row.source]}
                   </span>
                 </td>
                 <td className="table__cell--end">
@@ -285,7 +289,7 @@ export function BookingTable({
                 <td className="table__note">
                   <span className="truncate" title={foreignText(row.note)}>
                     {row.note === "" ? (
-                      <span className="muted">— keine Leistung erfasst —</span>
+                      <span className="muted">{text.noNote}</span>
                     ) : (
                       /*
                         Die Leistung geht in die Abrechnung und ist fremder
@@ -301,7 +305,7 @@ export function BookingTable({
                 <td className="table__cell--end">
                   <Menu
                     trigger={<Icon name="more-horizontal" size={16} />}
-                    triggerLabel={`Aktionen für die Buchung ${foreignText(row.todoTitle)}`}
+                    triggerLabel={text.rowActions(foreignText(row.todoTitle))}
                     triggerClassName="table__row-menu"
                     align="end"
                     entries={rowMenu(row)}
@@ -314,14 +318,4 @@ export function BookingTable({
       </table>
     </div>
   );
-}
-
-export interface TableShellProps {
-  readonly children: ReactNode;
-  readonly className?: string;
-}
-
-/** Rahmen fuer Leer-, Lade- und Fehlerzustand an Tabellenstelle. */
-export function TableShell({ children, className }: TableShellProps) {
-  return <div className={cx("table-shell", className)}>{children}</div>;
 }

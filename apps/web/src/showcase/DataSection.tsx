@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   BookingTable,
-  TableShell,
   type BookingRowData,
   type SortColumn,
   type SortDirection,
 } from "../features/bookings/BookingTable";
+import { TableShell } from "../shared/ui/TableShell";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
-import { EXPORT_STATUS_LABEL, type ExportStatus } from "../shared/ui/ExportStatus";
+import type { ExportStatus } from "../shared/ui/ExportStatus";
+import { labels } from "../lib/labels";
 import { FilterBar, SearchField, type ActiveFilter } from "../shared/ui/FilterBar";
 import { Select } from "../shared/ui/Select";
 import { ContextMenu, type ContextMenuState, type MenuEntry } from "../shared/ui/Menu";
@@ -37,8 +38,8 @@ const STATUS_OPTIONS: ReadonlyArray<{
   readonly label: string;
 }> = [
   { value: "all", label: "Alle Exportstände" },
-  { value: "open", label: `Nur ${EXPORT_STATUS_LABEL.open.toLocaleLowerCase("de-DE")}` },
-  { value: "exported", label: `Nur ${EXPORT_STATUS_LABEL.exported.toLocaleLowerCase("de-DE")}` },
+  { value: "open", label: `Nur ${labels().exportStatus.open.toLocaleLowerCase("de-DE")}` },
+  { value: "exported", label: `Nur ${labels().exportStatus.exported.toLocaleLowerCase("de-DE")}` },
 ];
 
 const VIEW_OPTIONS: ReadonlyArray<{ readonly value: ViewState; readonly label: string }> = [

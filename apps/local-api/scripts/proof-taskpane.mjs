@@ -25,6 +25,7 @@ import { request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { proofPort } from './port-probe.mjs';
 import { paketQuelle } from './source-resolve.mjs';
 
 // Kein Auflösungshaken mehr (T-029): Seit `packages/domain` seine internen
@@ -60,7 +61,9 @@ await writeFile(join(root, 'app.js'), 'export const a = 1;\n');
 // Eine Datei, die es nie hinausschaffen darf.
 await writeFile(join(root, 'geheim.pem'), 'NICHT-AUSLIEFERN');
 
-const PORT = 17944; // nicht 17844, damit ein laufender Dienst nicht stört
+// Proof port + 101 (17944 by default): off the product's 17844 and off the +1 that
+// proof:access and the other service runs bind on the same TAKT_PROOF_PORT (E-128).
+const PORT = proofPort() + 101;
 
 const quietLogger = { lifecycle: () => {}, request: () => {} };
 

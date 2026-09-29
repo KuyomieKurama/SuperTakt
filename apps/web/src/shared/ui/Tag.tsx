@@ -3,6 +3,7 @@ import { cx } from "../../lib/cx";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "./Foreign";
 import { Icon } from "./Icon";
+import { labels } from "../../lib/labels";
 
 /**
  * Tag-Chip — A-4.1 bis A-4.5, A-9.
@@ -116,14 +117,14 @@ export function TagChip({
       */}
       {isNew ? (
         <span className="chip__badge chip__badge--new">
-          <span className="visually-hidden">wird neu angelegt</span>
-          <span aria-hidden>neu</span>
+          <span className="visually-hidden">{labels().tagChip.newHidden}</span>
+          <span aria-hidden>{labels().tagChip.newMark}</span>
         </span>
       ) : null}
       {isDefault ? (
         <span className="chip__badge">
-          <span className="visually-hidden">Standard-Tag</span>
-          <span aria-hidden>S</span>
+          <span className="visually-hidden">{labels().tagChip.defaultHidden}</span>
+          <span aria-hidden>{labels().tagChip.defaultMark}</span>
         </span>
       ) : null}
     </>
@@ -157,7 +158,7 @@ export function TagChip({
         <button
           type="button"
           className="chip__remove"
-          aria-label={`Tag ${foreignText(label)} entfernen`}
+          aria-label={labels().tagChip.remove(foreignText(label))}
           disabled={disabled}
           onClick={onRemove}
         >
@@ -188,7 +189,7 @@ export function TagPath({ segments, className }: TagPathProps) {
   return (
     <span className={cx("tag-path", className)}>
       <span className="visually-hidden">
-        Pfad: <Foreign value={segments.join(" / ")} />
+        {labels().tagChip.path}<Foreign value={segments.join(" / ")} />
       </span>
       <span aria-hidden className="tag-path__inner">
         {visible.map((segment, index) => (

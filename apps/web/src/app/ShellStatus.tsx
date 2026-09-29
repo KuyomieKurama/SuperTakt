@@ -13,6 +13,7 @@ import { focusFirstWithin, keepTabInside } from "../lib/focus";
 import { Icon } from "../shared/ui/Icon";
 import { Button } from "../shared/ui/Primitives";
 import { Scrim } from "../shared/ui/DialogSurface";
+import { appTexts } from "./texts";
 
 /**
  * Takt — die drei Zustaende, die die Huelle beim Start meldet (Abschnitt 15).
@@ -209,29 +210,27 @@ function useQuitAttempt(onQuit: () => void | Promise<void>): {
  * reisst — das ist B-1.6 Punkt 3 und kein Zufall.
  */
 function QuitFailureNotice({ cause }: { readonly cause: string | null }) {
+  const texts = appTexts().shell;
   return (
     <div className="quitfail">
       <p className="quitfail__title">
         <Icon name="alert-triangle" size={14} />
-        <span>SuperTakt ließ sich so nicht beenden</span>
+        <span>{texts.quitFailedTitle}</span>
       </p>
       <p className="quitfail__body">
-        {cause ?? "Der Beenden-Befehl hat nicht gewirkt: Das Fenster steht noch."}
+        {cause ?? texts.quitFailedFallback}
       </p>
       <ol className="quitfail__steps">
         <li>
-          Schließen Sie das Fenster über das Kreuz in der Titelleiste — oder mit
-          <span className="mono"> Alt+F4</span>.
+          {texts.quitStepWindow}
+          <span className="mono"> {texts.quitStepWindowKeys}</span>.
         </li>
         <li>
-          Hilft das nicht: <span className="mono">Strg+Umschalt+Esc</span> öffnet den
-          Task-Manager. Beenden Sie dort den Eintrag „SuperTakt".
+          {texts.quitStepTaskManagerLead} <span className="mono">{texts.quitStepTaskManagerKeys}</span>{" "}
+          {texts.quitStepTaskManager}
         </li>
       </ol>
-      <p className="quitfail__foot">
-        Beides ist gefahrlos. Was gespeichert ist, bleibt gespeichert, und der lokale
-        Dienst hält von selbst an, sobald das Fenster von SuperTakt weg ist.
-      </p>
+      <p className="quitfail__foot">{texts.quitSafe}</p>
     </div>
   );
 }
@@ -260,6 +259,7 @@ function QuitButton({
   readonly size?: "sm" | "md";
 }) {
   const { attempt, start } = useQuitAttempt(onQuit);
+  const texts = appTexts().shell;
 
   return (
     <>
@@ -273,7 +273,7 @@ function QuitButton({
         loading={attempt.kind === "running"}
         onClick={start}
       >
-        {attempt.kind === "running" ? "SuperTakt wird beendet …" : "SuperTakt beenden"}
+        {attempt.kind === "running" ? texts.quitting : texts.quit}
       </Button>
     </>
   );
@@ -314,6 +314,7 @@ export function StartupProblemNotice({
   className,
 }: StartupProblemNoticeProps) {
   if (problems.length === 0) return null;
+  const texts = appTexts().shell;
 
   return (
     <div
@@ -325,26 +326,20 @@ export function StartupProblemNotice({
         <Icon name="alert-circle" size={18} />
       </span>
       <div className="shellnote__main">
-        <p className="shellnote__title">SuperTakt ist nicht vollständig gestartet</p>
-        <p className="shellnote__body">
-          Ein Teil der Anwendung steht nicht zur Verfügung. Das ist SuperTakt beim Start
-          aufgefallen:
-        </p>
+        <p className="shellnote__title">{texts.startupTitle}</p>
+        <p className="shellnote__body">{texts.startupBody}</p>
         <ul className="shellnote__list">
           {/* Der Schluessel ist die Position: Die Liste entsteht einmal beim
               Start, wird nicht sortiert und nicht ergaenzt. */}
           {problems.map((problem, index) => (
-            <li className="shellnote__item" key={index}>
+            <li className="shellnote__item" key={index} lang="de">
               {problem}
             </li>
           ))}
         </ul>
         <div className="shellnote__todo">
-          <p className="shellnote__todo-title">Was Sie tun können</p>
-          <p className="shellnote__body">
-            Beenden Sie SuperTakt und starten Sie es neu. Bleibt die Meldung, geben Sie sie
-            unverändert an Ihre Systembetreuung weiter — sie benennt bereits, was fehlt.
-          </p>
+          <p className="shellnote__todo-title">{texts.whatYouCanDo}</p>
+          <p className="shellnote__body">{texts.startupAdvice}</p>
         </div>
         {onQuit !== undefined ? (
           <div className="shellnote__actions">
@@ -381,7 +376,13 @@ export interface SyncFolderNoticeProps {
  * Der Ton ist Warnung, nicht Fehler. Wer hier rot faerbt, hat fuer die
  * Sperrmeldung nichts Lauteres mehr uebrig.
  */
+/**
+ * Concrete self-help instead of a referral (A-28.5, F-15). The data folder
+ * comes from LOCALAPPDATA or XDG_DATA_HOME (`appdata.rs`); the backup keeps
+ * the data when that variable is changed.
+ */
 export function SyncFolderNotice({ warning, detail, className }: SyncFolderNoticeProps) {
+  const texts = appTexts().shell;
   return (
     <div
       className={cx("shellnote", "shellnote--sync", className)}
@@ -392,34 +393,23 @@ export function SyncFolderNotice({ warning, detail, className }: SyncFolderNotic
         <Icon name="alert-triangle" size={18} />
       </span>
       <div className="shellnote__main">
-        <p className="shellnote__title">Die Daten von SuperTakt liegen an einer ungeeigneten Stelle</p>
-        <p className="shellnote__body">{warning}</p>
+        <p className="shellnote__title">{texts.syncTitle}</p>
+        <p className="shellnote__body" lang="de">{warning}</p>
         <div className="shellnote__todo">
-          <p className="shellnote__todo-title">Was das bedeutet</p>
-          <p className="shellnote__body">
-            Zwei Programme, die gleichzeitig an derselben Datei arbeiten, können sie
-            unbrauchbar machen — die erfassten Zeiten wären dann verloren. Und die Daten
-            Ihrer Kunden verlassen den Rechner, sobald der Ordner auf einen Dateiserver
-            oder in einen Onlinespeicher kopiert wird.
-          </p>
+          <p className="shellnote__todo-title">{texts.whatItMeans}</p>
+          <p className="shellnote__body">{texts.syncMeaning}</p>
         </div>
         <div className="shellnote__todo">
-          <p className="shellnote__todo-title">Was Sie tun können</p>
-          <p className="shellnote__body">
-            SuperTakt kann diesen Ordner nicht selbst verlegen; er wird vom Betriebssystem
-            vorgegeben. Wenden Sie sich an Ihre Systembetreuung, damit der
-            Anwendungsdatenordner dieses Kontos auf einem Laufwerk dieses Rechners liegt.
-          </p>
+          <p className="shellnote__todo-title">{texts.whatYouCanDo}</p>
+          <p className="shellnote__body">{texts.syncSelfHelp}</p>
         </div>
         {detail !== null ? (
           <p className="shellnote__handover">
-            <span className="shellnote__handover-label">Für die Systembetreuung</span>
-            {detail}
+            <span className="shellnote__handover-label">{texts.forSupport}</span>
+            <span lang="de">{detail}</span>
           </p>
         ) : null}
-        <p className="shellnote__foot">
-          SuperTakt arbeitet weiter. Der Hinweis bleibt stehen, solange der Ordner dort liegt.
-        </p>
+        <p className="shellnote__foot">{texts.syncFoot}</p>
       </div>
     </div>
   );
@@ -447,6 +437,7 @@ export function ServiceStoppedPanel({
   titleId,
   descriptionId,
 }: ServiceStoppedPanelProps) {
+  const texts = appTexts().shell;
   return (
     <>
       <div className="dialog__head">
@@ -454,44 +445,35 @@ export function ServiceStoppedPanel({
           <Icon name="alert-circle" size={18} />
         </span>
         <h2 className="dialog__title" id={titleId}>
-          SuperTakt kann im Moment nichts speichern
+          {texts.stoppedTitle}
         </h2>
       </div>
 
       <div className="dialog__body" id={descriptionId}>
-        <p>
-          Der lokale Dienst von SuperTakt ist nicht erreichbar. Er ist der Teil der Anwendung,
-          der jede Buchung und jede Änderung auf die Festplatte schreibt.
-        </p>
+        <p>{texts.stoppedBody}</p>
         <p className="dialog__consequence">
           <Icon name="alert-triangle" size={14} />
-          <span>{exit.message}</span>
+          <span lang="de">{exit.message}</span>
         </p>
-        <p className="servicestop__assurance">
-          Was bereits gespeichert ist, bleibt erhalten. Alles, was Sie ab jetzt eingeben,
-          geht verloren.
-        </p>
+        <p className="servicestop__assurance">{texts.stoppedAssurance}</p>
         {exit.detail !== null ? (
           <p className="servicestop__handover">
-            <span className="shellnote__handover-label">Für die Systembetreuung</span>
-            {exit.detail}
+            <span className="shellnote__handover-label">{texts.forSupport}</span>
+            <span lang="de">{exit.detail}</span>
           </p>
         ) : null}
-        <p className="servicestop__steps-title">Was zu tun ist</p>
+        <p className="servicestop__steps-title">{texts.whatToDo}</p>
         <ol className="servicestop__steps">
-          <li>Notieren Sie sich, woran Sie gerade gearbeitet haben.</li>
-          <li>Beenden Sie SuperTakt und starten Sie es neu.</li>
-          <li>
-            Kommt die Meldung wieder, geben Sie sie an Ihre Systembetreuung weiter.
-          </li>
+          <li>{texts.stoppedStepNote}</li>
+          <li>{texts.stoppedStepRestart}</li>
+          <li>{texts.stoppedStepSupport}</li>
         </ol>
       </div>
 
       <div className="dialog__footer servicestop__footer">
         {exit.code !== null ? (
           <p className="servicestop__code">
-            Beendigungscode <span className="mono">{exit.code}</span> — hilft bei der
-            Rückfrage.
+            {texts.exitCodeLead} <span className="mono">{exit.code}</span> {texts.exitCodeTail}
           </p>
         ) : null}
         <QuitButton onQuit={onQuit} variant="danger" />
@@ -610,6 +592,7 @@ export function UserNameBlockedPanel({
   titleId,
   descriptionId,
 }: UserNameBlockedPanelProps) {
+  const texts = appTexts().shell;
   return (
     <>
       <div className="dialog__head">
@@ -617,56 +600,37 @@ export function UserNameBlockedPanel({
           <Icon name="alert-circle" size={18} />
         </span>
         <h2 className="dialog__title" id={titleId}>
-          SuperTakt kann unter diesem Windows-Benutzernamen nicht arbeiten
+          {texts.userNameTitle}
         </h2>
       </div>
 
       <div className="dialog__body" id={descriptionId}>
-        <p>
-          SuperTakt schreibt den Windows-Benutzernamen, unter dem Sie an diesem Rechner
-          angemeldet sind, unverändert in jede Exportdatei. Daran erkennt die Abrechnung,
-          wem die erfasste Zeit gehört.
-        </p>
+        <p>{texts.userNameBody}</p>
         <p className="dialog__consequence">
           <Icon name="alert-triangle" size={14} />
-          <span>
-            In diesem Namen steht ein Steuer- oder Richtungszeichen. Solche Zeichen sind
-            unsichtbar und können die Zeile, in der sie stehen, umstellen. SuperTakt startet
-            deshalb nicht, statt eine Abrechnung zu schreiben, die etwas anderes anzeigt,
-            als in ihr steht.
-          </span>
+          <span>{texts.userNameConsequence}</span>
         </p>
-        <p className="servicestop__assurance">
-          Der Name selbst steht nicht in dieser Meldung — genau die Zeichen, um die es
-          geht, würden sie umdrehen.
-        </p>
+        <p className="servicestop__assurance">{texts.userNameNotShown}</p>
 
-        <p className="servicestop__steps-title">Was Sie tun können</p>
+        <p className="servicestop__steps-title">{texts.whatYouCanDo}</p>
         <ol className="servicestop__steps">
-          <li>
-            Melden Sie sich an diesem Rechner unter einem anderen Windows-Konto an und
-            starten Sie SuperTakt dort. Das ist der Weg, der ohne fremde Hilfe funktioniert.
-          </li>
-          <li>
-            Oder lassen Sie den Anmeldenamen dieses Kontos ändern. Das geht nur mit
-            Administratorrechten — bei einem Firmenkonto über die Systembetreuung.
-          </li>
+          <li>{texts.userNameStepOtherAccount}</li>
+          <li>{texts.userNameStepRename}</li>
         </ol>
 
         {dataPath === null ? null : (
           <p className="servicestop__assurance">
-            Ihre bisher erfassten Daten sind davon nicht betroffen. Sie liegen in{" "}
-            <span className="mono">{dataPath}</span>. Sichern Sie diesen Ordner, bevor Sie
-            das Konto wechseln: Unter einem anderen Konto legt SuperTakt einen eigenen an.
+            {texts.userNameDataLead}{" "}
+            <span className="mono">{dataPath}</span>
+            {texts.userNameDataTail}
           </p>
         )}
 
         <p className="servicestop__handover">
-          <span className="shellnote__handover-label">Für die Systembetreuung</span>
-          Der lokale Dienst weist den Windows-Benutzernamen ab (Grund
-          <span className="mono"> user_invalid</span>): Er enthält ein Steuer- oder
-          Richtungszeichen (C0, C1 oder ein bidirektionales Formatierungszeichen) und ginge
-          unverändert als Feld „WindowsUser" in die Abrechnungsdatei.
+          <span className="shellnote__handover-label">{texts.forSupport}</span>
+          {texts.userNameSupportLead}
+          <span className="mono"> user_invalid</span>
+          {texts.userNameSupportTail}
         </p>
       </div>
 

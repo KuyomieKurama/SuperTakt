@@ -43,8 +43,6 @@ import type {
   StatusId,
   TagId,
   TaktError,
-  TimeEntryId,
-  Timestamp,
   TodoId,
 } from '@takt/domain';
 import { CALL_NUMBER_INPUT_MESSAGE, checkCallNumber, normalizeCallNumber } from '@takt/domain';
@@ -69,9 +67,9 @@ import { CALL_NUMBER_INPUT_MESSAGE, checkCallNumber, normalizeCallNumber } from 
  */
 import { statusFor } from '../../http/problem.ts';
 
-import { bookOnTodo, createTodo, findMatches, loadContext } from './service.ts';
+import { createTodo, findMatches, loadContext } from './service.ts';
 import type { AddinDeps } from './ports.ts';
-import { appendMailSchema, bookSchema, createTodoSchema, toFieldIssues, type FieldIssue } from './schema.ts';
+import { appendMailSchema, createTodoSchema, toFieldIssues, type FieldIssue } from './schema.ts';
 
 /*
  * Hier stand bis T-046 zusätzlich `call_number_not_usable`.
@@ -84,7 +82,7 @@ import { appendMailSchema, bookSchema, createTodoSchema, toFieldIssues, type Fie
  * allgemeinen Satz zu fallen. Damit war der Schlüssel eine Fehlerhülle für
  * einen Fall, den es nicht gibt.
  */
-type ErrorCode = 'validation_error' | 'not_found' | 'time_entry_rejected';
+type ErrorCode = 'validation_error' | 'not_found';
 
 interface ErrorBody {
   readonly error: {
@@ -97,7 +95,6 @@ interface ErrorBody {
 const MESSAGES: Readonly<Record<ErrorCode, string>> = Object.freeze({
   validation_error: 'Die Eingabe ist unvollständig oder unzulässig.',
   not_found: 'Nicht vorhanden.',
-  time_entry_rejected: 'Die Zeitbuchung wurde nicht angenommen.',
 });
 
 const errorBody = (code: ErrorCode, details?: readonly FieldIssue[]): ErrorBody =>
@@ -109,9 +106,8 @@ const errorBody = (code: ErrorCode, details?: readonly FieldIssue[]): ErrorBody 
  * Ein fachlicher Fehlschlag aus dem Anwendungsfall, unverändert weitergereicht
  * (T-061).
  *
- * Dieselbe Bauart wie die Buchungsroute weiter unten und wie `envelopeFor` auf
- * der Hauptfläche: Schlüssel und Satz kommen aus der Domäne beziehungsweise
- * dem Anwendungsfall, nicht aus einer zweiten Liste hier. Eine zweite Liste
+ * Dieselbe Bauart wie `envelopeFor` auf der Hauptfläche: Schlüssel und Satz
+ * kommen aus der Domäne beziehungsweise dem Anwendungsfall, nicht aus einer zweiten Liste hier. Eine zweite Liste
  * hieße, dass ein neuer Fehlschlag an einer Stelle einen Satz hat und an der
  * anderen nicht.
  *
@@ -277,45 +273,38 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    *
    * ---------------------------------------------------------------------------
    * **Seit T-304 entstehen hier Anhänge — an diesem Todo und an keinem
-   * anderen** (A-19.22 bis A-19.33, E-108, A-A-82)
+   * anderen** (A-19.22 bis A-19.33, E-108)
    * ---------------------------------------------------------------------------
    *
    * Das ist die Änderung, und sie ist eng. Der Rumpf trägt `attachments`: die
    * E-Mail selbst als Datei, ihre Dateianhänge und ihre Cloud-Anhänge als
    * Verweise. Sie hängen an dem Todo, das **dieselbe Anfrage** anlegt.
    *
-   * **Die Zusage, die geblieben ist, lautet anders als bis gestern.** Bis T-247
-   * hieß sie „über das Add-in entsteht kein Anhang"; das war der Wortlaut von
-   * A-19.19, und E-108 hat ihn aufgehoben. Was E-108 **nicht** aufgehoben hat,
-   * ist A-A-82, und das ist die Zusage ab jetzt:
+   * **Die Grenze lautet seit A-10.11 anders, als sie einmal lautete.** „Über
+   * das Add-in entsteht kein Anhang" (A-19.19) hat E-108 aufgehoben; „über das
+   * Add-in entsteht kein Anhang an einem **vorhandenen** Todo" (A-A-82) haben
+   * A-10.11 bis A-10.13 aufgehoben. Was heute gilt (E-134 Punkt 3):
    *
-   * > Über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da
-   * > war.
+   * > An einem Todo, das vorher schon da war, entsteht ein Anhang
+   * > ausschließlich über `POST /addin/todos/{todoId}/mails`, ausschließlich
+   * > bei gleicher gültiger Call-Nummer und ausschließlich in derselben
+   * > Transaktion wie der Mail-Eintrag.
    *
-   * Sie ist strukturell und nicht per Voreinstellung:
+   * Für **diese** Route bleibt es strukturell bei der engeren Aussage:
    *
-   *  - Diese Route führt **kein Feld, das ein Todo benennt** — es gibt an ihr
-   *    keinen Pfadparameter und keinen Rumpfschlüssel dafür.
-   *  - `AddinDeps.emailAttachments` hat **keinen Parameter vom Typ `TodoId`**.
-   *    Sie nimmt die Funktion entgegen, die eine Kennung erzeugt, und sieht
-   *    die Kennung erst, nachdem sie selbst das Anlegen ausgelöst hat.
+   *  - Sie führt **kein Feld, das ein vorhandenes Todo benennt** — weder einen
+   *    Pfadparameter noch einen Rumpfschlüssel, und `mode` kennt nur `new`.
    *  - `AddinUnit` hat weiterhin **keinen `AttachmentPort`** (A-A-21′ (c)).
    *  - Die Anhangsrouten der Hauptanwendung liegen unter
    *    `/api/v1/todos/{todoId}/attachments`, also außerhalb von `/addin`, und
    *    sind für das Add-in-Token unerreichbar (A-A-21).
    *
    * **Gemessen wird die Wirkung und nicht der Name.** `proof:addin`
-   * Abschnitt 18 legt ein Todo über die Haupttür an, ruft danach diese Route
-   * mit Anhängen **und** einer mitgeschickten `todoId` des vorhandenen Todos —
-   * und zählt: Die Anhänge hängen am **neuen** Todo, das vorhandene hat
-   * weiterhin null. Die Gegenprobe daneben wird rot, wenn jemand einen
-   * `todoId`-Parameter nachrüstet.
-   *
-   * Bis T-247 maß derselbe Abschnitt „null Zeilen in `todo_attachment`". Das
-   * war die richtige Messung für die damalige Zusage und wäre für die heutige
-   * falsch — ein Wächter, der eine aufgehobene Zusage weiterhin bewacht,
-   * behauptet das Gegenteil des Bestands, und das ist der Befund vom
-   * 2026-09-10 in der anderen Richtung.
+   * Abschnitt 18 fährt jede Tür unter `/addin` an und hält die Menge derer,
+   * nach denen am vorhandenen Todo ein Anhang steht, gegen die **eine**
+   * erlaubte. Daneben die Gegenprobe aus E-134 Punkt 3: dieselbe
+   * Zuordnungsroute mit einer abweichenden Call-Nummer antwortet 422, und
+   * `todo_attachment` bleibt unverändert.
    */
   routes.post('/todos', async (c) => {
     const body = await readJson(c.req.raw);
@@ -389,7 +378,7 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
        *
        * **Und keine Todo-Kennung**, in keinem Zweig dieser Route. Ein Anhang
        * entsteht hier an dem Todo, das diese Anfrage anlegt, und an keinem
-       * anderen (A-A-82).
+       * anderen; das Ergänzen läuft über `…/{todoId}/mails` (A-10.11).
        */
       attachments: parsed.data.attachments,
     };
@@ -410,23 +399,6 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
     return c.json({ data: result.value }, 201);
   });
 
-  /**
-   * A-6.1, A-10.9 — Zeit auf ein vorhandenes Todo buchen.
-   *
-   * Die Buchung entsteht mit Start und Ende, nicht mit einer Dauer: `TimeEntry`
-   * führt beide, und die Dauer wird daraus berechnet. Wer eine Dauer schickte,
-   * müsste sich auf eine Zeitzone einigen — und die Tagesgruppe des Exports
-   * hängt am Kalendertag des Starts (E-025).
-   *
-   * **War das Todo erledigt, ist es danach offen** (A-2.5, seit T-038). Das ist
-   * keine Option der Anfrage, sondern die Wirkung der Handlung — dieselbe wie
-   * beim Timerstart in der Hauptanwendung (I-05). Die Antwort sagt beides:
-   * `doneCleared`, ob das Kennzeichen gefallen ist, und `poolMovement`, in
-   * welchen Pools und Spalten das Todo damit wieder steht, in welche es
-   * hineinkommt und aus welchen es verschwindet. Beides steht in der Antwort,
-   * weil der Aufrufer es **anzeigen** soll und nicht, weil er daraus etwas
-   * ableiten müsste.
-   */
   routes.post('/todos/:todoId/mails', async (c) => {
     const parsed = appendMailSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return c.json(errorBody('validation_error', toFieldIssues(parsed.error)), 422);
@@ -436,53 +408,7 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
     return c.json({ data: result.value });
   });
 
-  routes.post('/todos/:todoId/time-entries', async (c) => {
-    const todoId = c.req.param('todoId');
-    const body = await readJson(c.req.raw);
-    const parsed = bookSchema.safeParse(body);
-    if (!parsed.success) {
-      return c.json(errorBody('validation_error', toFieldIssues(parsed.error)), 422);
-    }
-
-    const result = await bookOnTodo(deps, {
-      todoId: todoId as TodoId,
-      startedAt: parsed.data.startedAt as Timestamp,
-      endedAt: parsed.data.endedAt as Timestamp,
-      note: parsed.data.note,
-    });
-
-    if (result.kind === 'not_found') {
-      return c.json(errorBody('not_found'), 404);
-    }
-    if (result.kind === 'rejected') {
-      // Der Schlüssel der Domäne wird durchgereicht — `time_entry_locked`,
-      // `timer_too_short`, `validation_error`. Er ist die einzige Größe, gegen
-      // die das Add-in verzweigt; der deutsche Satz kommt ebenfalls aus der
-      // Domäne und enthält weder Pfad noch SQL.
-      return c.json({ error: { code: result.code, message: result.message } }, 422);
-    }
-
-    return c.json(
-      {
-        data: {
-          timeEntry: result.timeEntry satisfies { readonly id: TimeEntryId },
-          todoWasDone: result.todoWasDone,
-          doneCleared: result.doneCleared,
-          // **Ein** Feld, drei Listen darin — dieselbe Gestalt wie an den
-          // Timer-Routen und an `PUT`/`DELETE /todos/{todoId}/done` (E-061
-          // Punkt 3). Bis T-104 standen hier `poolNames`, `enteringPoolNames`
-          // und `leavingPoolNames` einzeln, und genau daran hing die Falle aus
-          // T-076 Befund 1: Die Antwort zählt ihre Felder auf, ein neues Feld
-          // am Ergebnis kommt hier **nicht** von selbst an, und wer eines der
-          // drei vergaß, bekam eine Antwort, die wie Erfolg aussah, und einen
-          // Aufgabenbereich ohne die halbe Auskunft (E-056). Ein Wert kann
-          // nicht mehr zur Hälfte ankommen.
-          poolMovement: result.poolMovement,
-        },
-      },
-      201,
-    );
-  });
+  // No booking door under /addin: POST /todos/:todoId/time-entries fell with E-120 (A-10.12, A-10.16).
 
   return routes;
 }

@@ -113,7 +113,8 @@ tags:
     description: Tags und Tag-Ordner (A-4.*).
   - name: Pools
     description: |
-      Regeln über Tags. Regel gespeichert, Mitgliedschaft abgeleitet (A-3.4).
+      Rules over five axes — required and excluded tags, status, done and
+      export state (T-076). The rule is stored, membership is derived (A-3.4).
 
       Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**; `placement` sagt,
       wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an.
@@ -122,7 +123,7 @@ tags:
       Das Board (E-054) und der Status eines Todos (A-5.4).
 
       Zwei verschiedene Dinge, seit E-054 auch im Modell: Die **Spalten** des
-      Boards sind Regeln über Tags und stehen unter `/pools`; der **Status**
+      Boards sind Regeln (fünf Achsen, T-076) und stehen unter `/pools`; der **Status**
       ist eine Eigenschaft des Todos und steht unter `/todo-statuses`. Das
       Board selbst wird unter `/board` gelesen.
   - name: Zeitbuchungen
@@ -375,6 +376,10 @@ paths:
         zuletzt vom Dienst ermittelte Ergebnis heraus und löst **nie** eine
         ausgehende Anfrage aus. Der Dienst prüft von sich aus: einmal kurz nach
         dem Start, danach höchstens einmal in 24 Stunden.
+
+        With the switch off (`versionCheckEnabled: false`, A-28.1) the service
+        does not ask at all — not even at start — and this route answers
+        `unknown`.
 
         Läge der Netzaufruf in dieser Route, könnte jeder lokale Prozess mit dem
         Sitzungsgeheimnis ihn in einer Schleife auslösen — und damit das
@@ -1321,6 +1326,52 @@ paths:
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
+  /pools/order:
+    put:
+      tags: [Pools]
+      operationId: reorderPools
+      summary: Set the order of all rules (A-28.3)
+      description: |
+        The complete order of **all** rules — pools and board columns share one
+        order (`position`), so the pool list and the board show the same
+        sequence. Never a fragment: a swap through two single `PATCH` calls
+        breaks the unique index on `position` halfway and answers 409. The
+        reorder runs in one transaction.
+
+        The list has no item cap of its own: it must name exactly the existing
+        rules (422 otherwise), and the 1 MB body limit bounds it.
+
+        Answers the rules of every placement in their new order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: Reordered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PoolWithResolution' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
   /pools/{poolId}:
     parameters: [{ $ref: '#/components/parameters/PoolId' }]
     patch:
@@ -1803,6 +1854,26 @@ paths:
           in: query
           description: Buchungen, deren Exportstatus zurückgesetzt wurde (R-10).
           schema: { type: boolean, default: false }
+        - name: tagId
+          in: query
+          description: |
+            C-14 — only bookings whose todo carries **all** these tags
+            (comma separated, same meaning as on `GET /todos`). Applied in SQL
+            before the page limit.
+          schema: { type: string, maxLength: 3250 }
+        - name: poolId
+          in: query
+          description: |
+            C-14 — only bookings whose todo belongs to **one** of these rules
+            (comma separated, same translation as the pool members). Applied
+            in SQL before the page limit.
+          schema: { type: string, maxLength: 3250 }
+        - name: hasNote
+          in: query
+          description: |
+            C-14 — `true`: only bookings with a service text (A-7.3);
+            `false`: only bookings without one. Never the todo note.
+          schema: { type: string, enum: ['true', 'false'] }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -1883,7 +1954,15 @@ paths:
         '403': { $ref: '#/components/responses/OriginRejected' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
-        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '422':
+          description: |
+            Wohlgeformt, aber fachlich unzulässig (`validation_error`), or the
+            entry would last more than 24 hours (`time_entry_too_long`, A-28.6;
+            `details` names `endedAt`). For an edit the limit applies only when
+            start or end change: an older, longer entry keeps its note editable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /time-entries/{timeEntryId}:
     parameters: [{ $ref: '#/components/parameters/TimeEntryId' }]
@@ -1919,8 +1998,9 @@ paths:
         ihre Leistung, die in die Abrechnung geht (A-7.4). Die Antwort trägt
         **kein** `poolMovement`: An dieser Handlung bewegen sich unter Umständen
         zwei Todos in entgegengesetzte Richtungen, und ein Feld für eine
-        Bewegung kann das nicht tragen. Der Fall ist offen (**O-X**); die
-        Begründung steht ausführlich am Bauteil `PoolMovement`.
+        Bewegung kann das nicht tragen. **Decided (O-X, E-120):** moving a
+        booking to another todo reports no movement; this is final, not open.
+        Die Begründung steht ausführlich am Bauteil `PoolMovement`.
       requestBody:
         required: true
         content:
@@ -1959,7 +2039,15 @@ paths:
                       message: Diese Buchung wurde bereits exportiert und kann nicht geändert werden. Setzen Sie den Exportstatus zurück, um sie zu bearbeiten.
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
-        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '422':
+          description: |
+            Wohlgeformt, aber fachlich unzulässig (`validation_error`), or the
+            entry would last more than 24 hours (`time_entry_too_long`, A-28.6;
+            `details` names `endedAt`). For an edit the limit applies only when
+            start or end change: an older, longer entry keeps its note editable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     delete:
       tags: [Zeitbuchungen]
       operationId: deleteTimeEntry
@@ -2258,7 +2346,14 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
         '404': { $ref: '#/components/responses/NotFound' }
-
+        '409':
+          description: |
+            With `stopRunning`, the displaced timer would book more than 24
+            hours (`timer_stop_end_required`, A-28.6). Nothing was written;
+            stop it first with `POST /timer/stop` and a named `endedAt`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
   /timer/stop:
@@ -2305,6 +2400,14 @@ paths:
         offene Buchungen", und jede Spalte mit `exportState: open` nimmt es
         damit auf. Wer nur am Start eine Auskunft gibt und am Stopp schweigt,
         sagt die halbe Wahrheit.
+
+        **At most 24 hours per booking (A-28.6, E-124 point 3).** A stop that
+        would book more than 24 hours — after the heartbeat cap above — is
+        rejected with `409 timer_stop_end_required` and writes nothing. The
+        caller then names the real end in `endedAt`; it must lie after the
+        start and not after now, and the booking it yields may not exceed 24
+        hours (`422 time_entry_too_long`). For an entry found at service start
+        the heartbeat cap still applies on top of `endedAt`.
       requestBody:
         required: true
         content:
@@ -2320,6 +2423,12 @@ paths:
                     Leistung nach A-7.3 (E-016). Sie geht in die Abrechnung
                     (A-7.4) — nicht zu verwechseln mit dem Vermerk des Todos,
                     der in der Anwendung bleibt (A-7.2).
+                endedAt:
+                  $ref: '#/components/schemas/Timestamp'
+                  description: |
+                    Optional. The real end when the timer ran for more than 24
+                    hours (A-28.6). Without it such a stop answers
+                    `409 timer_stop_end_required`.
       responses:
         '200':
           description: Gestoppt.
@@ -2395,6 +2504,16 @@ paths:
             unbestätigte Rückkehr aus einer inaktiven Zeit (`conflict`, A-24).
             Im zweiten Fall läuft der Timer weiter und es wurde nichts
             geschrieben; zuerst ist `POST /timer/idle/return` an der Reihe.
+            Or the booking would exceed 24 hours and no `endedAt` was named
+            (`timer_stop_end_required`, A-28.6); nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: |
+            `endedAt` is not an exact timestamp after the start and not after
+            now (`validation_error`), or the booking up to it would exceed 24
+            hours (`time_entry_too_long`, A-28.6).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -2519,9 +2638,9 @@ paths:
       operationId: beginIdle
       summary: Laufenden Timer vor der inaktiven Zeit anhalten (A-24)
       description: |
-        Merkt eine erkannte Abwesenheit vor. Ob der Timer dabei anhält oder
-        weiterläuft, entscheidet die Einstellung `idleKeepTimerRunning`; der
-        Vorgabewert ist „weiterlaufen".
+        Merkt eine erkannte Abwesenheit vor. Bei der Rückkehr bleibt der Timer
+        bis zur bewussten Zuordnung angehalten; dieser Aufruf schreibt keine
+        Zeitbuchung.
 
         **Auf einer beim Dienststart vorgefundenen Buchung wird abgewiesen**
         (`409 conflict`, seit T-371, R-34, E-036). Ein Eintrag ohne Ende, den
@@ -2567,6 +2686,10 @@ paths:
             ausgeschaltet, oder die laufende Buchung wurde beim Dienststart
             **vorgefunden** und muß zuerst über `POST /timer/orphaned/resolve`
             oder `POST /timer/stop` entschieden werden (T-371).
+
+            `timer_stop_end_required` (A-28.6): the active part before the
+            absence would exceed 24 hours. Nothing was written; the timer is
+            stopped with a named end instead.
           content:
             application/json:
               schema:
@@ -2693,7 +2816,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '422':
-          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          description: |
+            Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+            `time_entry_too_long` (A-28.6, E-124 point 3): a worked section to a
+            task exceeds 24 hours; `details` names `allocations.<n>.seconds`.
+            The sum rule of A-24.5 stays; split the section.
           content:
             application/json:
               schema:
@@ -2786,6 +2913,12 @@ paths:
         (`poolMovement`, E-058 Punkt 6) — aber nur, wenn tatsächlich eine
         entsteht. `discard` erzeugt keine Buchung und bewegt nichts; dort steht
         `null`, ohne dass eine einzige Regel aufgelöst wird.
+
+        **At most 24 hours (A-28.6, E-124 point 3).** When the last heartbeat
+        lies more than 24 hours after the start, `book_until_heartbeat` is
+        rejected with `409 timer_stop_end_required`. The caller then names an
+        earlier end in `endedAt` (suggested: `min(heartbeat, start + 24 h)`);
+        the booking ends at the earlier of `endedAt` and the heartbeat.
       requestBody:
         required: true
         content:
@@ -2797,6 +2930,11 @@ paths:
                 resolution:
                   type: string
                   enum: [book_until_heartbeat, discard]
+                endedAt:
+                  $ref: '#/components/schemas/Timestamp'
+                  description: |
+                    Optional. An earlier end for `book_until_heartbeat` when the
+                    booking would otherwise exceed 24 hours (A-28.6).
       responses:
         '200':
           description: Entschieden.
@@ -2893,7 +3031,18 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
         '409':
-          description: Es gibt keine verwaiste Buchung (`timer_not_running`).
+          description: |
+            Es gibt keine verwaiste Buchung (`timer_not_running`), oder die
+            Buchung bis zum Lebenszeichen dauerte mehr als 24 Stunden und kein
+            `endedAt` wurde genannt (`timer_stop_end_required`, A-28.6).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: |
+            `endedAt` is not after the start and not after now
+            (`validation_error`), or the booking up to it would exceed 24 hours
+            (`time_entry_too_long`, A-28.6).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -3088,6 +3237,8 @@ paths:
           description: |
             Die Buchung ist bereits ausgebucht oder exportiert
             (`export_status_unchanged`). Ein zweites Ausbuchen gibt es nicht.
+            Eine Buchung eines Todos mit NoExport lässt sich nicht ausbuchen
+            (`time_entry_no_export`, A-26.3); sie geht ohnehin in keinen Export ein.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -3473,14 +3624,17 @@ paths:
     get:
       tags: [Suche]
       operationId: searchEverything
-      summary: Globale Suche über Todos und Zeitbuchungen (E-038)
+      summary: Global search over todos, internal notes and bookings (E-038, C-22)
       description: |
-        Zwei Listen in einer Antwort. Todos werden über Titel und Call-Nummer
-        getroffen, Zeitbuchungen über ihren Leistungstext (A-7.3).
+        Two lists in one answer. Todos match by title, call number **and
+        internal note** (C-22, E-075 point 2); bookings match by their service
+        text (A-7.3), filtered in SQL over all bookings (C22-04).
 
-        Der interne Vermerk (A-7.1) ist **kein** Suchfeld und kommt in keiner
-        Antwort vor. Er ist eine eigene Ressource mit einem eigenen Aufruf
-        (`/todos/{id}/note`) — das ist die vierte Schicht der Notiz-Trennung.
+        **The internal note (A-7.1) never appears in the answer** (K-3): a hit
+        names only its origin (`origins`), never note text. The note remains
+        its own resource (`/todos/{id}/note`). Session route only — no add-in
+        token reaches it (K-6). The billing export is untouched: this route is
+        not a door into the export (K-7, A-7.2).
       parameters:
         - name: q
           in: query
@@ -3507,7 +3661,7 @@ paths:
                           - type: object
                             required: [items]
                             properties:
-                              items: { type: array, items: { $ref: '#/components/schemas/Todo' } }
+                              items: { type: array, items: { $ref: '#/components/schemas/TodoSearchHit' } }
                         description: |
                           Seitenweise, mit derselben Fortsetzungsmarke wie
                           `/todos`. Die Marke gilt **nur** für diese Liste.
@@ -3515,11 +3669,11 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/TimeEntry' }
                         description: |
-                          Nicht seitenweise: Die Buchungen entstehen als Filter
-                          auf einer bereits begrenzten Menge (höchstens 200
-                          gelesene Buchungen), nicht aus einer eigenen Abfrage.
-                          Eine zweite Fortsetzungsmarke in derselben Antwort
-                          wäre nicht zu bedienen, ohne die erste zu verlieren.
+                          Not paged: at most the 200 newest **matching**
+                          bookings — filtered in SQL, not the 200 newest
+                          bookings filtered afterwards (C22-04). A second
+                          continuation mark in the same answer could not be
+                          used without losing the first.
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3663,8 +3817,9 @@ paths:
       summary: Ein Todo aus einer E-Mail anlegen (A-2.1, A-9.5, A-10.5)
       description: |
         Mit mail und requestId wird die Nachricht transaktionssicher zugeordnet (A-10.11).
-        mode auto ergänzt genau einen Call-Treffer, legt ohne Treffer an und weist Mehrdeutigkeit ab.
-        mode new erlaubt die bewusste Neuanlage. Wiederholte requestId erzeugt nichts doppelt.
+        Diese Tür legt immer ein neues Todo an. Eine vorhandene Aufgabe wird ausschließlich
+        über den benannten Pfad `POST /addin/todos/{todoId}/mails` ergänzt. Wiederholte
+        requestId erzeugt nichts doppelt.
         Titel, Tags und Standard-Tags werden nur bei einer Neuanlage angewendet.
         Ohne mail bleibt der bisherige Anlegevertrag für ältere lokale Aufrufer bestehen.
       requestBody:
@@ -3682,7 +3837,7 @@ paths:
                   oneOf: [{ type: integer, minimum: 1, maximum: 525600 }, { type: 'null' }]
                 requestId: { $ref: '#/components/schemas/Id' }
                 mail: { $ref: '#/components/schemas/MailMetadata' }
-                mode: { type: string, enum: [auto, new], default: new }
+                mode: { type: string, enum: [new], default: new }
                 title:
                   type: string
                   minLength: 1
@@ -3939,7 +4094,7 @@ paths:
                     Zugesagt und gemessen wird deshalb die zweite:
                     `proof:addin` Abschnitt 18f schickt die Anfrage mit einem
                     **gültigen** Add-in-Token, erwartet `404` und hält als
-                    Gegenprobe die Nachbarroute `…/time-entries` daneben — sie
+                    Gegenprobe die Nachbarroute `…/mails` daneben — sie
                     darf weder `404` noch `401` antworten, sonst spräche der
                     `404` darüber über den Aufbau der Messung statt über die
                     Route.
@@ -4044,162 +4199,6 @@ paths:
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
-  /addin/todos/{todoId}/time-entries:
-    parameters: [{ $ref: '#/components/parameters/TodoId' }]
-    post:
-      tags: [Add-in]
-      operationId: createAddinTimeEntry
-      summary: Zeit auf ein vorhandenes Todo buchen (A-6.1, A-10.9)
-      description: |
-        Die Buchung entsteht mit Start und Ende, nicht mit einer Dauer:
-        `TimeEntry` führt beide, und die Dauer wird daraus berechnet. Wer eine
-        Dauer schickte, müsste sich auf eine Zeitzone einigen — und die
-        Tagesgruppe des Exports hängt am Kalendertag des Starts (E-025).
-
-        War das Todo als erledigt gekennzeichnet, ist es nach dieser Buchung
-        wieder offen (A-2.5). Das ist **keine** Option der Anfrage. Es gibt
-        keinen Schalter, und es gibt keine Voreinstellung, die man umlegen
-        könnte: Buchen aus dem Add-in wirkt wie der Timerstart in der
-        Hauptanwendung, sonst hätte dieselbe Handlung je nach Weg zwei
-        Ergebnisse (Befund C-03, behoben in T-038).
-
-        Bis T-038 stand hier ein Rumpffeld `reopenIfDone` mit der Vorgabe
-        `false`. Es ist ersatzlos weg. Ein Aufrufer, der es weiterhin
-        mitschickt, bekommt trotzdem **201** und trotzdem die Aufhebung — die
-        Eingabeprüfung kennt den Schlüssel nicht und wirft ihn still weg. Ein
-        422 wäre an dieser Stelle falsch: Es ließe eine fachlich vollständige
-        Buchung scheitern.
-
-        Was geschehen ist, sagt die **Antwort** und nicht die Anfrage:
-        `doneCleared`, ob das Kennzeichen gefallen ist, und `poolMovement`,
-        was daraus folgt (E-058, E-061 Punkt 3).
-
-        **Welche Regeln das Todo dadurch aufnehmen und verlieren, sagt
-        `poolMovement`.** Bis T-104 stand an dieser Stelle „Die Kanban-Spalte
-        bleibt, wo sie ist (E-023) — Erledigt und Spalte sind zwei Achsen", und
-        das ist seit E-055 falsch: Eine Kanban-Spalte **ist** eine Regel und
-        entscheidet auch über „Erledigt" und über den Exportstatus. Diese
-        Buchung ändert beides — das Kennzeichen fällt, und die entstehende
-        Buchung setzt „hat offene Buchungen". Es ändert sich also unter
-        Umständen sehr wohl, in welchen Spalten die Karte steht; genau dafür
-        trägt die Antwort `enters` und `leaves`. Was unverändert bleibt, ist der
-        **Status** des Todos: Erledigt und Status sind zwei getrennte Achsen
-        (E-023), und die Buchung faßt die zweite nicht an.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              # Bewusst **kein** `additionalProperties: false`: Der Dienst weist
-              # unbekannte Schlüssel nicht ab, er wirft sie weg. Ein strenges
-              # Prüfwerkzeug, das hier abriegelte, beschriebe eine Ablehnung,
-              # die es nicht gibt — siehe den Absatz zu `reopenIfDone` oben.
-              required: [startedAt, endedAt]
-              properties:
-                startedAt: { $ref: '#/components/schemas/Timestamp' }
-                endedAt: { $ref: '#/components/schemas/Timestamp' }
-                note:
-                  type: string
-                  maxLength: 4000
-                  default: ''
-                  description: |
-                    Die **Leistung** (A-7.3). Sie geht in die Abrechnung
-                    (A-7.4) und ist deshalb — anders als der Vermerk beim
-                    Anlegen — nicht das Feld, in das E-Mail-Text vorbelegt
-                    wird.
-
-                    Der Deckel ist **enger als der derselben Spalte über die
-                    Hauptanwendung** (`POST /time-entries`). Dass er zufällig
-                    so groß ist wie der des Vermerks eine Route weiter oben,
-                    ist kein Zusammenhang: Der eine begrenzt übernommenen
-                    E-Mail-Text (B-12.3), dieser eine Eingabe des Benutzers,
-                    die in die Abrechnungsdatei geht. Ob die beiden Türen für
-                    dieses Feld verschieden bleiben sollen, ist mit T-134 als
-                    offene Frage vermerkt.
-      responses:
-        '201':
-          description: |
-            Gebucht. War das Todo erledigt, ist es das jetzt nicht mehr.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: object
-                    required: [timeEntry, todoWasDone, doneCleared, poolMovement]
-                    properties:
-                      timeEntry: { $ref: '#/components/schemas/TimeEntry' }
-                      todoWasDone:
-                        type: boolean
-                        description: |
-                          Der **Vorzustand**: War das Todo vor dieser Buchung
-                          als erledigt gekennzeichnet?
-                      doneCleared:
-                        type: boolean
-                        description: |
-                          Die **Wirkung**: Wurde „Erledigt" durch diese Buchung
-                          aufgehoben? Seit T-038 gilt `doneCleared ===
-                          todoWasDone`; beide Felder bleiben, weil sie
-                          Verschiedenes aussagen und ein Aufrufer, der nur
-                          eines liest, so oder so das Richtige liest.
-                      poolMovement:
-                        oneOf:
-                          - { $ref: '#/components/schemas/PoolMovement' }
-                          - { type: 'null' }
-                        description: |
-                          Wie diese Buchung das Todo durch die **Regeln**
-                          bewegt hat — Pools wie Board-Spalten —, oder `null`
-                          (E-056, E-058, E-061 Punkt 3).
-
-                          Bis T-104 standen hier `poolNames`,
-                          `enteringPoolNames` und `leavingPoolNames`. Es ist
-                          dieselbe Auskunft: `appears` ist das alte
-                          `poolNames`, `enters` das alte `enteringPoolNames`,
-                          `leaves` das alte `leavingPoolNames`. Zwei Formen für
-                          eine Sache hießen, daß jede Fläche beide kennen muß —
-                          E-061 Punkt 3 läßt deshalb nur noch diese gelten,
-                          dieselbe wie an `POST /timer/start`, `/timer/stop`,
-                          `/timer/orphaned/resolve` und
-                          `PUT`/`DELETE /todos/{todoId}/done`.
-
-                          Drei leere Listen sind eine Aussage und kein Fehlen:
-                          Auf dieses Todo paßt derzeit keine Regel. Die
-                          Zugehörigkeit ist nirgends gespeichert, sie wird bei
-                          jeder Abfrage neu bestimmt (A-3.4) — deshalb kostet
-                          die Aufhebung keinen einzigen Schreibvorgang an den
-                          Regeln.
-
-                          `null` ist die **andere** Aussage: Hier war keine
-                          Bewegung möglich, weil das Todo offen war und schon
-                          eine offene Buchung hatte. Es wurde dann auch keine
-                          Regel über ihre Ordnerbäume aufgelöst. War das Todo
-                          **erledigt**, steht hier immer ein Wert — die Buchung
-                          hebt das Kennzeichen auf, und damit sind die beiden
-                          Zustände verschieden.
-
-                          Dieselbe Rechnung und dasselbe Zustandspaar wie in
-                          `AddinTodoMatch.poolMovement`: erledigt ist das Todo
-                          danach nicht mehr, und eine offene Buchung hat es in
-                          jedem Fall. Beide Antworten müssen übereinstimmen,
-                          sonst sagt der Aufgabenbereich vor der Buchung etwas
-                          anderes als danach.
-
-                          Den Satz dazu bildet
-                          `poolMovementSentence(movement, 'past', anlaß)` aus
-                          `@takt/domain` — Anlaß `reopen`, wenn `doneCleared`
-                          gilt, sonst `booking` (E-058 Punkt 5). Bei `null`
-                          entfällt die Zeile.
-        '400': { $ref: '#/components/responses/TokenInUrl' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/OriginRejected' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '413': { $ref: '#/components/responses/PayloadTooLarge' }
-        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
-        '422': { $ref: '#/components/responses/UnprocessableEntity' }
-
   # ---------------------------------------------------------------------------
   /settings:
     get:
@@ -4254,10 +4253,24 @@ paths:
                 theme: { type: string, enum: [system, light, dark] }
                 designTheme: { type: string, enum: [classic, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha, clear] }
                 density: { type: string, enum: [comfortable, compact] }
+                motionIntensity: { type: string, enum: [reduced, subtle, expressive] }
                 promptOnTimerStop: { type: boolean }
                 idleKeepTimerRunning: { type: boolean, default: true }
                 idleDetectionEnabled: { type: boolean }
                 idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
+                versionCheckEnabled:
+                  type: boolean
+                  description: |
+                    A-28.1. `false`: the version check makes no request and no
+                    outgoing connection, not even at start, and
+                    `GET /version-check` reports `unknown`.
+                uiLanguage:
+                  type: string
+                  enum: [de, en]
+                  description: |
+                    A-28.2. Language of the main interface. Add-in and service
+                    messages stay German; the export file is never affected
+                    (E-123 point 4).
                 skippedVersion:
                   oneOf:
                     - type: string
@@ -4394,6 +4407,22 @@ paths:
 
         Rumpfgrenze 256 MiB — die einzige Route unter `/data-transfer` mit
         dieser Ausnahme; die Fremdimporte daneben bleiben bei 64 MB.
+
+        Since T-388:
+
+        - **Names pass the door's check** (T-394, E-063): task titles, tag,
+          folder, status, priority, pool and template names, attachment title
+          and display name, `windows_user` and `actor` are rejected with `422`
+          when empty, too long or carrying a control or direction character.
+          The message names table and column, never the value; nothing changes.
+        - **The export directory stays only if it is local** (N-1, E-124
+          point 9): absolute, existing, no UNC or network share on this
+          computer; otherwise it becomes `null` and `warnings` says so.
+        - **Entries over 24 hours are kept unchanged** and counted in
+          `warnings` (A-28.6).
+        - **An open idle phase** that starts after this computer's clock is
+          pulled back to now (A-A-133), and its allocation window ends at most
+          at the last heartbeat of its entry (B-5, R-35).
       requestBody:
         required: true
         content:
@@ -4549,10 +4578,9 @@ components:
           **Sitzungsgeheimnis** der Oberfläche.
         * **Ausschließlich** der Teilbaum `/addin` — `GET /addin/context`,
           `GET /addin/todo-matches`, `POST /addin/todos` und
-          `POST /addin/todos/{todoId}/time-entries` — nimmt daneben auch das
-          **Add-in-Token** an. Vier Operationen, nicht mehr; eine fünfte für
-          Anhänge gab es bis T-247 und gibt es seit der Entscheidung zu F-21
-          nicht mehr.
+          `POST /addin/todos/{todoId}/mails` — nimmt daneben auch das
+          **Add-in-Token** an. Four operations, no more: the attachment route
+          fell with F-21 (T-247), the booking route with E-120 (T-389).
         * Dazu genau eine benannte Ausnahme: `GET /health`. Sie ist der Knopf
           „Verbindung prüfen" in den Add-in-Einstellungen, gibt nichts heraus
           als `{ "status": "ok" }`, ändert nichts und liegt weiterhin hinter dem
@@ -4730,8 +4758,8 @@ components:
         Welcher Schlüssel kommt, hängt an der Route und steht dort. Der Dienst
         führt an dieser Stelle: `tag_folder_cycle`, `tag_folder_not_empty`,
         `tag_in_use`, `name_conflict`, `timer_already_running`,
-        `timer_not_running`, `time_entry_locked`, `export_status_unchanged`,
-        `export_status_not_settable`, `export_nothing_to_do`,
+        `timer_not_running`, `timer_stop_end_required`, `time_entry_locked`, `export_status_unchanged`,
+        `export_status_not_settable`, `time_entry_no_export`, `export_nothing_to_do`,
         `builtin_template_immutable`, `status_in_use`, `last_status_column`,
         `default_status_locked` und `conflict`.
       content:
@@ -4740,6 +4768,10 @@ components:
     UnprocessableEntity:
       description: |
         Die Anfrage ist wohlgeformt, aber fachlich unzulässig.
+
+        A single time entry lasts at most 24 hours (A-28.6): a booking by hand,
+        an edit of start or end, a named end at a stop and a worked idle
+        section above that answer `time_entry_too_long`.
 
         **Namen und Titel** (`name`, `title`) werden dabei nicht nur auf Länge
         geprüft: Steuerzeichen (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und
@@ -4856,10 +4888,12 @@ components:
         format: { type: string, const: de.supertakt.data-archive }
         schemaVersion:
           type: integer
-          const: 10
+          const: 12
           description: |
-            Erzeugt wird stets die Fassung 10. Eingelesen werden 1 bis 10; Fassung
-            6 ist die erste, die `data.files` führt.
+            Always written as version 12; versions 1 to 12 are read. Version 6 is
+            the first with `data.files`; version 11 adds `version_check_enabled`
+            and `ui_language`; version 12 adds `motion_intensity` to `app_setting`
+            (older archives use subtle motion).
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
         data:
@@ -4876,7 +4910,7 @@ components:
 
     DataImportSummary:
       type: object
-      required: [source, todos, projects, sections, tags, timeEntries, images, files, warnings]
+      required: [source, todos, projects, sections, tags, timeEntries, rejectedTimeEntries, images, files, warnings]
       properties:
         source: { type: string, enum: [takt, todoist, super-productivity] }
         todos: { type: integer, minimum: 0 }
@@ -4884,6 +4918,13 @@ components:
         sections: { type: integer, minimum: 0 }
         tags: { type: integer, minimum: 0 }
         timeEntries: { type: integer, minimum: 0 }
+        rejectedTimeEntries:
+          type: integer
+          minimum: 0
+          description: |
+            Foreign time entries rejected because they last more than 24 hours
+            (A-28.6); `warnings` says the same in a sentence. Always 0 for an
+            own archive, which keeps such entries unchanged and warns instead.
         images: { type: integer, minimum: 0 }
         files:
           type: integer
@@ -5126,31 +5167,17 @@ components:
         title:
           type: string
           minLength: 1
-          maxLength: 512
+          maxLength: 500
           description: |
-            **Die 512 hier gegen die 500 an jeder Tür ist kein Versehen.**
+            Every door accepts at most 500 characters since T-114 (`titleSchema`
+            in `http/input.ts`, `MAX_TITLE_CHARACTERS` in `@takt/domain`); the
+            archive import checks the same bound (T-388). O-AD aligns this
+            description with the doors.
 
-            Jeder Eingang nimmt seit T-114 höchstens 500 Zeichen an —
-            `POST /todos`, `PATCH /todos/{todoId}` und `POST /addin/todos`
-            teilen dieselbe Prüfung (`titleSchema` in `http/input.ts`).
-            Bis dahin ließ allein die Add-in-Tür 512 zu, und ein damit
-            angelegtes Todo steht weiter im Bestand: Die Prüfung sitzt am
-            Eingang, nicht am Bestand, und es gibt keine Migration, die
-            vorhandene Titel kürzt (T-101 Annahme 6 — nennen statt still
-            ändern; ein gekürzter Titel wäre eine geänderte Benutzereingabe
-            ohne jemanden, der es erfährt).
-
-            Diese Zahl sagt deshalb, was eine **Antwort** tragen kann, und
-            nicht, was eine Anfrage setzen darf. Wer sie auf 500 zieht,
-            behauptet über fremde Bestände etwas, das er nicht weiß — ein
-            solcher Titel ließe sich weiterhin lesen, aber nicht mehr gegen
-            diese Beschreibung prüfen.
-
-            Für den Benutzer hat das eine sichtbare Folge, und sie ist
-            dieselbe wie bei den Richtungszeichen: Ein solcher Titel lässt sich
-            **nicht unverändert speichern** — der Änderungsdialog schickt ihn
-            mit, und `PATCH /todos/{todoId}` weist ihn mit `422` ab (C-03).
-            Der Weg heraus ist, ihn zu kürzen.
+            **Named gap:** a todo created through the add-in before T-114 may
+            still carry up to 512 characters. It reads fine, but cannot be saved
+            unchanged — `PATCH /todos/{todoId}` answers `422` (C-03) until the
+            title is shortened.
         callNumber:
           oneOf: [{ type: string, maxLength: 128 }, { type: 'null' }]
           description: Aus dem Add-in erkannt (E-006, A-2.6). Darf leer bleiben.
@@ -5744,6 +5771,11 @@ components:
             Das Feld heißt aus historischen Gründen `rule` — es war einmal die
             ganze Regel. Was es bedeutet, steht hier; `excludedTags` daneben
             macht es unübersehbar.
+
+            **Deprecated name (O-D):** responses that show a rule
+            (`PoolWithResolution`) also carry the same list as `requiredTags`,
+            and requests accept `requiredTags`. `rule` goes once web and add-in
+            read the new name (T-400).
         excludedTags:
           type: array
           items: { $ref: '#/components/schemas/PoolRuleTerm' }
@@ -5802,8 +5834,20 @@ components:
           unresolvedExcluded,
           emptyRuleFolderIds,
           matchesNothing,
+          matchesNothingReason,
         ]
       properties:
+        matchesNothingReason:
+          type: string
+          enum: [none, empty, unresolved_required]
+          description: |
+            Why the rule matches nothing, as one named reason (O-J). `none`
+            exactly when `matchesNothing` is `false`; `unresolved_required`
+            takes precedence over `empty`, the same order as the booleans
+            below. Consumers switch over this value instead of combining
+            `isEmpty`, `unresolvedRequired` and `matchesNothing`; a new reason
+            then shows up as a compile error, not as a silent gap. The three
+            booleans stay until web and add-in read this field (T-400).
         tagCount:
           type: integer
           minimum: 0
@@ -6017,13 +6061,6 @@ components:
         | `POST /time-entries` | `booking` | Die Buchung von Hand kann die erste des Todos sein (E-061 Nachtrag, O-V) |
         | `PUT /todos/{todoId}/done` | `booking` | Das Kennzeichen wird gesetzt (E-060). Der Anlaß trägt hier kein Wort von Buchung — er bezeichnet die **neutrale** Form des Satzes |
         | `DELETE /todos/{todoId}/done` | `reopen` | Das Todo war erledigt und kehrt zurück; „wieder" stimmt (E-060) |
-        | `GET /addin/todo-matches` | folgt dem Zustand: `reopen`, wenn das Todo erledigt ist, sonst `booking` | **Ankündigung** der Buchung aus dem Aufgabenbereich (E-061 Punkt 3) |
-        | `POST /addin/todos/{todoId}/time-entries` | ebenso, nach dem Zustand **vor** der Buchung | **Bestätigung** derselben Buchung |
-
-        Die beiden letzten stehen in den Add-in-Bauteilen ausführlich
-        beschrieben; sie benutzen dieselbe Rechnung und dieselbe Gestalt, seit
-        die drei Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames`
-        entfallen sind (E-061 Punkt 3, T-104).
 
         **`PATCH /time-entries/{timeEntryId}` liefert das Feld nicht — und die
         Begründung dafür ist nicht, dass nichts geschähe.** Ein geänderter
@@ -6034,10 +6071,9 @@ components:
         Todos, und zwar in entgegengesetzte Richtungen. Ein Feld für **eine**
         Bewegung kann das nicht tragen.
 
-        Welche Antwort an diese Stelle gehört, ist offen (**O-X**) und liegt
-        beim Auftraggeber. Bis dahin schweigt die Route bewusst, statt die
-        halbe Bewegung zu melden — und diese Beschreibung sagt das, statt eine
-        Begründung zu geben, die den Fall gar nicht kennt.
+        **Decided by the client (O-X, E-120):** the route reports no movement
+        when it moves a booking to another todo. It stays silent on purpose
+        rather than report half of the movement.
 
         Überall gilt: `null` heißt „hier war keine Bewegung möglich", drei leere
         Listen hießen „nachgesehen und nichts gefunden". Der Unterschied ist
@@ -6069,8 +6105,15 @@ components:
       allOf:
         - $ref: '#/components/schemas/Pool'
         - type: object
-          required: [resolved]
+          required: [requiredTags, resolved]
           properties:
+            requiredTags:
+              type: array
+              items: { $ref: '#/components/schemas/PoolRuleTerm' }
+              description: |
+                The required tags under their telling name (O-D) — the same list
+                as `rule`, which stays as a deprecated alias until web and add-in
+                read this field (T-400). `/addin/context` carries only `rule`.
             resolved: { $ref: '#/components/schemas/PoolResolution' }
 
     PoolPlacement:
@@ -6109,12 +6152,19 @@ components:
           allOf: [{ $ref: '#/components/schemas/PoolPlacement' }]
           default: pool
         position: { type: integer, minimum: 0, default: 0 }
+        requiredTags:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: |
+            Required tags (O-D). Empty or missing does not restrict this axis.
+            Send either `requiredTags` or `rule`, never both (422).
         rule:
           type: array
           maxItems: 200
-          default: []
+          deprecated: true
           items: { $ref: '#/components/schemas/PoolRuleTerm' }
-          description: Erforderliche Tags. Leer trifft nichts, nicht alles.
+          description: Deprecated alias of `requiredTags` (O-D) until the web sends the new name (T-400).
         excludedTags:
           type: array
           maxItems: 200
@@ -6155,10 +6205,17 @@ components:
         includeSubfolders: { type: boolean }
         placement: { $ref: '#/components/schemas/PoolPlacement' }
         position: { type: integer, minimum: 0 }
-        rule:
+        requiredTags:
           type: array
           maxItems: 200
           items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: Required tags (O-D). Send either `requiredTags` or `rule`, never both (422).
+        rule:
+          type: array
+          maxItems: 200
+          deprecated: true
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: Deprecated alias of `requiredTags` (O-D).
         excludedTags:
           type: array
           maxItems: 200
@@ -6251,10 +6308,38 @@ components:
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
 
+    TodoSearchHit:
+      description: |
+        A todo hit of the global search (C-22, K-1): the todo, flat as
+        everywhere else, plus where it matched. No field carries note text
+        (K-3).
+      allOf:
+        - $ref: '#/components/schemas/Todo'
+        - type: object
+          required: [origins]
+          properties:
+            origins:
+              type: array
+              minItems: 1
+              maxItems: 3
+              uniqueItems: true
+              items: { type: string, enum: [title, call_number, todo_note] }
+              description: |
+                Where the todo matched, in the fixed order title, call number,
+                note, decided in the service with the same `LIKE` masking as
+                the search (K-5). Never empty for a hit.
+
     TimeEntry:
       type: object
-      required: [id, todoId, startedAt, endedAt, durationSeconds, note, exportStatus, exportCount, source, createdAt, updatedAt]
+      required: [id, todoId, startedAt, endedAt, durationSeconds, note, exportStatus, exportCount, source, todoNoExport, createdAt, updatedAt]
       properties:
+        todoNoExport:
+          type: boolean
+          readOnly: true
+          description: |
+            Read-only copy of the todo's NoExport flag (F-8, E-124 point 6,
+            A-26). Such a booking is recorded but never "open for billing".
+            No request sets it; it follows the todo.
         id: { $ref: '#/components/schemas/Id' }
         todoId: { $ref: '#/components/schemas/Id' }
         startedAt: { $ref: '#/components/schemas/Timestamp' }
@@ -7291,10 +7376,9 @@ components:
         Vermerk fehlt hier nicht aus Versehen, sondern weil er die Add-in-Fläche
         nicht verlässt (A-7.2, R-06).
 
-        Zwei Felder gehen über `Todo` hinaus, und beide beantworten die Frage,
-        die vor der Buchung steht — „was passiert, wenn ich hier draufbuche?":
-        die bereits gebuchte Zeit, getrennt nach offen und exportiert, und die
-        Bewegung durch die Regeln, die die Buchung auslösen würde.
+        One field goes beyond `Todo`: the time already booked, split into open
+        and exported. The add-in no longer books (E-120), so the former
+        `poolMovement` forecast is gone as well (E-125).
       required:
         [
           id,
@@ -7305,7 +7389,6 @@ components:
           completedAt,
           openSeconds,
           exportedSeconds,
-          poolMovement,
         ]
       properties:
         id: { $ref: '#/components/schemas/Id' }
@@ -7331,72 +7414,6 @@ components:
             einer Summe verrechnet: A-8.6 verlangt, dass der Unterschied
             zwischen „schon exportiert" und „noch zu exportieren" sichtbar ist,
             und eine exportierte Buchung ist gesperrt.
-        poolMovement:
-          oneOf:
-            - { $ref: '#/components/schemas/PoolMovement' }
-            - { type: 'null' }
-          description: |
-            Wie eine Buchung auf dieses Todo es durch die **Regeln** bewegen
-            würde — Pools wie Board-Spalten —, oder `null` (I-05, E-056, T-084,
-            E-061 Punkt 3).
-
-            Bis T-104 standen hier `poolNames`, `enteringPoolNames` und
-            `leavingPoolNames`. Es ist dieselbe Auskunft in der Form, die
-            E-061 Punkt 3 als einzige über HTTP zuläßt: `appears` ist das alte
-            `poolNames`, `enters` das alte `enteringPoolNames`, `leaves` das
-            alte `leavingPoolNames`.
-
-            **Regeln und nicht nur Pools.** Gerechnet wird über `list('all')`,
-            also auch über reine Kanban-Spalten (`placement: board`) — und der
-            Fall, für den E-056 geschrieben wurde, ist ausgerechnet eine
-            Spalte. Ob ein genannter Name einen Pool bezeichnet, eine Spalte
-            oder bei `placement: both` beides, steht hier nicht; der Satz nennt
-            ihn deshalb ohne Gattungswort (E-058 Punkt 4).
-
-            **Zugehörigkeit, nicht Sichtbarkeit.** Gerechnet wird `matchesPool`
-            und nicht `isVisibleInPool`: Sichtbarkeit hinge an
-            `includeCompleted`, einer Einstellung der Ansicht in der
-            Hauptanwendung (E-039), die das Add-in nicht kennt. Nach der
-            Buchung ist das Todo ohnehin offen, und dann ist es in jeder Regel,
-            zu der es gehört, auch sichtbar.
-
-            **Warum „nach einer Buchung" und nicht „jetzt".** Der
-            Aufgabenbereich baut daraus einen Satz im Futur — „Es erscheint
-            dann wieder in …". Bis T-076 war das dasselbe wie „jetzt", weil die
-            Zugehörigkeit allein an den Tags hing. Seit eine Regel auch über
-            `completion` und `exportState` urteilen kann, fallen die beiden
-            Zeitpunkte auseinander: Eine Regel `completion: done` enthält ein
-            erledigtes Todo jetzt und **nach** der Buchung nicht mehr (A-2.5
-            hebt „Erledigt" auf), eine Regel `exportState: open` umgekehrt.
-            Genannt wird, was der Benutzer nach seiner Entscheidung vorfindet.
-
-            Alle fünf Achsen der Regel werden ausgewertet (T-078). Vor T-078
-            waren es nur die erforderlichen Tags, und die Antwort nannte
-            deshalb **zu viele** Regeln, sobald eine der übrigen Achsen benutzt
-            wurde.
-
-            **Wozu `enters` und `leaves` neben `appears`.** `appears` ist ein
-            **Zustand**, die beiden anderen sind eine **Bewegung**. Der
-            Unterschied ist der, den der Aufgabenbereich braucht, wenn das Todo
-            gar nicht erledigt ist: Dort gibt es nichts aufzuheben, und eine
-            Aufzählung aller ohnehin zutreffenden Regeln wäre kein Hinweis. Was
-            sich aber ändert, ist eine Nachricht wert — die **erste** Buchung
-            auf einem Todo setzt „hat offene Buchungen" von falsch auf wahr,
-            und jede Regel mit `exportState: open` nimmt es damit auf. Und
-            `leaves` ist der Grund, aus dem E-056 überhaupt geschrieben wurde:
-            Eine Regel `completion: done` zusammen mit `exportState: open` ist
-            eine **Abrechnungsliste** — erledigt, noch nicht abgerechnet. Wer
-            aus Outlook auf eine Karte darin bucht, sieht sie aus genau der
-            Liste verschwinden, in der er sie sucht; eine unerklärte Bewegung
-            wird an dieser Stelle als Datenverlust gelesen.
-
-            `null` heißt: Diese Buchung bewegt nichts — das Todo ist offen und
-            hat schon eine offene Buchung, keine der fünf Achsen ändert sich,
-            und es wurde keine Regel über ihre Ordnerbäume aufgelöst. Der
-            Aufgabenbereich läßt die Zeile dann weg. Ist das Todo
-            **erledigt**, steht hier immer ein Wert: Die Buchung hebt das
-            Kennzeichen auf, und der Satz über die Rückkehr (Anlaß `reopen`)
-            hat auch ohne jeden Treffer etwas zu sagen.
 
     Version:
       type: string
@@ -7479,7 +7496,7 @@ components:
       description: |
         Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
       required:
-        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, skippedVersion, updatedAt]
+        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, motionIntensity, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, skippedVersion, versionCheckEnabled, uiLanguage, updatedAt]
       properties:
         exportDirectory:
           oneOf: [{ type: string }, { type: 'null' }]
@@ -7490,10 +7507,18 @@ components:
         theme: { type: string, enum: [system, light, dark] }
         designTheme: { type: string, enum: [classic, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha, clear] }
         density: { type: string, enum: [comfortable, compact] }
+        motionIntensity: { type: string, enum: [reduced, subtle, expressive], default: subtle }
         promptOnTimerStop: { type: boolean }
         idleDetectionEnabled: { type: boolean }
         idleKeepTimerRunning: { type: boolean, default: true }
         idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
+        versionCheckEnabled:
+          type: boolean
+          description: A-28.1 — default `true`. Stored, survives restart and data archive.
+        uiLanguage:
+          type: string
+          enum: [de, en]
+          description: A-28.2 — default `de`. Stored, survives restart and data archive.
         skippedVersion:
           oneOf: [{ $ref: '#/components/schemas/Version' }, { type: 'null' }]
           description: |
@@ -7514,9 +7539,10 @@ components:
 # -----------------------------------------------------------------------------
 # Wem welcher Abschnitt gehört — und was hier wirklich nicht steht
 #
-# Der Namensraum /api/v1/addin/** STEHT in dieser Datei. Seit T-019 sind es vier
-# Operationen — getAddinContext, findAddinDuplicates, createAddinTodo,
-# createAddinTimeEntry — samt der Bauteile AddinTodoCreated und AddinTodoMatch.
+# The /api/v1/addin/** namespace IS described in this file: four operations —
+# getAddinContext, findAddinDuplicates, createAddinTodo, appendAddinMail — plus
+# the components AddinTodoCreated and AddinTodoMatch. createAddinTimeEntry fell
+# with E-120 (T-389).
 #
 # Bis T-062 stand hier das Gegenteil: „wird gesondert beschrieben", „Nicht in
 # dieser Datei beschrieben". Der Satz stammte aus der Zeit vor T-019 und ist

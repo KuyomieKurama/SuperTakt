@@ -180,6 +180,11 @@ export function removeTagFolder(
  * gibt es keine Auflösung, die eine andere Antwort geben könnte.
  */
 export interface PoolWithResolution extends Pool {
+  /**
+   * The required tags under their telling name (O-D). `rule` carries the same list and stays
+   * as a deprecated alias until web and add-in read `requiredTags` (T-400).
+   */
+  readonly requiredTags: Pool['rule'];
   readonly resolved: PoolResolution;
 }
 
@@ -198,6 +203,7 @@ export interface PoolWithResolution extends Pool {
 export function poolWithResolution(pool: Pool, axes: PoolAxesResolution): PoolWithResolution {
   return {
     ...pool,
+    requiredTags: pool.rule,
     resolved: resolvePool({
       axes: pool,
       ruleTagIds: axes.required.tagIds,
@@ -371,6 +377,19 @@ export async function updatePool(
     if (!updated.ok) return updated;
     const [view] = await withResolution(unit, [updated.value]);
     return view === undefined ? err(taktError('not_found', 'Diesen Pool gibt es nicht.')) : ok(view);
+  });
+}
+
+/** A-28.3 — the full order of all rules; pool list and board columns share one order. */
+export function reorderPools(
+  context: AppContext,
+  order: readonly PoolId[],
+): Promise<UseCaseResult<readonly PoolWithResolution[]>> {
+  const timestamp = now(context);
+  return context.transactions.inTransaction(async (unit) => {
+    const reordered = await unit.pools.reorder(order, timestamp);
+    if (!reordered.ok) return reordered;
+    return ok(await withResolution(unit, reordered.value));
   });
 }
 

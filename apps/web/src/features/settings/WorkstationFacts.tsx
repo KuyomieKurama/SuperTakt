@@ -4,11 +4,12 @@ import { cx } from "../../lib/cx";
 import {
   adviseDatabaseLocation,
   type DatabaseLocationConcern,
-  type DatabaseLocationImpact,
 } from "./databaseLocationAdvice";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, InlineMessage } from "../../shared/ui/Primitives";
 import { Foreign } from "../../shared/ui/Foreign";
+import { useLanguage } from "../../lib/language";
+import { settingsTexts } from "./texts";
 
 /**
  * Takt — die zwei Auskünfte des Dienstes über diesen Arbeitsplatz (C-20).
@@ -43,10 +44,10 @@ import { Foreign } from "../../shared/ui/Foreign";
  *
  * ## Und die Einschränkung aus T-039, hier verschärft
  *
- * Zum Exportordner **belegt** der Dienst Merkmale beim Betriebssystem. Zu
- * dieser Datei tut er das nicht — es kommt nur der Pfad. Kein Befund heißt
- * deshalb „im Pfad steht nichts" und niemals „unbedenklich". Das steht so in
- * der Ansicht und nicht bloß in diesem Kommentar.
+ * For the export folder the service proves traits with the operating system.
+ * For this file it only measures the access rights (A-28.8); everything else
+ * comes from the path. No finding therefore means "nothing in the path", never
+ * "harmless" — and the view says so, not only this comment.
  */
 
 /* Der Name, unter dem abgerechnet wird                                 */
@@ -60,6 +61,7 @@ export interface BillingUserFactProps {
 export function BillingUserFact({ user, className }: BillingUserFactProps) {
   const name = user.trim();
   const labelId = useId();
+  const text = settingsTexts();
 
   /*
    * Eine benannte Gruppe und keine lose Folge aus Beschriftung und Wert: Sonst
@@ -74,21 +76,13 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
       aria-labelledby={labelId}
     >
       <span className="overline" id={labelId}>
-        Abgerechnet wird unter
+        {text.billedAs}
       </span>
 
       {name.length === 0 ? (
-        <InlineMessage tone="warning" title="Der Dienst nennt keinen Benutzernamen">
-          <p>
-            Ohne Namen lässt sich hier nicht nachsehen, wem die Abrechnung Ihre Arbeitszeit
-            zuordnet. Im Export steht trotzdem einer — welcher, zeigt nach dem ersten Lauf das
-            Exportprotokoll.
-          </p>
-          <p>
-            Beenden Sie SuperTakt und starten Sie die Anwendung über ihre Verknüpfung neu. Der Name
-            kommt beim Start von der Anwendungshülle; fehlt er, ist der Dienst nicht auf dem
-            üblichen Weg gestartet worden.
-          </p>
+        <InlineMessage tone="warning" title={text.noUserName}>
+          <p>{text.noUserNameBody}</p>
+          <p>{text.noUserNameRemedy}</p>
         </InlineMessage>
       ) : (
         <>
@@ -105,16 +99,18 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
             <Foreign value={name} />
           </p>
           <p className="workstation__body">
-            Dieser Name steht in <strong>jeder Zeile jeder Exportdatei</strong>. Er sagt der
-            Abrechnung, wessen Arbeitszeit sie vor sich hat.
+            {text.userNameBefore}
+            <strong>{text.userNameStrong}</strong>
+            {text.userNameAfter}
           </p>
           <p className="workstation__source">
             <Icon name="shield" size={14} />
             <span>
-              SuperTakt bekommt ihn beim Start vom Betriebssystem, nicht aus einer Umgebungsvariablen:{" "}
-              <span className="mono">set USERNAME=…</span> ändert ihn nicht, und über keine Route
-              lässt er sich setzen. Deshalb steht er hier: nachzusehen ist er damit{" "}
-              <strong>vor</strong> dem ersten Export und nicht erst danach im Exportprotokoll.
+              {text.userNameSourceBefore}
+              <span className="mono">set USERNAME=…</span>
+              {text.userNameSourceMiddle}
+              <strong>{text.userNameSourceStrong}</strong>
+              {text.userNameSourceAfter}
             </span>
           </p>
         </>
@@ -125,10 +121,6 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
 
 /* Befunde zum Ablageort                                                */
 
-const IMPACT_LABEL: Readonly<Record<DatabaseLocationImpact, string>> = {
-  confidentiality: "Die Kundendaten verlassen diesen Rechner",
-  durability: "Der Bestand kann verlorengehen oder beschädigt werden",
-};
 
 interface DatabaseLocationConcernListProps {
   readonly concerns: readonly DatabaseLocationConcern[];
@@ -148,6 +140,7 @@ function DatabaseLocationConcernList({
   className,
 }: DatabaseLocationConcernListProps) {
   if (concerns.length === 0) return null;
+  const text = settingsTexts();
 
   return (
     <div className={cx("dbconcerns", className)}>
@@ -159,10 +152,10 @@ function DatabaseLocationConcernList({
             <span>{concern.remedy}</span>
           </p>
           <p className="dbconcerns__meta">
-            <span className="dbconcerns__evidence-label">Gefunden im Pfad</span>
+            <span className="dbconcerns__evidence-label">{text.foundInPath}</span>
             <span className="mono">{concern.evidence}</span>
             <span className="dbconcerns__impacts">
-              {concern.impacts.map((impact) => IMPACT_LABEL[impact]).join(" · ")}
+              {concern.impacts.map((impact) => text.impact[impact]).join(" · ")}
             </span>
           </p>
         </InlineMessage>
@@ -182,10 +175,15 @@ interface CopyFeedback {
 export interface DatabaseLocationFactProps {
   /** Wie der Dienst ihn meldet. `null` heißt: Bestand im Arbeitsspeicher. */
   readonly path: string | null;
+  /**
+   * How many data files are more open than `0600` (A-28.8). `null` or `0` shows nothing:
+   * "not measurable" is not a finding.
+   */
+  readonly filesTooPermissive?: number | null;
   readonly className?: string;
 }
 
-export function DatabaseLocationFact({ path, className }: DatabaseLocationFactProps) {
+export function DatabaseLocationFact({ path, filesTooPermissive = null, className }: DatabaseLocationFactProps) {
   /*
    * Der kopierte Pfad und nicht bloß „kopiert": Ändert sich der Pfad, gehört
    * die Rückmeldung nicht mehr dazu. Ein `useEffect`, der einen Merker beim
@@ -196,7 +194,10 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
   const labelId = useId();
   const valueId = `${labelId}-value`;
 
-  const advice = useMemo(() => adviseDatabaseLocation(path ?? ""), [path]);
+  const language = useLanguage();
+  // `language`: the advice carries sentences of the UI language.
+  const advice = useMemo(() => adviseDatabaseLocation(path ?? ""), [path, language]);
+  const text = settingsTexts();
 
   return (
     <div
@@ -205,14 +206,12 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
       aria-labelledby={labelId}
     >
       <span className="overline" id={labelId}>
-        Der Bestand liegt in
+        {text.dataLiesIn}
       </span>
 
       {path === null ? (
-        <InlineMessage tone="info" title="Diese Fassung führt keine Datei">
-          Der Bestand steht im Arbeitsspeicher: Alles, was Sie eintragen, ist beim Beenden weg. So
-          läuft der Prüfbetrieb und die Musterseite des Designsystems. Im installierten SuperTakt steht
-          an dieser Stelle ein Pfad.
+        <InlineMessage tone="info" title={text.noFile}>
+          {text.noFileBody}
         </InlineMessage>
       ) : (
         <>
@@ -233,7 +232,7 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
                   .catch(() => setFeedback({ path, ok: false }));
               }}
             >
-              Pfad kopieren
+              {text.copyPath}
             </Button>
             {/* Immer im Baum, damit die Vorlesehilfe eine Änderung bemerkt
                 statt eines neu erscheinenden Elements. */}
@@ -241,38 +240,57 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
               {current === null
                 ? ""
                 : current.ok
-                  ? "Kopiert."
-                  : "Das Kopieren hat nicht geklappt — markieren Sie den Pfad von Hand."}
+                  ? text.copied
+                  : text.copyPathFailed}
             </span>
           </div>
           <p className="workstation__body">
-            In dieser einen Datei stehen alle Todos, Buchungen und Vermerke — im Klartext. SuperTakt kann
-            den Ort nicht verlegen: Er folgt dem Anwendungsdatenverzeichnis dieses Benutzers und ist
-            über keine Einstellung verstellbar.
+            {text.oneFileBody}
           </p>
           <p className="workstation__source">
             <Icon name="download" size={14} />
             <span>
-              Zum Sichern: SuperTakt beenden und den <strong>ganzen Ordner</strong> kopieren. Neben{" "}
-              <span className="mono">takt.db</span> führt SQLite die Nachbardateien{" "}
-              <span className="mono">-wal</span> und <span className="mono">-shm</span>; die Datei
-              allein kann unvollständig sein.
+              {text.backupBefore}
+              <strong>{text.backupStrong}</strong>
+              {text.backupMiddle}
+              <span className="mono">takt.db</span>
+              {text.backupSidecars}
+              <span className="mono">-wal</span>
+              {text.and}
+              <span className="mono">-shm</span>
+              {text.backupAfter}
             </span>
           </p>
+
+          {/*
+            First: measured on the file, while the concerns below are inferred from the
+            path (welle-18.md 6). No path and no file names in the text (B-2.4 point 4).
+          */}
+          {filesTooPermissive !== null && filesTooPermissive > 0 ? (
+            <div className="dbconcerns">
+              <InlineMessage tone="warning" title={text.permissionsTitle}>
+                <p>{text.permissionsBody}</p>
+                <p className="dbconcerns__remedy">
+                  <Icon name="arrow-up-right" size={14} />
+                  <span>{text.permissionsRemedy}</span>
+                </p>
+              </InlineMessage>
+            </div>
+          ) : null}
 
           <DatabaseLocationConcernList concerns={advice.concerns} />
 
           <p className="workstation__limit">
             <Icon name="info" size={14} />
             <span>
-              {advice.concerns.length === 0
-                ? "Am Pfad ist nichts aufgefallen — das ist keine Entwarnung, sondern eine Nichtaussage: "
-                : "Beurteilt wurde nur, was im Pfad steht. "}
-              Zum <strong>Exportordner</strong> fragt der Dienst das Betriebssystem und belegt
-              Merkmale; zu <strong>dieser Datei</strong> tut er das nicht. Ein zugeordnetes
-              Netzlaufwerk wie <span className="mono">Z:\</span> und ein Ordner, den ein
-              Synchronisierungsclient nach einer Umbenennung weiter überwacht, stehen in keinem
-              Pfad.
+              {advice.concerns.length === 0 ? text.pathNothing : text.pathOnlyJudged}
+              {text.limitBefore}
+              <strong>{text.limitExportStrong}</strong>
+              {text.limitMiddle}
+              <strong>{text.limitFileStrong}</strong>
+              {text.limitDrive}
+              <span className="mono">Z:\</span>
+              {text.limitAfter}
             </span>
           </p>
         </>

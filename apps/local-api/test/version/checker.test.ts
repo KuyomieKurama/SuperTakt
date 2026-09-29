@@ -722,6 +722,197 @@ describe('A-A-106 — ein Speicher, dessen write() nie eintrifft, hält die Prü
 });
 
 /**
+ * A-A-124 (`docs/bedrohungsmodell.md`) — wörtlich: "Ein abgelegter Speicher
+ * bleibt für die Laufzeit abgelegt — das gehört in den Satz daneben. Der
+ * Bestandswert ist danach veraltet, nicht fehlend; eine Datensicherung nach
+ * A-20 trägt einen Zeitpunkt, der beliebig alt sein kann, und sieht dabei
+ * gültig aus."
+ *
+ * Der T-364-Bericht, der diese vier Fälle für "die nächste Welle" angekündigt
+ * hatte (T-364 Abschnitt 6, referenziert in `board.md` Welle 12), ist nicht
+ * mehr im Bestand — `.claude/team/reports/**` ist ungetrackt und wurde beim
+ * Aufräumen mitgelöscht (`board.md`, Zeile "Auffällig" nach Welle 17). Die
+ * vier Fälle unten sind deshalb aus A-A-124 selbst und aus der Begründung bei
+ * `forgetStore`/`reportStoreFailure` (`version.ts`, Kommentare zu T-367)
+ * neu abgeleitet, nicht aus dem verlorenen Bericht übernommen (T-395 Auftrag
+ * Punkt 1).
+ *
+ * Seit T-367 sind die zwei Gründe eines versagenden Speichers NICHT mehr
+ * gleich behandelt (vorher: beide legten ab). Vier Sätze, vier Fälle:
+ *
+ *  1. Ein WERFENDER Speicher wird NICHT abgelegt — jeder weitere Prüflauf
+ *     versucht erneut zu schreiben.
+ *  2. Ein STUMMER Speicher (nie eintreffend) WIRD nach seiner Frist abgelegt
+ *     — und zwar für den Rest der Prozeßlaufzeit, kein weiterer Versuch.
+ *  3. Wirft derselbe Speicher zuerst und fällt danach still, teilen sich
+ *     beide Gründe EINE Protokollzeile, und es ist die ERSTE — "Beide Gründe
+ *     teilen sich die eine Zeile", Kommentar bei `reportStoreFailure`.
+ *  4. Der Bestandswert bleibt nach dem endgültigen Ablegen exakt auf dem
+ *     letzten erfolgreich geschriebenen Stand stehen — veraltet, aber gültig
+ *     aussehend, nicht `NULL` und nicht durch einen späteren Lauf verändert.
+ */
+describe('A-A-124 — ein werfender Speicher bleibt im Einsatz, ein stummer wird endgültig abgelegt (T-367, T-364 §6, T-395)', () => {
+  it('1. ein werfender Speicher bleibt im Einsatz: jeder weitere Lauf versucht erneut zu schreiben, trotzdem GENAU EINE Protokollzeile', async () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    let writeCalls = 0;
+    const throwingStore: VersionCheckStorePort = {
+      write: () => {
+        writeCalls += 1;
+        return Promise.reject(new Error('Speicher kaputt (Schreiben)'));
+      },
+    };
+    const checker = createVersionChecker({
+      logger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 15,
+      store: throwingStore,
+    });
+    checkers.push(checker);
+
+    checker.start();
+    // Drei vollständige Läufe: Ein einziger Wurf wäre auch unter der vor
+    // T-367 gültigen Fassung grün gewesen (die legte erst beim ZWEITEN Lauf
+    // sichtbar nichts mehr ab, weil dann längst kein Speicher mehr da war).
+    // Erst der dritte Versuch belegt, daß der Speicher nach dem ersten UND
+    // dem zweiten Wurf noch im Einsatz ist.
+    await waitUntil(() => writeCalls >= 3, 3_000);
+    expect(writeCalls).toBeGreaterThanOrEqual(3);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const unwritable = lines.filter((line) => line.includes('version_check_state_unwritable'));
+    expect(unwritable.length).toBe(1);
+  });
+
+  it('2. ein stummer Speicher wird nach seiner ersten Frist abgelegt und danach nie wieder versucht', async () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    let writeCalls = 0;
+    const silentStore: VersionCheckStorePort = {
+      write: () => {
+        writeCalls += 1;
+        return new Promise<void>(() => {});
+      },
+    };
+    const checker = createVersionChecker({
+      logger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 15,
+      storeDeadlineMs: 10,
+      store: silentStore,
+    });
+    checkers.push(checker);
+
+    checker.start();
+    // Vier ausgehende Anfragen, aber höchstens EIN Schreibversuch — der
+    // Speicher ist seit Ablauf der ersten Frist abgelegt (`store = null`).
+    await waitUntil(() => counting.calls() >= 4, 3_000);
+
+    expect(writeCalls).toBe(1);
+    const timeoutLines = lines.filter((line) => line.includes('version_check_state_write_timeout'));
+    expect(timeoutLines.length).toBe(1);
+  });
+
+  it('3. wirft der Speicher zuerst und fällt danach still, steht im Protokoll GENAU EINE Zeile — und es ist die erste, nicht die zweite', async () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    let writeCalls = 0;
+    const flakyStore: VersionCheckStorePort = {
+      write: () => {
+        writeCalls += 1;
+        // Erster Aufruf: wirft sofort. Jeder weitere: löst nie ein.
+        if (writeCalls === 1) return Promise.reject(new Error('Speicher kaputt (einmalig)'));
+        return new Promise<void>(() => {});
+      },
+    };
+    const checker = createVersionChecker({
+      logger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 15,
+      storeDeadlineMs: 15,
+      store: flakyStore,
+    });
+    checkers.push(checker);
+
+    checker.start();
+    // Der zweite Schreibversuch legt den Speicher endgültig ab (Timeout);
+    // danach folgen weitere Läufe, ohne einen dritten Versuch auszulösen.
+    await waitUntil(() => writeCalls >= 2, 3_000);
+    await waitUntil(() => counting.calls() >= 5, 3_000);
+
+    // Kein dritter Schreibversuch — der zweite hat den Speicher endgültig
+    // abgelegt.
+    expect(writeCalls).toBe(2);
+
+    const unwritable = lines.filter((line) => line.includes('version_check_state_unwritable'));
+    const timeoutLines = lines.filter((line) => line.includes('version_check_state_write_timeout'));
+    // Die EINE Zeile trägt den ERSTEN Grund (der Wurf) — der zweite Grund
+    // (die Stille) kommt zu spät, `storeFailureLogged` steht schon.
+    expect(unwritable.length).toBe(1);
+    expect(timeoutLines.length).toBe(0);
+  });
+
+  it('4. der Bestandswert bleibt nach dem endgültigen Ablegen auf dem letzten erfolgreichen Stand stehen — veraltet, nicht NULL, sieht gültig aus (A-A-124, wörtlich)', async () => {
+    const { database, versionCheckState } = await openStoreBackedDatabase();
+    try {
+      let writeCalls = 0;
+      // Die ersten beiden Schreibversuche laufen über den ECHTEN Adapter
+      // (`versionCheckState.recordCheck`) durch — derselbe Adapter, den
+      // `composition.ts` tatsächlich verdrahtet. Ab dem dritten Versuch
+      // fällt der Speicher still.
+      const flakyRealStore: VersionCheckStorePort = {
+        write: (at: Date) => {
+          writeCalls += 1;
+          if (writeCalls <= 2) return versionCheckState.recordCheck(toTimestamp(at));
+          return new Promise<void>(() => {});
+        },
+      };
+      const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+      const checker = createVersionChecker({
+        logger: silentLogger,
+        now: () => new Date(),
+        source: counting.source,
+        startDelayMs: 5,
+        intervalMs: 20,
+        minIntervalMs: 15,
+        storeDeadlineMs: 15,
+        store: flakyRealStore,
+      });
+      checkers.push(checker);
+
+      checker.start();
+      await waitUntil(() => writeCalls >= 2 && counting.calls() >= 2, 3_000);
+      const afterSecondWrite = await versionCheckState.lastCheckAt();
+      expect(afterSecondWrite).not.toBeNull();
+
+      // Weitere Läufe, während der Speicher schon endgültig abgelegt ist —
+      // der Bestand darf sich jetzt NICHT mehr ändern.
+      await waitUntil(() => counting.calls() >= 5, 3_000);
+      const afterMoreRuns = await versionCheckState.lastCheckAt();
+
+      // Veraltet, nicht fehlend: derselbe Wert wie nach dem zweiten
+      // erfolgreichen Schreiben, nicht NULL und nicht ein neuerer Zeitpunkt.
+      expect(afterMoreRuns).toBe(afterSecondWrite);
+      expect(writeCalls).toBe(3);
+    } finally {
+      database.close();
+    }
+  });
+});
+
+/**
  * T-279 — der Streuwert auf den Boden (`VERSION_CHECK_JITTER_RATIO`, in
  * `packages/domain`). Hier wird nicht die reine Rechnung geprüft (das steht
  * in `packages/domain/test/version.test.ts`), sondern daß der Prüfer sie
@@ -793,4 +984,83 @@ it('mehrfaches Starten verschiebt weder die erste Prüfung noch den laufenden Ta
     checker.stop();
     vi.useRealTimers();
   }
+});
+
+/**
+ * A-28.1 (T-397, E-129 point 4) — the user's on/off switch (`options.enabled`). Off means no
+ * request at all, also at start; a switch that throws counts as off for that tick and costs
+ * exactly one log line; switching back on takes effect at the next tick without a restart.
+ */
+describe('A-28.1 — the version-check switch: off means zero requests, a throwing switch counts as off', () => {
+  it('switched off from the start: source.latest is never called, current() stays "unknown"', async () => {
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    const checker = createVersionChecker({
+      logger: silentLogger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 10,
+      enabled: { isEnabled: () => false },
+    });
+    checkers.push(checker);
+
+    checker.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(counting.calls()).toBe(0);
+    expect(checker.current()).toEqual({ state: 'unknown' });
+  });
+
+  it('a switch that throws is treated as off: zero requests and exactly one "version_check_switch_unreadable" line', async () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    const checker = createVersionChecker({
+      logger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 10,
+      enabled: {
+        isEnabled: () => {
+          throw new Error('Einstellung nicht lesbar');
+        },
+      },
+    });
+    checkers.push(checker);
+
+    checker.start();
+    // Several ticks — the switch keeps throwing on every one of them.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(counting.calls()).toBe(0);
+    expect(checker.current()).toEqual({ state: 'unknown' });
+    const unreadable = lines.filter((line) => line.includes('version_check_switch_unreadable'));
+    expect(unreadable.length).toBe(1);
+  });
+
+  it('switching it back on takes effect at the next tick, without a restart', async () => {
+    let on = false;
+    const counting = countingSource(async () => ({ ok: true, version: '3.1.0' }));
+    const checker = createVersionChecker({
+      logger: silentLogger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 20,
+      minIntervalMs: 10,
+      enabled: { isEnabled: () => on },
+    });
+    checkers.push(checker);
+
+    checker.start();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(counting.calls()).toBe(0);
+
+    on = true;
+    await waitUntil(() => counting.calls() === 1);
+    expect(checker.current()).toEqual({ state: 'known', latestVersion: '3.1.0' });
+  });
 });

@@ -7,6 +7,8 @@ import { useMutation } from "../../app/useAsync";
 import { formatDateTime } from "../../lib/format";
 import { Button, Card, InlineMessage } from "../../shared/ui/Primitives";
 import { NoteField } from "../../shared/ui/NoteField";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — der interne Vermerk eines Todos (A-7.1, E-016).
@@ -38,8 +40,10 @@ export function TodoNoteCard({ todoId, note, onSaved }: TodoNoteCardProps) {
   const noteText = noteDraft ?? note.text;
   const noteDirty = noteDraft !== null && noteDraft !== note.text;
 
+  const text = todoTexts();
+
   return (
-    <Card title="Vermerk">
+    <Card title={text.internalNote}>
       <NoteField
         scope="internal"
         hideLabel
@@ -65,23 +69,23 @@ export function TodoNoteCard({ todoId, note, onSaved }: TodoNoteCardProps) {
               const saved = await putTodoNote(todoId, noteText);
               setNoteDraft(null);
               onSaved(saved);
-              toasts.success("Vermerk gespeichert.", "Er bleibt in SuperTakt.");
+              toasts.success(todoTexts().noteSaved, todoTexts().noteSavedBody);
             });
           }}
         >
-          Vermerk speichern
+          {text.saveNote}
         </Button>
         {noteDirty ? (
-          <span className="note-actions__hint">Nicht gespeicherte Änderung</span>
+          <span className="note-actions__hint">{text.unsavedChange}</span>
         ) : (
           <span className="note-actions__hint muted">
-            Zuletzt geändert am {formatDateTime(note.updatedAt)}
+            {text.lastChangedOn(formatDateTime(note.updatedAt))}
           </span>
         )}
       </div>
       {noteMutation.error === null ? null : (
-        <InlineMessage tone="danger" title="Der Vermerk wurde nicht gespeichert">
-          {noteMutation.error}
+        <InlineMessage tone="danger" title={text.noteNotSaved}>
+          <ServiceText text={noteMutation.error} fromService={noteMutation.errorFromService} />
         </InlineMessage>
       )}
     </Card>

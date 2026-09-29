@@ -455,7 +455,8 @@
   text-decoration: none;
   transition:
     background-color var(--motion-fast) var(--ease-out),
-    color var(--motion-fast) var(--ease-out);
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .nav__item:hover {
@@ -465,6 +466,12 @@
 
 .nav__item:active {
   background-color: var(--bg-active);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root[data-motion-intensity="expressive"] .nav__item:hover {
+    transform: translateX(var(--motion-nav-shift));
+  }
 }
 
 .nav__item--current {
@@ -1715,11 +1722,13 @@ body:has(.scrim) .toast {
  * und die häufigere verdrängte die dringendere. Überfälligkeit bleibt deshalb
  * eine Aussage der Frist-**Zelle**.
  *
- * Zwei Klassen im Selektor, damit die Zeilenfärbung das Zebra schlägt:
- * `.table__row:nth-child(even)` ist gleich spezifisch, und wer sich auf die
- * Reihenfolge zweier Stilblätter verläßt, verliert beim nächsten Umbau.
+ * The zebra case is listed explicitly: `.table__row:nth-child(even)` weighs
+ * 0-2-0 like `.table__row.todo-row--running`, so the plain selector only wins
+ * through stylesheet order. The `:nth-child(even)` line weighs 0-3-0 and wins
+ * in any order (docs/design/todo-tabelle.md 10.5, Ü-2).
  */
 .table__row.todo-row--running,
+.table__row.todo-row--running:nth-child(even),
 .table__row.todo-row--running:hover {
   background-color: var(--timer-running-bg);
   color: var(--timer-running-fg);
@@ -5198,15 +5207,15 @@ body:has(.scrim) .toast {
   background: var(--bg-surface);
   box-shadow: var(--shadow-lg);
 }
-.idle-summary { display: grid; justify-items: center; gap: var(--space-2); text-align: center; }
-.idle-summary__duration { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.2; font-variant-numeric: tabular-nums; }
-.idle-summary__task { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: var(--text-sm); }
+.idle-summary { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-subtle); text-align: center; }
+.idle-summary__duration { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.idle-summary__task { display: flex; max-width: 100%; align-items: center; gap: var(--space-1); overflow: hidden; color: var(--text-secondary); font-size: var(--text-sm); }
+.idle-summary__task > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .idle-summary__hint, .idle-continuing { margin: 0; text-align: center; color: var(--text-secondary); }
 .idle-continuing { display: flex; justify-content: center; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .idle-mode { border: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
 .idle-mode legend { text-align: center; width: 100%; padding-block: var(--space-3); font-weight: var(--weight-semibold); }
-.idle-mode__choice { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-2); border: 1px solid var(--border-control); border-radius: var(--radius-md); cursor: pointer; }
-.idle-mode__emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 1.5rem; line-height: 1; }
+.idle-mode__choice { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-block-size: 5.5rem; gap: var(--space-2); padding: var(--space-3) var(--space-2); border: 1px solid var(--border-control); border-radius: var(--radius-md); cursor: pointer; }
 .idle-mode__choice input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .idle-mode__choice[data-selected="true"] { background: var(--bg-selected); border-color: var(--accent-bg); }
 .idle-mode__choice:focus-within { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
@@ -5218,6 +5227,15 @@ body:has(.scrim) .toast {
 .idle-search summary, .idle-note summary { cursor: pointer; color: var(--text-secondary); font-size: var(--text-sm); }
 .idle-search[open], .idle-note[open] { display: grid; gap: var(--space-2); }
 .idle-split-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-sm); }
+.idle-dialog__footer .dialog__secondary-submit { white-space: normal; text-align: center; }
+@media (max-width: 32rem) {
+  .idle-dialog__footer { align-items: stretch; }
+  .idle-dialog__footer > .dialog__submit,
+  .idle-dialog__footer > .dialog__secondary-submit { width: 100%; }
+  .idle-dialog__footer > .dialog__submit { order: 1; }
+  .idle-dialog__footer > .dialog__secondary-submit { order: 2; }
+  .idle-dialog__footer > .dialog__cancel { order: 3; align-self: center; }
+}
 @media (min-width: 640px) {
   .idle-allocation__fields:has(.idle-duration) { grid-template-columns: minmax(0, 1fr) 17rem; align-items: end; }
 }
@@ -5413,4 +5431,20 @@ body:has(.scrim) .toast {
   .board__filters > .field { flex: 1 1 10rem; min-inline-size: 0; }
   .board__help { margin-inline-start: 0; }
   .board__bar { flex-wrap: wrap; }
+}
+
+/* Groups of the global search by kind of hit (C-22, T-393 K-9/K-10). */
+.gsearch__group + .gsearch__group {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gsearch__group-label {
+  display: block;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+
+.gsearch__group-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

@@ -42,7 +42,7 @@
   <ProviderName>SuperTakt</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
   <DisplayName DefaultValue="SuperTakt" />
-  <Description DefaultValue="E-Mail und Dateien an eine passende Aufgabe anhängen oder eine neue Aufgabe anlegen." />
+  <Description DefaultValue="E-Mail und Dateien an ein passendes Todo anhängen oder ein neues Todo anlegen." />
   <IconUrl DefaultValue="https://localhost:17844/assets/takt-64.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:17844/assets/takt-128.png" />
   <SupportUrl DefaultValue="https://localhost:17844/" />
@@ -85,7 +85,6 @@
       <Hosts>
         <Host xsi:type="MailHost">
           <DesktopFormFactor>
-            <FunctionFile resid="commandsUrl" />
             <ExtensionPoint xsi:type="MessageReadCommandSurface">
               <OfficeTab id="TabDefault">
                 <Group id="taktMsgReadGroup">
@@ -124,7 +123,6 @@
           <bt:Image id="icon80" DefaultValue="https://localhost:17844/assets/takt-80.png" />
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="commandsUrl" DefaultValue="https://localhost:17844/commands.html" />
           <bt:Url id="paneUrl" DefaultValue="https://localhost:17844/index.html" />
         </bt:Urls>
         <bt:ShortStrings>
@@ -132,7 +130,7 @@
           <bt:String id="paneButtonLabel" DefaultValue="E-Mail anhängen" />
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="paneButtonTip" DefaultValue="E-Mail und Dateien an eine passende Aufgabe anhängen oder eine neue Aufgabe anlegen." />
+          <bt:String id="paneButtonTip" DefaultValue="E-Mail und Dateien an ein passendes Todo anhängen oder ein neues Todo anlegen." />
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

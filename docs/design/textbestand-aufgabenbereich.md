@@ -18,14 +18,85 @@ Die neuen geschützten Aussagen stehen in `DuplicateOffer.tsx`:
 
 | Kennung | Wortlaut | Bedeutung |
 |---|---|---|
-| SP-A-27 | Dabei wird auf dem vorhandenen Todo keine Zeit erfasst. | Anhängen erzeugt keine Zeitbuchung. |
-| SP-A-28 | Ein erledigtes Todo bleibt erledigt. | Anhängen hebt das Kennzeichen nicht auf. |
+| SP-A-27 | Das Ergänzen erfasst keine Zeit | Anhängen erzeugt keine Zeitbuchung. |
+| SP-A-28 | und lässt erledigte Todos erledigt. | Anhängen hebt das Kennzeichen nicht auf. |
+
+**Update T-391d (2026-09-24, ux-designer).** The two rows above carry the wording released in
+T-414 (S-7), replacing the PR #15 wording. Both are parts of one sentence and follow directly
+after „Die E-Mail wird als Anhang am ausgewählten Todo gespeichert." — together they form the
+bundle value `offerAppendNote` in `apps/outlook-addin/src/ui/texts.ts`, no longer a literal in
+`DuplicateOffer.tsx`. The sentence is shown only while an existing Todo is chosen
+(`target !== 'new'`); with „Stattdessen neues Todo anlegen" it is hidden, because it is only
+true for the append branch (T-247 Y-02, A-10.12). The meaning column is unchanged.
 
 `proof:addin` Abschnitt 20 prüft diese Aussagen wie die bisherigen Träger auf genau ein
 Vorkommen und mit einzeln eingesetzten Gegenbeispielen. Abschnitt 21 prüft die Wirkung
 gegen den zusammengesetzten Dienst mit echtem Add-in-Token und echter SQLite-Datenbank.
 V-08 gilt weiter: Eine eingegebene Frist wird beim Anhängen nicht übernommen. Der Hinweis
 erscheint nur bei einem Treffer und einer eingegebenen Frist; ohne diese Zustände nicht.
+
+---
+
+## Nachtrag T-391c (2026-09-24, Welle 18e) — one word for the thing, one place for the time
+
+**Author of this addendum: ux-designer.** The inventory in sections 1 to 11 belongs to
+integration-dev (T-182); this addendum does not rewrite it. It records four decisions that the
+orders T-398c and T-400 need in writing, and it names one count that has gone stale.
+
+**1. The leading term is „Todo", never „Aufgabe" (E-029, confirmed E-133 point 2).** PR #19
+introduced „Aufgabe" on this surface, and the two addenda of 2026-09-15 at the end of this paper
+quote it. They are rewritten below. The wording that matters most is the button in
+`DuplicateOffer`: it reads **„Stattdessen neues Todo anlegen"**, and the specification carries
+that wording since E-134 point 4 — so the rename does not run against A-10.16 any more. The same
+applies to „Passende Aufgabe" → **„Passendes Todo"**, „Mehrere passende Aufgaben" → **„Mehrere
+passende Todos"**, „Zur Aufgabe ergänzen" → **„Zum Todo ergänzen"** and to every remaining
+„Aufgabe" in the create button and the done view. Built in T-398c; the E-087 search over the
+present wording belongs to that order, because the strings sit in `getByRole` names of the
+browser proof.
+
+**2. Nothing visible says „Deadline" — and what is red today is a key name, not a text.**
+A-19.2 binds the **visible** word: on this surface the field is called „Frist" and nothing else.
+The English glossary word for it is **„Due date"** (`welle-18.md` 2.4), never „Deadline"; the
+task pane stays German until E-120 lifts that, so the English word has no place here at all.
+`proof:addin` 18e is red at the moment because it reads the source without comments and finds
+`deadlineHintCore` and `deadlineHintAddinPrefix` — identifiers, which E-130 explicitly exempts.
+The guard measures the **values** of the text bundle and the rendered JSX from T-398c on. Two
+things follow, and the second is the one that is easy to lose: the key names stay as they are
+(E-130), **and** the counter-check stays — an inserted „Deadline" in a bundle value must still
+turn the run red.
+
+**3. The due time belongs to the deadline field.** Today „Fälligkeitsuhrzeit (optional)" stands
+**behind the tags** and carries a second word for the same thing (`TaskPane.tsx`, A-19.2 finding
+in T-409c). It becomes **„Uhrzeit der Frist (optional)"** and moves directly beneath „Frist",
+into the same field group. Three reasons, and none of them is tidiness:
+
+- A-19.2 allows one word for the thing. „Fälligkeit" is a second one.
+- The control is disabled while no date is entered (`disabled={!dueDate}`). A disabled control
+  four fields away from its cause is a dead end: the user sees that it does not work and cannot
+  see why. Next to the date, the cause is in the same glance.
+- A-27.9: the time is an addition to the day, not a second deadline. Position says that; a
+  separate section says the opposite.
+
+No new sentence is needed for it. SP-A-02 already says „die Uhrzeit ist optional", and the add-in
+sends no time when none is entered (E-122 point 3) — which is why the main application's
+„Ohne eigene Uhrzeit gilt 00:00." (SP-04b over there) must **not** be copied here.
+
+**4. SP-A-02 is built, and its core is now measured, not promised.** The approved O-GF wording
+stands in the add-in's text bundle (`src/ui/texts.ts`): `deadlineHintAddinPrefix` plus
+`deadlineHintCore`, and `proof:addin` 19d holds the core character by character against
+`deadlineHintCore` of the main application (GF-03, green in T-400a). Over there the entry is
+split into **SP-04a** (the core) and **SP-04b** (the 00:00 sentence); the sibling of SP-A-02 is
+therefore SP-04a and nothing else. Since the texts live in bundles, an entry names the **key**,
+not the file — the same rule that `textbestand.md` adopted in its addendum T-391c.
+
+**5. One count in this paper is stale, and it is named rather than quietly fixed.** Section A-03
+says „zwölf" field labels and refers to the counter in `proof-addin.mjs` 19c. Measured today
+there are **16** call sites with a `label`: „Dauer" and „Leistung (geht in die Abrechnung)" are
+gone with the booking surface (PR #15), and „Darstellung", „Standard-Status", „Standard-Tags",
+„Ablagevorgabe: Status", „Fälligkeitsuhrzeit (optional)" and „Tag-Ordner" have come. Re-reading
+those labels is integration-dev's own inventory, not this addendum's; what belongs here is the
+warning that the number in A-03 is a date and not a proof (the rule this paper states for line
+numbers holds for counts as well).
 
 ---
 
@@ -249,7 +320,7 @@ steht.
 | Ort | Text (gekürzt) | Zeichen | Urteil |
 |---|---|---|---|
 | `TaskPane.tsx:463` | „Sie ist die Standardquelle für das Exportfeld „Call" und darf leer bleiben." | 76 | **A** (A-2.6: leer ist erlaubt) + Exportbezug. Gesperrt, SP-A-03 |
-| `TaskPane.tsx:547` | „Takt sucht in der E-Mail nicht nach einer Frist — …" | 176 | **A**, **V-04 freigegeben**. Gesperrt, SP-A-02 |
+| `TaskPane.tsx:547` (today `:507`) | „Takt sucht in der E-Mail nicht nach einer Frist — …" → after O-GF: „SuperTakt liest die Frist nicht aus der E-Mail — …" | 176 (old) | **A**, **V-04 freigegeben**, replaced by the O-GF wording (T-393, see SP-A-02). Gesperrt, SP-A-02 |
 | `TaskPane.tsx:590` | „Die Standard-Tags aus den Einstellungen kommen beim Anlegen automatisch dazu. …" | 168 | **A** (A-9.5, Pflichtflow). Gesperrt, SP-A-04 |
 | `TaskPane.tsx:662` (2026-09-06; dieses Papier nannte `:634`, gemessen stand er vor T-196 auf `:642`) | „Er geht nicht in die Abrechnung." | 32 | **A**. Satz 1 („Interner Vermerk des Todos.") ist mit **ST-A-08 in T-196 gefallen**, Abschnitt 8.6. Was bleibt, ist **ab jetzt gesperrt** — SP-A-01. UM-A-01 bleibt offen und bezieht sich jetzt auf den einen Satz |
 | `TaskPane.tsx:745` | „Gerundet wird erst beim Export, auf die Tagessumme." | 51 | **A** — steht ein zweites Mal, ST-A-02 |
@@ -379,7 +450,7 @@ Ausdrücklich aufgenommen und ausdrücklich außerhalb des Rasters:
 | # | Ort | Was er trägt | Buchstabe | Prüfpunkt |
 |---|---|---|---|---|
 | **SP-A-01** | `TaskPane.tsx:660`, `:832` — „(bleibt in SuperTakt)", „(geht in die Abrechnung)" — **und seit T-196 dazu `:662` „Er geht nicht in die Abrechnung."** | die Grenze zwischen Vermerk und Leistung | **A** | A-7.2, A-7.3, **R-08**, E-016, B-12.3. Der Zusatz ist die Auflage aus Z-45: Nach ST-A-08 ist `:662` der einzige ganze **Satz** dieser Fläche, der die Grenze noch ausspricht. Fiele auch er, stünde A-7.2 nur noch in einem Klammerzusatz — und ein Klammerzusatz nennt den **Ort**, nicht das Ziel, das der Text nicht erreicht |
-| **SP-A-02** | `TaskPane.tsx:547` — der Fristhinweis | die Abwesenheit jeder Fristerkennung | **A** | **V-04 aus T-165, unverändert freigegeben.** E-074 Punkt 4, A-19.1, A-19.7. Die kürzere Fassung liegt vor und ist **nicht** freigegeben. Gemessen von `proof:addin` 19d (Stellung, „leer lassen", kein Fülltext). Sein Geschwister ist SP-04 drüben — **eine** Fassung für beide Flächen, Zeitpunkt V-03/V-04 in T-165 (E-078 Nachtrag Punkt 7) |
+| **SP-A-02** | `TaskPane.tsx:547` — der Fristhinweis | die Abwesenheit jeder Fristerkennung | **A** | **V-04 aus T-165, unverändert freigegeben.** E-074 Punkt 4, A-19.1, A-19.7. Die kürzere Fassung liegt vor und ist **nicht** freigegeben. Gemessen von `proof:addin` 19d (Stellung, „leer lassen", kein Fülltext). Sein Geschwister ist SP-04 drüben — **eine** Fassung für beide Flächen, Zeitpunkt V-03/V-04 in T-165 (E-078 Nachtrag Punkt 7). *Update T-391b: approved wording from T-393 (O-GF), not yet built: „SuperTakt liest die Frist nicht aus der E-Mail — Sie tragen sie selbst ein. Ein Kalendertag, die Uhrzeit ist optional. Überfällig ist die Frist erst ab dem Folgetag. Leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." The first sentence is the add-in prefix (`deadlineHintAddinPrefix`); the remaining four are the core (`deadlineHintCore`), character-identical with SP-04 and measured for equality (GF-03). No 00:00 sentence here — the add-in sends no time when none is entered (E-122 point 3); saying 00:00 would be false. Bundled in the add-in's text store, not in `TaskPane.tsx` (E-118). Adds A-19.7 and the overdue rule (A-19.6 with A-27.9), which the old wording lacked (GF-01).* |
 | **SP-A-03** | `TaskPane.tsx:463` | „darf leer bleiben" | **A** | A-2.6 |
 | **SP-A-04** | `TaskPane.tsx:590` | Standard-Tags kommen von selbst dazu | **A** | A-9.5, Pflichtflow `CLAUDE.md`, `textbestand.md` 11.4 Zeile 5 |
 | **SP-A-05** | `TaskPane.tsx:834` | „Text aus der E-Mail gehört in den Vermerk, nicht hierher." — seit T-196 der **ganze** Hinweis, weil der Satz davor gefallen ist | **F** | B-12.3, R-08. **Berichtigt in T-196, und die Berichtigung ist der Befund:** Diese Zeile zitierte den zweiten Satz, Abschnitt A-04 führte die **ganze** `hint` als „Gesperrt, SP-A-05". Der Unterschied war kein Schreibfehler. Der erste Satz war in T-165 als **F-3 freigegeben** — und diese Aufnahme hat die Freigabe nicht ausgeführt, sondern sie in eine Sperre umgeschrieben. Die Auflösung steht in Abschnitt 8.6 |
@@ -957,6 +1028,8 @@ auf.
    drüben gegen SP-A-02 hier). Das ist kein Auftrag, den eine Seite allein erledigen kann: Wer
    zuerst kürzt, erzeugt die Abweichung, die der Punkt verhindern soll. Zeitpunkt laut E-078:
    die Wiedervorlage V-03/V-04 in T-165.
+   *Answered (T-393, O-GF): one shared core plus one sentence per surface; see SP-A-02. Built by
+   integration-dev and frontend-dev in the same wave, separate files.*
 2. **Drei Sätze stehen zeichengleich in zwei Häusern.** `callnumber/labels.ts` und
    `routes/addin/index.ts` führen je fünf Ablehnungsgründe für eine **eingetragene** Call-Nummer,
    und drei davon sind Wort für Wort identisch — zwei sind bereits auseinandergelaufen. Der
@@ -1024,15 +1097,15 @@ fremde Datei hat, die Harmlosigkeit der drei anderen.
 
 Durch A-10.11 ist der reine Duplikathinweis ersetzt. Der aktuelle Satz lautet:
 „Wählen Sie eine Aufgabe zum Ergänzen oder legen Sie bewusst eine neue Aufgabe an.
-Das Ergänzen erfasst keine Zeit und lässt erledigte Aufgaben erledigt.“
+Das Ergänzen erfasst keine Zeit und lässt erledigte Todos erledigt.“
 Die neue Aussage wird im bestehenden Add-in-Nachweis einschließlich Gegenprobe geprüft.
 
 
 ### Präzisierung A-10.16 (15.09.2026)
 
-Der erste Satz lautet jetzt „Die E-Mail wird als Anhang an der ausgewählten Aufgabe
+Der erste Satz lautet jetzt „Die E-Mail wird als Anhang am ausgewählten Todo
  gespeichert.“ Die Zusicherungen aus SP-A-27/SP-A-28 bleiben erhalten. Der Button
-„Stattdessen neue Aufgabe erstellen“ blendet ausschließlich die Neuanlagefelder ein.
+„Stattdessen neues Todo anlegen“ blendet ausschließlich die Neuanlagefelder ein.
 Die veraltete Prüfung auf Abwesenheit jedes Buttons ist durch die Prüfung auf
 Abwesenheit direkter Speicher- und Zeitfunktionen ersetzt; der Browsernachweis prüft
 Zielwahl, Formularanzeige und EML-Auftrag.

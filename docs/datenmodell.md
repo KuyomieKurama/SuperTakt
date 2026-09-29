@@ -2765,6 +2765,80 @@ A-10.11–A-10.15 erlauben das Ergänzen vorhandener Todos über einen strikten 
 Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelten nun für
 **nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
 Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
-Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+Exportdaten. Die vier erlaubten Add-in-Routen (seit E-120 ohne Buchungsroute) werden weiter als feste Menge geprüft.
 Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
 konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
+
+## Importing an own archive — what is checked or adjusted (T-388)
+
+The archive version stays as `DATA_ARCHIVE_VERSION` says; none of this changes the format.
+
+- **Display names** pass the door's check before anything is written (T-394, E-063):
+  `todo.title`, `tag.name`, `tag_folder.name`, `todo_status.name`, `todo_priority.name`,
+  `pool.name`, `export_template.name`, `todo_attachment.title` and `display_name` (both may be
+  `NULL`), `export_run.windows_user`, `export_audit.actor`. Trimmed not empty, at most the door's
+  length constant, no control or direction character. One exception: `todo.title` is read up
+  to `LEGACY_MAX_TITLE_CHARACTERS` (512, the limit before T-114), so a store that still holds
+  such a title can restore its own backup (A-20.4, E-132 point 1); new titles stay at 500.
+  A violation rejects the whole archive; the message names table and column, never the value.
+- **`app_setting.export_directory`** is kept only when it is an absolute, existing, local
+  directory on the importing computer; UNC and network paths are recognised by form before any
+  file-system access. Otherwise it becomes `NULL` with a warning (N-1, E-124 point 9, R-37).
+- **`time_entry` rows over 24 hours** are kept unchanged and counted in a warning (A-28.6).
+- **An open `timer_idle` phase** whose `started_at` lies after the importing computer's clock is
+  pulled back to that clock; earlier periods of the phase are capped the same way (A-A-133).
+  The phase is recorded like an entry found at service start, so its allocation window ends at
+  most at the last `timer_heartbeat` of its entry (B-5, R-35).
+
+## Migration 0029 and archive version 11 (T-397, A-28.1, A-28.2)
+
+Migration `0029_interface_preferences` adds two columns to `app_setting` with `ALTER TABLE … ADD
+COLUMN`; no index, view or trigger changes:
+
+| Column | Type | Default | Meaning |
+|---|---|---|---|
+| `version_check_enabled` | INTEGER, CHECK (0, 1) | 1 | A-28.1. 0: the version check makes no request and no outgoing connection, not even at start. Read synchronously on every tick through `VersionCheckStatePort.isEnabled`; a missing row reads as on, the same as `toAppSettings` (E-132 point 4). |
+| `ui_language` | TEXT, CHECK ('de', 'en') | 'de' | A-28.2. Language of the main interface. Never reaches the export file (E-123 point 4). |
+
+The older column `locale` (migration 0001, free text, default `de-DE`) is left untouched: nothing
+reads it. It is not reused for A-28.2 because it accepts arbitrary tags and existing tests set it
+to `de-AT`.
+
+The backward direction drops both columns. Named loss: a disabled version check is enabled again
+and the interface returns to German.
+
+`DATA_ARCHIVE_VERSION` is **11**. Version 11 carries both columns in `app_setting`; versions 1 to
+10 are read with `version_check_enabled = 1` and `ui_language = 'de'`, the state every
+installation had before the two switches existed. Pool order (A-28.3) needs no new version:
+`pool.position` has always been part of the archive.
+
+## Pool order, required tags and the resolution reason (T-397, A-28.3, O-D, O-J)
+
+- **Order.** `pool.position` carries one order for pool list and board (`ux_pool_position`,
+  unique). A swap through two single `PATCH` calls fails halfway with 409, measured on
+  2026-09-24. `PoolPort.reorder` takes the complete order of all rules and writes it in two
+  passes inside one savepoint (first negative, then final positions) — the same pattern as
+  `StatusPort.reorder`.
+- **`rule` → `requiredTags` (O-D).** The column-level data is unchanged. In HTTP the required
+  tags are also called `requiredTags`; `rule` stays as a deprecated alias in both directions
+  until the web and add-in read the new name (T-400). The TypeScript field `Pool.rule` is
+  renamed together with its consumers (`apps/web/src/lib/poolRule.ts` extends `PoolRuleAxes`,
+  65 references in `packages/storage/test`) in a later, sequential step.
+- **`matchesNothingReason` (O-J).** `PoolResolution` carries `'none' | 'empty' |
+  'unresolved_required'` beside the three booleans; `unresolved_required` wins over `empty`.
+
+## Reads that join the todo (T-397, F-8, C-14, C-22)
+
+- `time_entry` reads carry `todo_no_export` through a correlated subquery on `todo`
+  (`TimeEntry.todoNoExport`, read only).
+- `TimeEntryFilter` gains `noteContains`, `hasNote`, `tagIds` and `poolIds`. Tags and pools are
+  translated by the same function as the todo list (`todoFilterConditions` in `repo-todos.ts`)
+  and applied as `todo_id IN (SELECT t.id FROM todo t WHERE …)`, before counting and paging.
+  `hasNote` means the booking's service text (`time_entry.note`), never `todo_note`.
+  `noteContains` compares `takt_fold(note)` against the folded term, so case is ignored beyond
+  ASCII (E-132 point 2); `takt_fold` is a connection function, not a stored column, so no
+  migration and no archive change.
+- `TodoFilter.searchIncludesNote` lets **only** the global search look into `todo_note.body`;
+  the todo list and pool members keep searching title and call number (C22-03).
+  `TodoPort.matchOrigins` returns per todo which of title, call number and note matched —
+  flags only, the note body never leaves SQL (K-3).

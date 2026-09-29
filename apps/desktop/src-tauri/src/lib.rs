@@ -173,12 +173,9 @@ pub fn run() {
                 // Ohne ihn startet er nicht, weil ein Export ohne Urheber nicht
                 // nachvollziehbar wäre.
                 //
-                // Bewusst der **nackte** Name und nicht `qualified_name`. A-8.5
-                // nennt das Feld `WindowsUser`, nicht `Domäne und Benutzer`; ob das
-                // Abrechnungstool die Domäne erwartet, ist offen (B-8.2 Punkt 4).
-                // Beide Werte stehen der Oberfläche über `takt_os_user` zur
-                // Verfügung, damit die Antwort auf diese Frage keine Änderung an
-                // der Startkette braucht.
+                // The bare name, never `qualified_name`: `WindowsUser` carries the
+                // user name without domain (A-28.4, E-120 F-14). The service strips
+                // a domain once more at the handshake (`userNameWithoutDomain`).
                 let os_user = identity::current();
 
                 // 5 — Sidecar. Ein Fehlschlag beendet Takt nicht: Das Fenster soll

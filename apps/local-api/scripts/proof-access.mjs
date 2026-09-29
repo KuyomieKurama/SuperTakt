@@ -1,4 +1,4 @@
-import { waitForPortFree } from './port-probe.mjs';
+import { checkNoHardcodedPort, portFree, proofPort, waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis des Zugriffsverfahrens (T-011).
  *
@@ -23,7 +23,7 @@ import { mkdir, mkdtemp, rm, stat, readFile } from 'node:fs/promises';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { join, dirname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { readdirSync, statSync } from 'node:fs';
@@ -87,8 +87,8 @@ const MIGRATIONS_DIR = migrationsVerzeichnis({ mindestens: 12 });
  * was A-18.3 verbietet.
  */
 const ENTRY = join(HERE, 'proof-access-entry.ts');
-const PORT = 17843;
-const BASE = `http://127.0.0.1:${PORT}/api/v1`;
+/** From TAKT_PROOF_PORT, default the product port (E-121 point 8); the entry reads the same variable. */
+const PORT = proofPort();
 const SECRET_SHAPE = /takt_[A-Za-z0-9_-]{43}/;
 
 /**
@@ -120,11 +120,60 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
+/**
+ * A promise this platform cannot measure (E-121 point 10, E-124 point 8).
+ *
+ * On Linux, the CI runner that can measure every line of this run, a skip is red. Elsewhere
+ * the line is not counted as passed and is listed in the summary as "ungemessen: <platform>".
+ */
+const unmeasured = [];
+function cannotMeasure(name, reason) {
+  if (process.platform === 'linux') {
+    check(name, false, `nicht meßbar unter linux: ${reason}`);
+    return;
+  }
+  unmeasured.push(name);
+  console.log(`  UNGEM ${name} — ungemessen: ${process.platform} (${reason})`);
+}
+
+/**
+ * Connects to host:port and classifies the outcome for the bind address check (W-10).
+ *
+ * Only ECONNREFUSED counts as "refused": the address exists and nobody listens there.
+ * Every other outcome (timeout, address not available, no IPv6) says nothing about the
+ * service and is returned as "unmeasurable".
+ */
+function probeConnect(host, port) {
+  return new Promise((done) => {
+    const socket = createConnection({ host, port, timeout: 1500 });
+    socket.once('connect', () => {
+      socket.destroy();
+      done({ outcome: 'accepted' });
+    });
+    socket.once('error', (error) => {
+      done(error.code === 'ECONNREFUSED' ? { outcome: 'refused' } : { outcome: 'unmeasurable', code: error.code ?? 'error' });
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      done({ outcome: 'unmeasurable', code: 'timeout' });
+    });
+  });
+}
+
+/** Listens on a wildcard address at a free port; the counter-probe for W-10. */
+function listenWildcard(host) {
+  return new Promise((done) => {
+    const server = createServer((socket) => socket.destroy());
+    server.once('error', (error) => done({ server: null, code: error.code ?? 'error' }));
+    server.listen({ host, port: 0, ipv6Only: false }, () => done({ server, port: server.address().port }));
+  });
+}
+
 // Dienst starten
 
 async function startService(
   dataDir,
-  { withSecret = true, withUser = true, user = 'kerem', closeAfterHandshake = false } = {},
+  { withSecret = true, withUser = true, user = 'kerem', closeAfterHandshake = false, secretValue } = {},
 ) {
   const child = spawn(process.execPath, [ENTRY], {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -146,7 +195,7 @@ async function startService(
   // (B-1.6, E-042). Absichtlich in EINEM Schreibvorgang — so wie es die Hülle
   // tut. Ein Leser, der die zweite Zeile im selben Datenblock verschluckt,
   // fällt hier auf und nicht erst auf dem Rechner des Benutzers.
-  const secret = withSecret ? `takt_${randomBytes(32).toString('base64url')}` : null;
+  const secret = withSecret ? (secretValue ?? `takt_${randomBytes(32).toString('base64url')}`) : null;
   if (secret !== null) {
     child.stdin.write(withUser ? `${secret}\n${user}\n` : `${secret}\n`);
     // Die Hülle stirbt unmittelbar nach dem Start des Sidecars — die
@@ -317,6 +366,9 @@ let service = null;
 let hardFailure = null;
 
 try {
+  section('Port aus TAKT_PROOF_PORT, nicht hartkodiert (E-121 Punkt 8, T-397a)');
+  await checkNoHardcodedPort(check, [fileURLToPath(import.meta.url), ENTRY]);
+
   if (!(await waitForPortFree(PORT))) {
     throw new Error(
       `Auf 127.0.0.1:${PORT} lauscht bereits etwas, auch nach 5 s Warten. ` +
@@ -329,11 +381,32 @@ try {
     const bare = await startService(dataDir, { withSecret: false });
     const code = await Promise.race([bare.exit, sleep(8000).then(() => 'timeout')]);
     check('Ohne Startgeheimnis beendet sich der Dienst mit Code 78', code === 78, `Code ${code}`);
+  }
+
+  section('0-. Ein abgewiesenes Startgeheimnis steht nicht in der Meldung (B-2.4, W-7)');
+  {
+    /*
+     * Started without a secret, "the message names no secret" had nothing to name (W-7).
+     * Here the service receives a secret-like value that is too short and therefore
+     * rejected, and exactly that value must be absent from its output. It does not match
+     * SECRET_SHAPE, so the redactor cannot hide it: only the handshake itself keeps it out.
+     */
+    const rejectedValue = `takt_${randomBytes(19).toString('base64url')}`;
+    const tooShort = await startService(dataDir, { secretValue: rejectedValue });
+    const code = await Promise.race([tooShort.exit, sleep(8000).then(() => 'timeout')]);
+    const ausgabe = tooShort.output();
+    check('Ein zu kurzes Startgeheimnis beendet den Dienst mit Code 78', code === 78, `Code ${code}`);
     check(
-      'Die Meldung nennt kein Geheimnis',
-      !SECRET_SHAPE.test(bare.output()),
-      bare.output().slice(0, 200),
+      'Vorbedingung: der Dienst hat den Wert gelesen und als zu kurz abgewiesen (reason=too_short)',
+      rejectedValue.length < 32 && ausgabe.includes('reason=too_short'),
+      ausgabe.slice(0, 300),
     );
+    check(
+      'Die Meldung gibt den abgewiesenen Wert nicht wieder, auch nicht teilweise',
+      !ausgabe.includes(rejectedValue) && !ausgabe.includes(rejectedValue.slice(5)),
+      ausgabe.slice(0, 300),
+    );
+    if (code === 'timeout') await stopService(tooShort);
   }
 
   section('0a. Start ohne Windows-Benutzernamen (E-042, B-8.1)');
@@ -460,7 +533,8 @@ try {
         const ausgabe = abbruch.output();
         if (code === 'timeout') await stopService(abbruch);
 
-        check(`${name}: der Dienst beendet sich mit Code 78`, code === 78, `Code ${code}`);
+        // 65 = migration failed (A-28.10, E-129 point 4); 78 stays the handshake code.
+        check(`${name}: der Dienst beendet sich mit Code 65`, code === 65, `Code ${code}`);
         check(
           `${name}: die Protokollzeile nennt den Grund „${erwarteterGrund}"`,
           ausgabe.includes(`"reason":"${erwarteterGrund}"`),
@@ -557,7 +631,7 @@ try {
      * niemand mit dem Dienst, und dann hält `shutdown()` mühelos Wort. Hier
      * redet jemand — halb.
      *
-     * Der Abschnitt öffnet eine Verbindung auf 17843 und schickt einen
+     * Der Abschnitt öffnet eine Verbindung auf den Prüfport und schickt einen
      * Anfragekopf ohne die abschließende Leerzeile. Für Node ist das eine
      * Anfrage, die noch kommt; `server.close()` wartet auf sie, bis
      * `headersTimeout` greift (60 s Vorgabe) oder, bei stockendem Rumpf,
@@ -729,41 +803,63 @@ try {
 
   section('1. Bindeadresse (B-1.1 Punkt 3 und 4)');
   {
+    /*
+     * W-10: The service's own "listening on 127.0.0.1" is a self-report, and the external
+     * IPv4 check depends on the network. The network-independent measurement: a wildcard
+     * bind (0.0.0.0 or ::) would also accept 127.0.0.2 and [::1]; a bind to 127.0.0.1 only
+     * refuses both. The counter-probe binds a wildcard itself and must see it accepted,
+     * otherwise "refused" above would prove nothing on this machine.
+     */
     check(
-      'Der Dienst meldet 127.0.0.1 als Bindeadresse',
+      `Selbstauskunft: der Dienst nennt 127.0.0.1:${PORT} als Bindeadresse`,
       service.output().includes(`Takt lauscht auf 127.0.0.1:${PORT}`),
     );
+    const own = await probeConnect('127.0.0.1', PORT);
+    check(`Vorbedingung: über 127.0.0.1:${PORT} nimmt der Dienst an`, own.outcome === 'accepted', JSON.stringify(own));
+
+    for (const [host, wildcard, label] of [
+      ['127.0.0.2', '0.0.0.0', '127.0.0.2'],
+      ['::1', '::', '[::1]'],
+    ]) {
+      const counter = await listenWildcard(wildcard);
+      const counterProbe = counter.server === null ? { outcome: 'unmeasurable', code: counter.code } : await probeConnect(host, counter.port);
+      if (counter.server !== null) await new Promise((done) => counter.server.close(done));
+      const probe = await probeConnect(host, PORT);
+
+      const name = `Über ${label}:${PORT} ist der Dienst nicht erreichbar — keine Platzhalterbindung`;
+      if (counterProbe.outcome !== 'accepted' || probe.outcome === 'unmeasurable') {
+        cannotMeasure(
+          name,
+          `Gegenprobe über ${wildcard}: ${counterProbe.outcome}${counterProbe.code ? ` ${counterProbe.code}` : ''}, ` +
+            `Messung: ${probe.outcome}${probe.code ? ` ${probe.code}` : ''}`,
+        );
+        continue;
+      }
+      check(`Gegenprobe: eine Bindung an ${wildcard} wäre über ${label} erreichbar`, counterProbe.outcome === 'accepted');
+      check(name, probe.outcome === 'refused', JSON.stringify(probe));
+    }
+
     const external = Object.values(networkInterfaces())
       .flat()
       .filter((entry) => entry && entry.family === 'IPv4' && !entry.internal)
       .map((entry) => entry.address);
     if (external.length === 0) {
-      console.log('  ----  keine externe IPv4 vorhanden, Prüfung übersprungen');
+      // Not a passed line: the wildcard case is measured above without a network.
+      console.log('  --    keine externe IPv4 vorhanden; nicht gezählt, die Platzhalterbindung messen die Zeilen darüber');
     } else {
-      const reachable = await new Promise((resolve) => {
-        const socket = createConnection({ host: external[0], port: PORT, timeout: 1500 });
-        socket.on('connect', () => {
-          socket.destroy();
-          resolve(true);
-        });
-        socket.on('error', () => resolve(false));
-        socket.on('timeout', () => {
-          socket.destroy();
-          resolve(false);
-        });
-      });
-      check(`Über ${external[0]}:${PORT} ist der Dienst nicht erreichbar`, reachable === false);
+      const reachable = await probeConnect(external[0], PORT);
+      check(`Über ${external[0]}:${PORT} ist der Dienst nicht erreichbar`, reachable.outcome !== 'accepted', JSON.stringify(reachable));
     }
   }
 
   section('2. Zielrechner — DNS-Rebinding (B-1.3)');
   {
-    const evil = await call('/api/v1/health', { headers: { host: 'evil.example:17843' } });
+    const evil = await call('/api/v1/health', { headers: { host: `evil.example:${PORT}` } });
     check('Host: evil.example ergibt 403', evil.status === 403);
     check('… mit dem Schlüssel host_not_allowed', evil.text.includes('host_not_allowed'));
 
     const evilWithToken = await call('/api/v1/health', {
-      headers: { host: 'evil.example:17843', 'X-Takt-Token': service.secret },
+      headers: { host: `evil.example:${PORT}`, 'X-Takt-Token': service.secret },
     });
     check(
       'Auch mit gültigem Nachweis: 403 — die Host-Prüfung steht vor dem Token',
@@ -775,7 +871,7 @@ try {
 
     const suffix = await call('/api/v1/health', { headers: { host: `127.0.0.1.evil.example:${PORT}` } });
     check(
-      'Host: 127.0.0.1.evil.example:17843 ergibt 403 — keine Präfixprüfung',
+      `Host: 127.0.0.1.evil.example:${PORT} ergibt 403 — keine Präfixprüfung`,
       suffix.status === 403,
       `war ${suffix.status}`,
     );
@@ -932,8 +1028,30 @@ try {
     });
     check('POST mit Formularkodierung: 415', form.status === 415);
 
+    /*
+     * W-11: Without a token there would be no effect even without a content-type check, so
+     * the two requests above measure the token check. The same two requests with the
+     * session secret can only be stopped by the content-type check.
+     */
+    const simpleWithSecret = await call('/api/v1/token', {
+      method: 'POST',
+      headers: { ...sessionHeaders, 'content-type': 'text/plain;charset=UTF-8' },
+      body: '{}',
+    });
+    check('POST mit text/plain und Sitzungsgeheimnis: 415', simpleWithSecret.status === 415, `war ${simpleWithSecret.status}`);
+    const formWithSecret = await call('/api/v1/token', {
+      method: 'POST',
+      headers: { ...sessionHeaders, 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'a=1',
+    });
+    check('POST mit Formularkodierung und Sitzungsgeheimnis: 415', formWithSecret.status === 415, `war ${formWithSecret.status}`);
+
     const stillTwo = await call('/api/v1/token', { headers: sessionHeaders });
-    check('Keine Wirkung eingetreten: generation unverändert 2', stillTwo.text.includes('"generation":2'));
+    check(
+      'Keine Wirkung eingetreten, auch mit Sitzungsgeheimnis: generation unverändert 2',
+      stillTwo.text.includes('"generation":2'),
+      stillTwo.text,
+    );
   }
 
   section('8. Token in der Adresse (B-2.4 Punkt 1)');
@@ -1014,10 +1132,7 @@ try {
      * trotzdem: Der Lauf schreibt aus, was er nicht mißt, statt es wegzulassen.
      */
     if (process.platform === 'win32') {
-      console.log(
-        '  --    Verzeichnis 0700 und Datei 0600: nicht gemessen — unter Windows sagt der ' +
-          'POSIX-Modus nichts, dort trägt die ACL (T-011)',
-      );
+      cannotMeasure('Verzeichnis 0700 und Datei 0600', 'der POSIX-Modus sagt unter Windows nichts, dort trägt die ACL (T-011)');
     } else {
       check(`Verzeichnis 0700 (ist ${(dirStat.mode & 0o777).toString(8)})`, (dirStat.mode & 0o777) === 0o700);
       check(`Datei 0600 (ist ${(fileStat.mode & 0o777).toString(8)})`, (fileStat.mode & 0o777) === 0o600);
@@ -1032,7 +1147,45 @@ try {
 
   section('12. Kein Geheimnis in der Ausgabe des Dienstes (B-2.4, B-12.2)');
   {
+    /*
+     * W-9: Collect the output before judging it. One last request on a recognisable path,
+     * then wait until its log line has arrived; the channel is ordered, so every earlier
+     * line is there too. Then require the two lines section 8 provoked: without them the
+     * absence checks below would pass over a silent or delayed log.
+     */
+    const MARKE = 'w-9-marke';
+    await call(`/api/v1/${MARKE}`, { headers: sessionHeaders });
+    for (let versuch = 0; versuch < 60 && !service.output().includes(MARKE); versuch += 1) {
+      await sleep(50);
+    }
     const output = service.output();
+    const requestLines = output
+      .split('\n')
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null && typeof entry.path === 'string' && typeof entry.status === 'number');
+    check(
+      'Die Ausgabe ist eingeholt: die Zeile der letzten Anfrage liegt vor',
+      requestLines.some((entry) => entry.path === `/api/v1/${MARKE}`),
+      `${requestLines.length} Anfragezeilen`,
+    );
+    check(
+      'Die Zeile zum Token im Pfad liegt vor, mit 400 und geschwärzt (takt_<geschwaerzt>)',
+      requestLines.some((entry) => entry.path === '/api/v1/takt_<geschwaerzt>' && entry.status === 400),
+      JSON.stringify(requestLines.filter((entry) => entry.status === 400)),
+    );
+    check(
+      'Die Zeile zum Token in der Abfrage liegt vor, als /api/v1/health mit 400 und token_in_url',
+      requestLines.some(
+        (entry) => entry.path === '/api/v1/health' && entry.status === 400 && entry.outcome === 'token_in_url',
+      ),
+      JSON.stringify(requestLines.filter((entry) => entry.status === 400)),
+    );
     check('Die gesamte Protokollausgabe enthält kein takt_-Geheimnis', !SECRET_SHAPE.test(output));
     check('Sie enthält das Sitzungsgeheimnis nicht', !output.includes(service.secret));
     check('Sie enthält das Add-in-Token nicht', !output.includes(addinToken));
@@ -1215,20 +1368,51 @@ try {
       `nicht angesehen, obwohl B-2.5 daran hängt: ${fehlend.join(', ')}`,
     );
 
+    /*
+     * Gesucht wird der Vergleich von **Geheimnismaterial**, auf beiden Seiten des Operators.
+     * Zwei gespeicherte Abdrücke mit !== zu vergleichen (Buchführung im token-service) ist
+     * ausdrücklich in Ordnung: Ein Abdruck ist kein Geheimnis, und der Aufrufer liefert ihn
+     * nicht. Ein Vergleich mit null, undefined oder einem Zahlen- oder Textliteral ist keiner
+     * auf Material (W-13).
+     */
+    const MATERIAL = String.raw`(?:presented|candidate|material|secret|token|credential)\w*`;
+    const NOT_MATERIAL = String.raw`(?:null|undefined|\d|'|"|\x60)`;
+    const materialComparison = new RegExp(
+      String.raw`${MATERIAL}\s*[!=]==(?!\s*${NOT_MATERIAL})|[!=]==\s*${MATERIAL}`,
+      'i',
+    );
+    const isComment = (line) => line.trimStart().startsWith('*') || line.trimStart().startsWith('//');
+
+    // Selbstprobe (W-13): the pattern must hit the known shapes and spare the harmless ones,
+    // otherwise "no === on token material" would judge with a blind pattern.
+    const mustHit = [
+      'const gleich = presented === secret;',
+      'if (token === header) return true;',
+      'return header !== credential;',
+      'if (candidateToken === stored) {',
+    ];
+    const mustSpare = ['if (token === null) return;', "if (secret.length === 0) {", 'if (fingerprint !== stored) {'];
+    check(
+      'Selbstprobe: das Muster trifft die vier bekannten Formen und keine der harmlosen (W-13)',
+      mustHit.every((line) => materialComparison.test(line)) && mustSpare.every((line) => !materialComparison.test(line)),
+      `verfehlt: ${mustHit.filter((line) => !materialComparison.test(line)).join(' | ')}; ` +
+        `falsch getroffen: ${mustSpare.filter((line) => materialComparison.test(line)).join(' | ')}`,
+    );
+
     let offending = [];
     for (const relative of scanned) {
       const text = await readFile(join(PAKET_WURZEL, relative), 'utf8');
       text.split('\n').forEach((line, index) => {
-        // Gesucht wird der Vergleich von **Geheimnismaterial**. Zwei
-        // gespeicherte Abdrücke mit !== zu vergleichen (Buchführung im
-        // token-service) ist ausdrücklich in Ordnung: Ein Abdruck ist kein
-        // Geheimnis, und der Aufrufer liefert ihn nicht.
-        if (/(presented|candidate|material|secret)\s*[!=]==/i.test(line) && !line.trimStart().startsWith('*') && !line.trimStart().startsWith('//')) {
+        if (materialComparison.test(line) && !isComment(line)) {
           offending.push(`${relative}:${index + 1}: ${line.trim()}`);
         }
       });
     }
-    check('Kein === auf Tokenmaterial im Nachweispfad', offending.length === 0, offending.join(' | '));
+    check(
+      'Kein === auf Tokenmaterial im Nachweispfad (Namen presented, candidate, material, secret, token, credential)',
+      offending.length === 0,
+      offending.join(' | '),
+    );
 
     // Gemessen: Ein Kandidat, der 47 von 48 Zeichen teilt, braucht nicht
     // messbar länger als einer, der schon im ersten Zeichen abweicht.
@@ -1306,7 +1490,9 @@ try {
     console.log(
       `        Median in ns — fast richtig: ${near}, früh falsch: ${far}, leer: ${empty}; Streuung ${spread.toFixed(2)}`,
     );
-    check('Die drei Fälle liegen innerhalb von 25 Prozent beieinander', spread < 1.25, `Streuung ${spread.toFixed(2)}`);
+    // W-12: a figure, not a check. The comparison below shows that this measurement cannot
+    // tell `===` from `timingSafeEqual`; the evidence is the construction and the static scan.
+    console.log(`        Kennzahl, nicht gezählt: Streuung ${spread.toFixed(2)} (Richtwert unter 1,25)`);
 
     // Vergleichswert mit ===, ausdrücklich **kein** Gegenbeweis: Auch dort ist
     // bei 48 Zeichen kein Unterschied messbar. Eine Messung ohne Ausschlag
@@ -1340,7 +1526,14 @@ try {
     const second = await startService(dataDir);
     const code = await Promise.race([second.exit, sleep(8000).then(() => 'timeout')]);
     check('Der zweite Start endet mit Code 74 statt auszuweichen', code === 74, `Code ${code}`);
-    check('Die Meldung nennt den Port, nicht das Token', second.output().includes(`Port ${PORT} ist belegt`));
+    check(
+      'Die Meldung nennt den Port, nicht das Token',
+      second.output().includes(`Port ${PORT} ist belegt`) &&
+        second.secret !== null &&
+        !second.output().includes(second.secret) &&
+        !SECRET_SHAPE.test(second.output()),
+      second.output().slice(-300),
+    );
   }
 
   section('15. Ende der Elternverbindung (B-1.6 Punkt 3)');
@@ -1375,6 +1568,9 @@ if (hardFailure !== null) {
 }
 
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen.`);
+if (unmeasured.length > 0) {
+  console.log(`${unmeasured.length} ungemessen: ${process.platform} — ${unmeasured.join(', ')}`);
+}
 if (failed > 0) {
   console.log(`Fehlgeschlagen: ${failures.join(', ')}`);
   process.exit(1);

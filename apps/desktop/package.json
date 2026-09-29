@@ -12,6 +12,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "proof:shell-surface": "node scripts/proof-shell-surface.mjs",
+    "proof:shell-parity": "node scripts/proof-shell-parity.mjs",
     "sidecar": "node scripts/build-sidecar.mjs",
     "sidecar:verify": "node scripts/verify-sidecar.mjs",
     "sidecar:checksums": "node scripts/verify-node-checksums.mjs",

@@ -6,12 +6,15 @@ export const SERVICE_STARTUP_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 1_000;
 const RETRY_DELAY_MS = 200;
 
+/** The service did not confirm readiness in time; the UI titles this "not ready yet", not "unreachable". */
+export class ServiceNotReadyError extends Error {}
+
 /** Process creation is not readiness: wait for the authenticated API before mounting data readers. */
 export async function waitForService(
   handshake: () => Promise<Connection>,
   readShellState: () => Promise<ShellStateSnapshot | null>,
 ): Promise<ShellStateSnapshot | null> {
-  const timeoutError = new Error(
+  const timeoutError = new ServiceNotReadyError(
     "Der lokale Dienst ist nach 30 Sekunden noch nicht bereit. Bitte versuchen Sie es erneut. " +
       "Bleibt die Meldung bestehen, beenden Sie SuperTakt vollständig und starten Sie es neu.",
   );
@@ -65,7 +68,7 @@ export async function waitForService(
     }
   } catch (cause) {
     if (cause === timeoutError && snapshot !== null && snapshot.problems.length > 0) {
-      throw new Error(`${timeoutError.message}\nHinweise beim Start: ${snapshot.problems.join(" ")}`);
+      throw new ServiceNotReadyError(`${timeoutError.message}\nHinweise beim Start: ${snapshot.problems.join(" ")}`);
     }
     throw cause;
   } finally {

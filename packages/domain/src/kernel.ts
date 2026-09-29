@@ -64,10 +64,16 @@ export type TaktErrorCode =
   | 'timer_already_running'
   | 'timer_not_running'
   | 'timer_too_short'
+  /** A-28.6: the stop would book more than 24 hours; the caller has to name the real end. */
+  | 'timer_stop_end_required'
   // Zeitbuchung und Export (A-6.9, E-012, A-8.8)
   | 'time_entry_locked'
+  /** A-28.6: a single time entry lasts at most 24 hours. */
+  | 'time_entry_too_long'
   | 'export_status_unchanged'
   | 'export_status_not_settable'
+  /** A-26.3: a booking of a NoExport todo cannot be marked "not billed". */
+  | 'time_entry_no_export'
   | 'export_nothing_to_do'
   | 'export_template_invalid'
   | 'export_source_forbidden'
@@ -272,3 +278,23 @@ export const calendarDayBounds = (
  */
 export const secondsBetween = (from: Timestamp, to: Timestamp): number =>
   Math.floor((Date.parse(to) - Date.parse(from)) / 1000);
+
+/** A timestamp that parses and round-trips exactly (`2026-02-30T…` parses, but is not one). */
+export const isExactTimestamp = (value: string): boolean => {
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().replace('.000Z', 'Z') === value;
+};
+
+/**
+ * The earlier of two timestamps, compared by time rather than by text.
+ *
+ * `null` when either side is unreadable: a `NaN` comparison is always false and would
+ * otherwise silently pick the second value — for a booking cap that is the expensive side
+ * (T-380, R-34).
+ */
+export const earlierOf = (a: Timestamp, b: Timestamp): Timestamp | null => {
+  const first = Date.parse(a);
+  const second = Date.parse(b);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+  return first <= second ? a : b;
+};

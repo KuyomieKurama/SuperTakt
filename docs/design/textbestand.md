@@ -197,6 +197,38 @@ läuft kein Vorleseprogramm (T-B09).
 
 ---
 
+## Nachtrag T-391c (Welle 18e) — one hint, two entries; one promise put back on what is built
+
+Three changes, all in section 5, all forced by something that was **measured** rather than
+argued: `proof:locked` ran 7 green / 2 red after T-400a, and both red entries were entries of
+this paper, not defects of the product (T-400a, open question 1; E-138 points 1 and 2).
+
+| # | Was | Wo in diesem Papier | Anlaß |
+|---|---|---|---|
+| 1 | **SP-04 becomes SP-04a and SP-04b.** The deadline hint is built from two keys: the shared core (`deadlineHintCore`, character-identical with the task pane) and the main-application addition „Ohne eigene Uhrzeit gilt 00:00." (`deadlineHintDefaultTime`). One locked entry quoting both sentences asks `proof:locked` for **one** contiguous string that no file contains, while GF-03 asks for the core as **its own** literal. Both at once works only with two entries. | Abschnitt 5 (SP-04a, SP-04b), 4 (Feldhinweise), 5.2, 11.4, 11.5, Fußnoten | **E-138 Punkt 1**, T-400a offene Frage 1, O-GF (T-393), GF-03 |
+| 2 | **SP-21 goes back to the sentence that is built.** T-391b had entered the approved future wording; since then the entry named a sentence that stands nowhere. The future wording is kept — in the reason column, marked as approved and unbuilt — and is built by **the same order** that makes the search hit the Vermerk (T-400). | Abschnitt 5 (SP-21), Fußnoten | **E-138 Punkt 2**, T-393 K-9 bis K-15, E-081 Punkt 4 |
+| 3 | **New rule for the place column: a bundled text is named by its key, not by its file.** Since T-400a the surface texts live in language bundles, and nine files under `apps/web/src` are called `texts.ts`. A file reference resolves by base name, so `texts.ts` is ambiguous and a slashed path is read as a file outside the UI — both make the run red for a reason that has nothing to do with the sentence. The key (`deadlineHintCore`, `noHit`) is resolvable, is measured in both directions, and survives a move. | Abschnitt 5 (SP-04a, SP-04b, SP-21), Fußnoten | T-400a, E-102, E-103 |
+
+**Leitbegriff.** Where an entry of this paper quotes surface copy, it says **Todo**, never
+„Aufgabe" (E-029, confirmed E-133 point 2). The wording of the specification in §25a/§26 stays
+as it is; the glossary maps it.
+
+**Was sich nicht geändert hat.** No approved sentence loses a character. Streichliste and
+Umbauliste stay at **ten** and **eight**. The Sperrliste counts **23** rows instead of 22, and
+that is **not** a new promise: SP-04a and SP-04b are the two halves of SP-04, which was always
+two sentences with two different scopes — one of them true on both surfaces, one of them false
+on the other one.
+
+**Zur Messung in diesem Nachtrag.** No run. This session had no shell; the anchors were read
+character by character against `apps/web/src/features/todos/texts.ts`,
+`apps/outlook-addin/src/ui/texts.ts` and `apps/web/src/app/texts.ts`, and against the parser in
+`apps/web/scripts/proof-locked-text.mjs` (which decides what an anchor is: a quotation, split at
+`…`, at least 12 characters, compared after normalising quotation marks, „SuperTakt" → „Takt"
+and runs of whitespace). That is a reading, not a green light — `pnpm --filter @takt/web
+proof:locked` is the proof, and it belongs in the next order that has a shell.
+
+---
+
 ## 1. Was gemessen wurde, und wie groß der Bestand ist
 
 Gezählt in `apps/web/src` **ohne** `showcase/**`:
@@ -572,7 +604,7 @@ Fristhinweis spricht eine Abwesenheit aus (E-074 Punkt 4), der Leistungshinweis 
 
 | Ort | Urteil |
 |---|---|
-| `TodoFormDialog.tsx:227` Frist | **A** — Sperrliste SP-04, Kürzung nur mit spec-ux-reviewer |
+| `TodoFormDialog.tsx:227` Frist (Wortlaut nach O-GF; seit T-400a zwei Schlüssel im Bündel, siehe SP-04a und SP-04b) | **A** — Sperrliste **SP-04a** (Kern) und **SP-04b** (00:00), Kürzung nur mit spec-ux-reviewer |
 | `TodoListScreen.tsx:504` Ordnung/Frist | **A** (E-074 Punkt 2) — Sperrliste SP-03 |
 | `labels.ts:519` `BILLING_NOTE_MAY_BE_EMPTY` | **F** (E-034, B-4 aus T-116) — Sperrliste SP-08 |
 | `labels.ts:438` `POOL_EXPORT_NOT_BILLED_HINT` | **F/A** (S-1 aus R-2). Das **V** war ein Meßfehler: `RadioRow` zeigt sichtbar ohnehin nur den Hinweis der gewählten Option — ~~UM-02~~ entfällt (E-081), es bleibt ST-03 und SP-15 |
@@ -948,7 +980,8 @@ verlangt hat** (E-078 Punkt 3). Wer eine neue Fassung will, legt sie **diesem** 
 | SP-01 | `AttachmentOpenDialog.tsx:211-215` | „Takt übergibt diese Datei an die Standardanwendung des Systems — dasselbe wie ein Doppelklick …" | **R-21**, E-072 Punkt 3, Auflage **A-A-6** Eigenschaft 3, A-19.18 | Nennt die **Wirkung** statt der Handlung. Ein kurzer Satz verschleiert hier einen Programmstart. |
 | SP-02 | `AttachmentOpenDialog.tsx:217-241` | „Diese Datei wird dabei ausgeführt." + Dateiname + **vollständiger Pfad** | **R-21**, A-A-6 Eigenschaften 1 und 2 | Der Pfad wird **nie** gekürzt. Beide Teile gehen durch `foreignText` (E-063). |
 | SP-03 | `TodoListScreen.tsx:504` | „Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten." | **E-074 Punkt 2**, A-19.20 | **Abwesenheit.** Ohne den Satz hält der Benutzer die Sortierung für kaputt. |
-| SP-04 | `TodoFormDialog.tsx:227` | „Ein Kalendertag mit optionaler Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." | **V-03/V-04** (T-154, sinngleicher Satz im Add-in), **E-074 Punkt 4**, A-19.1, A-19.7, E-070 Punkt 4 | **Abwesenheit.** E-078 nennt diesen Satz namentlich als Beispiel. |
+| **SP-04a** | Schlüssel `deadlineHintCore` im Textbündel des Merkmals todos (features/todos/texts.ts), gelesen vom Fristfeld in `TodoFormDialog` | „Ein Kalendertag, die Uhrzeit ist optional. Überfällig ist die Frist erst ab dem Folgetag. Leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." | **V-03/V-04** (T-154, T-165), **O-GF (T-393)**, **GF-03**, **E-074 Punkt 4**, A-19.1, A-19.6 mit A-27.9, A-19.7, E-070 Punkt 4, E-122 Punkte 2–3, **E-138 Punkt 1** | **Abwesenheit.** E-078 nennt diesen Satz namentlich als Beispiel. Er ist der **Kern**, den beide Flächen zeichengleich tragen (drüben SP-A-02); `proof:addin` 19d hält die zwei Bündel gegeneinander. Deshalb steht er als **ein** Literal unter **einem** Schlüssel und wird hier als **ein** Satzteil gesperrt — zusammengesetzt gemessen wäre GF-03 nicht zu halten (Nachtrag T-391c). Gebaut seit T-400a. Frühere Fassung: „Ein Kalendertag mit optionaler Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export. Die Uhrzeit ist 00:00, bis Sie sie ändern." |
+| **SP-04b** | Schlüssel `deadlineHintDefaultTime`, dieselbe Stelle, hinter dem Kern mit einem Leerzeichen angefügt; **nur** die Hauptanwendung | „Ohne eigene Uhrzeit gilt 00:00." | **A-27.7**, **O-GF (T-393)**, **E-122 Punkt 3**, **E-138 Punkt 1** | **Folge.** Die Hauptanwendung setzt bei gesetztem Tag 00:00; das Add-in schickt ohne Eingabe gar keine Uhrzeit. Der Satz steht deshalb **hier und drüben nicht** — drüben wäre er falsch, und das ist der ganze Grund für die Teilung. Fällt er, verschweigt das Fristfeld eine Uhrzeit, die die Anwendung ungefragt setzt. |
 | SP-05 | `TodoDetailScreen.tsx:421` und `:429-432` | „… sie steht in keinem Export." / „Keine Frist gesetzt. Dieses Todo ist deshalb weder überfällig noch heute fällig — es hat schlicht keinen dieser Zustände." | **A-19.5**, A-19.8, E-070 Punkt 4 | **Abwesenheit**, wörtlich aus A-19.5. |
 | SP-06 | `ConfirmDialog.tsx:37-57, 134-158` — die **Bauart** von `refusal` samt dauerhaft leerer Live-Region, und jeder Text, der darin landet | **B-5** (T-116), **SC 4.1.3** | Eine Region, die erst mit ihrem Inhalt in den Baum kommt, wird nicht angesagt. Gilt gleichlautend in `AttachmentOpenDialog.tsx:248`, `UpdateDialog.tsx:155`, `ShellStatus.tsx:271`. |
 | SP-07 | `BookingsScreen.tsx:534, 538`; `BookingDialogs.tsx:320, 325` | „Dieselbe Arbeitszeit geht beim nächsten Export erneut in die Abrechnung." + „Mir ist klar, dass diese Zeiten dadurch ein zweites Mal abgerechnet werden können." | **E-012**, **R-10** | **Folge** einer Handlung, aus der eine Doppelabrechnung entstehen kann. Der einzige Ort, an dem sie steht. |
@@ -965,7 +998,7 @@ verlangt hat** (E-078 Punkt 3). Wer eine neue Fassung will, legt sie **diesem** 
 | SP-18 | `errorText.ts:166-178` „Betroffen sind die Regeln „Ost", „Nord" …" und `TagsScreen.tsx:496-499` | | **W-11** (R-2a), T-097, T-107, T-110, E-063 | **Absage mit Begründung.** Eine Sperre, aus der man nicht herausfindet, ist nur halb umkehrbar. |
 | SP-19 | `StatusSettings.tsx:519-531` (die drei Sätze) **und `:568-596` (die sichtbare Begründungsfläche `status-admin__blocked`, in der sie stehen)** | „Das ist der Standard für neue Todos. Bestimmen Sie zuerst einen anderen …" | **SC 4.1.2**, **SC 1.3.1**, A-5.4, **T-172 Punkt 2** | **Absage mit Begründung.** Träger ist die **sichtbare Fläche**, nicht der gesperrte Knopf — gemessen. Sie zu entfernen nimmt die einzige erreichbare Quelle weg. Berichtigt in T-180, siehe unten. |
 | SP-20 | `App.tsx:226-236` `NoShellNotice` | „Diese Seite ist die Oberfläche von Takt. Sie spricht mit einem lokalen Dienst …" | **E-001**, E-036, T-057 | **Abwesenheit.** Erklärt, warum eine sichtbare Anwendung nichts tut. Der Kommentar bei :237-243 hält fest, warum dort auch kein Knopf steht. |
-| SP-21 | `GlobalSearch.tsx:244` | „… Gesucht wird in Titeln, Call-Nummern und Leistungstexten — nicht im Vermerk." | **E-075 Punkt 2**, **C-22** (Wiedervorlage), E-038 | **Abwesenheit**, und sie ist derzeit die **einzige wahre** Aussage über den Umfang der Suche. Sie fällt frühestens, wenn die Suche den Vermerk trifft — und dann zusammen mit der Wiedervorlage von C-22. |
+| SP-21 | `apps/web/src/app/texts.ts` › `search` — Leertext der Ergebnisliste (Schlüssel `noHit`), unsichtbarer Name des Suchfeldes (Schlüssel `label`), Gruppenüberschriften (Schlüssel `groupTodos`, `groupNote`, `groupEntries`) und Herkunftstext (Schlüssel `hitIn`, `hitInNoteOnly`, `origin`) | Leertext: „Kein Treffer für „…". Gesucht wird in Titeln, Call-Nummern, Vermerken und Leistungstexten." — unsichtbarer Name: „Globale Suche über Todos, Vermerke und Leistungstexte" — Gruppenüberschriften: „Todos", „Im Vermerk (intern)", „In Leistungen" — Herkunft in der Trefferzeile: „Treffer in: Titel, Vermerk" oder „Treffer im Vermerk" (nur Note-Treffer) | **E-075 Punkt 2**, **C-22** (entschieden, E-122 Punkt 1), E-038, **K-9 bis K-15 (T-393)**, E-081 Punkt 4, **E-138 Punkt 2** | Die Umfangsaussage ist die **einzige wahre** Aussage über den Umfang der Suche; seit T-400 schließt sie den Vermerk ein. Gesperrt ist die **Umfangsaussage**, nicht der Satzanfang mit dem Suchwort. Alle Komponenten stehen gebaut in `apps/web/src/app/texts.ts` und sind gegen das Handbuch und die Spezifikation (Abschnitt C-22 und K-9 bis K-15) prüfbar. **Kein Vermerksauszug** an irgendeiner Stelle — nicht in der Zeile, nicht im `title`, nicht im zugänglichen Namen (K-12). |
 | **SP-22** | `docs/benutzerhandbuch.md`, „Mit dem Kanban-Board arbeiten" › Unterabschnitt **„Herkunft der Spalten"** — **fremde Hoheit: documenter** | „Vor der ersten Veröffentlichung wies eine interne Reihenfolge jeder Karte ihren Platz in einer Spalte zu. …" bis „… unabhängig von der Spalte, in der die zugehörige Karte gerade steht." | **UM-08**, **T-200 Z-54**, E-054, A-5.4, **E-081 Punkt 4** | **Alleinträger nach Fall** — neue Sorte, siehe 5.2. Zwei der vier Punkte der Karte „Was sich geändert hat" (`BoardScreen.tsx`) stehen nach ihrem Fall **nur noch hier**: „Ihre Todos sind vollzählig da" und „Der Status bleibt". **Die Karte ist am 2026-09-06 mit T-209 gefallen** — Pflichtangabe 2 aus 5.2, nachgetragen von frontend-dev im selben Auftrag wie die Streichung (E-081 Punkt 4). **Gegengemessen T-211, 2026-09-06:** Am Baum steht die Karte nicht mehr; `BoardScreen.tsx` und `app.css` führen ihren Fall im Kommentar, und `board-setup__actions` ist mit ihr gefallen (Auflage 1 aus Z-54). Damit ist der Eintrag nach seiner eigenen Regel vollständig und keine Behauptung mehr. **Gesperrt ist nach Pflichtangabe 3 die Aussage, nicht der Wortlaut** — der Zitatanfang in der dritten Spalte ist hier Fundhilfe, nicht Anker. Aufgenommen **2026-09-06**. |
 
 ### 5.1 Berichtigung zu SP-19 (Nachtrag T-180, O-EQ)
@@ -1036,12 +1069,13 @@ danach sehen beide Listen vollständig aus.
 **Drei Pflichtangaben, die kein bisheriger Eintrag führt.** Ohne sie ist ein Eintrag dieser Sorte
 nicht prüfbar:
 
-1. **Die Hoheit der Datei.** SP-01 bis SP-21 zeigen alle in `apps/web/src`; wer dort einen
+1. **Die Hoheit der Datei.** SP-01 bis SP-21 (einschließlich SP-04a und SP-04b) zeigen alle in
+   `apps/web/src`; wer dort einen
    Textdurchgang fährt, liest diese Liste. Ein Handbuchdurchgang liest sie heute **nicht**. Ein
    Eintrag dieser Sorte nennt deshalb den Hoheitsinhaber ausdrücklich, und eine neue Fassung wird
    **zwei** Leuten vorgelegt: dem Prüfer, der den Fall freigegeben hat, **und** dem
    Hoheitsinhaber. Bei SP-22 sind das spec-ux-reviewer (T-200) und documenter (T-201).
-2. **Die gefallene Fläche und das Datum ihres Falls.** Bei SP-04 steht die Anforderung im Satz;
+2. **Die gefallene Fläche und das Datum ihres Falls.** Bei SP-04a steht die Anforderung im Satz;
    wer ihn liest, sieht, woran er hängt. Bei SP-22 steht **nichts** dabei — der Absatz sieht aus
    wie Geschichte. Erst die Angabe „weil `BoardScreen.tsx` › Karte „Was sich geändert hat" am
    〈Datum〉 gefallen ist" macht ihn prüfbar. **Fehlt sie, ist der Eintrag eine Behauptung.**
@@ -1789,7 +1823,7 @@ nenne sie, weil ein Textdurchgang, der ohne Vorwarnung startet, genau hier zuers
 
 | Ort | Was er trägt | Buchstabe | Woran er hängt |
 |---|---|---|---|
-| der Fristhinweis am Fristfeld | „Ein Tag, keine Uhrzeit. … leer lassen heißt: keine Frist." | **A** | **V-03/V-04** (T-158, T-165), E-074 Punkt 4, A-19.1, A-19.7 — und **E-078 nennt diesen Satz namentlich als Beispiel dafür, was nicht fällt**. Sein Geschwister ist SP-04 |
+| der Fristhinweis am Fristfeld | „SuperTakt liest die Frist nicht aus der E-Mail — Sie tragen sie selbst ein. Ein Kalendertag, die Uhrzeit ist optional. Überfällig ist die Frist erst ab dem Folgetag. Leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." *(O-GF, approved T-393; the add-in prefix plus the shared core — no 00:00 sentence, E-122 point 3)* | **A** | **V-03/V-04** (T-158, T-165), **O-GF (T-393)**, E-074 Punkt 4, A-19.1, A-19.6 with A-27.9, A-19.7 — und **E-078 nennt diesen Satz namentlich als Beispiel dafür, was nicht fällt**. Sein Geschwister ist **SP-04a**; der Kern ist mit ihm zeichengleich (GF-03). Der Zusatz „Ohne eigene Uhrzeit gilt 00:00." (SP-04b) steht **nur** drüben |
 | `create-gate.ts` — die fünf Sperrgründe | „Der Titel fehlt." usw. | **B** | **V-11** aus T-154. Ein gesperrter Hauptknopf ohne Grund ist die Fläche, an der ein Benutzer stehenbleibt |
 | `callnumber/labels.ts` — `REJECTION_LABEL` und `INPUT_REJECTION_LABEL` | zehn Absagegründe, je einer pro Ablehnungsgrund | **B** | T-041, T-046, **R-15** (zwei Todos zum selben Kundenvorgang, Zeit auf zwei Vorgängen), E-045 |
 | das Angebot bei vorhandenem Call | auf das vorhandene Todo buchen statt ein Duplikat anlegen | **F** | Pflichtflow, `CLAUDE.md`. Der Satz nennt die Folge einer Wahl, die sich in der Abrechnung auswirkt |
@@ -1801,7 +1835,7 @@ namentlich **T-165**.
 
 ### 11.5 Die eine Stelle, an der beide Aufnahmen sich berühren
 
-Der Fristhinweis steht **zweimal**: hier als SP-04 (`TodoFormDialog.tsx:227`), drüben am Fristfeld
+Der Fristhinweis steht **zweimal**: hier als SP-04a/SP-04b (`TodoFormDialog.tsx:227`), drüben am Fristfeld
 des Aufgabenbereichs. E-078 Nachtrag Punkt 7 verlangt **eine** Fassung für beide Flächen, und
 nennt auch den Zeitpunkt: die Wiedervorlage V-03/V-04 in T-165, nicht einen späteren Durchgang.
 
@@ -1809,6 +1843,14 @@ nennt auch den Zeitpunkt: die Wiedervorlage V-03/V-04 in T-165, nicht einen spä
 die Abweichung, die der Punkt verhindern soll. Vorschlag an den Orchestrator: ein Auftrag, zwei
 Dateien, eine Fassung — und die Vorlage geht an T-165, wie E-080 Punkt 3 es für die Anrede bereits
 festhält.
+
+**Erledigt, und anders als hier vorgeschlagen — nachgetragen T-391c.** Eine Fassung für beide
+Flächen gibt es nicht, ohne daß eine der beiden etwas Falsches sagt (00:00 drüben) oder etwas
+Sinnloses (die E-Mail hier). Entschieden ist deshalb **ein gemeinsamer Kern plus je ein
+flächeneigener Satz** (O-GF, T-393; gebaut in T-398b und T-400a). Aus SP-04 sind **SP-04a** (Kern,
+zeichengleich mit drüben, gemessen von GF-03) und **SP-04b** (nur hier) geworden; drüben hält
+SP-A-02 den Kern und den Add-in-Satz. Die Berührstelle ist damit nicht mehr eine Fassung, sondern
+**eine Messung** — und die ist billiger zu halten als eine Verabredung.
 
 ---
 
@@ -3407,6 +3449,39 @@ steht in 11.8 und gilt unverändert daneben.
 SP-04: Der aktuelle Auftrag zur Outlook-Angleichung ersetzt die Beschränkung auf
 eine Frist ohne Uhrzeit (A-10.14). Der geschützte Hinweis nennt jetzt die optionale
 Uhrzeit; seine Aussagen zu Pools, Spalten, Buchungen und Export bleiben bestehen.
+
+SP-04, update T-391b (2026-09-24): O-GF (T-393) replaces both deadline hints with one
+shared core plus one surface-specific sentence each; see the SP-04 row and 11.4. The core
+adds "Überfällig ist die Frist erst ab dem Folgetag." (A-19.6 with A-27.9). A-19.6 was
+clarified in the spec (E-122 point 2). Section 11.5 is thereby answered: one order, two files,
+one core.
+
+SP-21, update T-391b (2026-09-24): C-22 is decided (E-122 point 1). The scope sentence
+turns positive in the same order that builds the Vermerk search (K-15, E-081 point 4).
+
+SP-04, update T-391c (2026-09-24): the entry is split. **SP-04a** holds the shared core
+(`deadlineHintCore`), **SP-04b** the main-application addition (`deadlineHintDefaultTime`).
+Reason, measured: `proof:locked` takes one quotation as **one** anchor and looks for it as
+one contiguous string, while GF-03 requires the core to be **its own literal** so that it can
+be compared character by character against the task pane. One entry can satisfy only one of
+the two. E-138 point 1.
+
+SP-21, update T-391c (2026-09-24): the entry is put back on the sentence that is **built
+today**. T-391b had already entered the approved future wording; from then on `proof:locked`
+was measuring a sentence that exists nowhere in `apps/web/src`, which is the opposite of a
+promise. The future wording, the group headings and the origin line now sit in the reason
+column and in `welle-18-fluss.md` section 15 until T-400 builds them (E-138 point 2).
+
+SP-21, update T-391f (2026-09-24): T-400 has built the approved wording (key `noHit` and the
+search field label in the bundle `app/texts.ts`). The entry now locks it for good: "Gesucht
+wird in Titeln, Call-Nummern, Vermerken und Leistungstexten." and "Globale Suche über Todos,
+Vermerke und Leistungstexte". The old absence wording is struck.
+
+Both updates follow one rule that is new with the language bundles (T-400a) and stated in the
+Nachtrag T-391c: **in the place column a bundled text is named by its key, not by its file.**
+Nine files under `apps/web/src` are called `texts.ts`; a file reference to one of them cannot
+be resolved by name, and a path with slashes is read as a file outside the UI. The key is both
+resolvable and stable across moves.
 
 SP-12: Der Benutzerauftrag zur kompakten Update-Anzeige ersetzt den früheren
 Button „Installieren“ durch „Release-Seite öffnen“. Die Sperrliste schützt den

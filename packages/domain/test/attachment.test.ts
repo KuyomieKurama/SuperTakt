@@ -478,12 +478,21 @@ describe('isUncPath — beide Schreibweisen (R-22, Bedrohungsmodell 20.1)', () =
 });
 
 describe('isAbsoluteAttachmentPath', () => {
-  it.each(['/home/nutzer', 'C:\\Users', 'C:/Users', 'D:\\x'])('"%s" ist absolut', (value) => {
+  it.each(['/home/nutzer', '/home/x', 'C:\\Users', 'C:/Users', 'D:\\x'])('"%s" ist absolut', (value) => {
     expect(isAbsoluteAttachmentPath(value)).toBe(true);
   });
 
   it.each(['relativ/pfad', 'datei.pdf', '', 'C:ohneSchraegstrich'])('"%s" ist NICHT absolut', (value) => {
     expect(isAbsoluteAttachmentPath(value)).toBe(false);
+  });
+
+  /**
+   * E-126 Punkt 2 (T-397): ein Pfad ohne Laufwerksbuchstaben ist kein absoluter Windows-Pfad —
+   * `\temp\datei.pdf` sieht wie ein Wurzelpfad aus, ist aber relativ zum aktuellen Laufwerk.
+   * `proof:shell-parity` gleicht das gegen `attachment.rs` ab (T-400, security-checker T-406).
+   */
+  it('"\\temp\\datei.pdf" ist NICHT absolut — kein Laufwerksbuchstabe (E-126 Punkt 2)', () => {
+    expect(isAbsoluteAttachmentPath('\\temp\\datei.pdf')).toBe(false);
   });
 });
 

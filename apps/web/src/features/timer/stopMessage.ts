@@ -4,6 +4,8 @@ import type { ToastTone } from "../../app/ToastContext";
 import { formatDuration, formatQuarters } from "../../lib/format";
 import { withMovement } from "../../lib/movement";
 import { quotedName } from "../../lib/foreign";
+import { dayGroupMissingNote, dayGroupPreviewFailed, labels } from "../../lib/labels";
+import { timerTexts } from "./texts";
 
 export interface StopMessage {
   readonly tone: ToastTone;
@@ -39,7 +41,9 @@ export function stopMessage(
   durationSeconds: number,
   movementSentence: string | null,
 ): StopMessage {
-  const booked = `Gebucht: ${formatDuration(durationSeconds)}.`;
+  const text = timerTexts();
+  const shared = labels();
+  const booked = text.booked(formatDuration(durationSeconds));
   /*
     Der Name im Titel, nicht im Satz (W-5 aus R-2a).
 
@@ -53,7 +57,7 @@ export function stopMessage(
     Rahmen — der Titel nennt das Todo, der Rumpf sagt, was mit ihm
     geschehen ist.
   */
-  const on = `Zeit gebucht auf ${quotedName(todoTitle)}`;
+  const on = text.timeBookedOn(quotedName(todoTitle));
 
   const message = ((): StopMessage => {
     if (insight === null) return { tone: "success", title: `${on}.`, body: booked };
@@ -66,22 +70,22 @@ export function stopMessage(
     if (insight.previewProblem !== null) {
       return {
         tone: "warning",
-        title: `${on} — der Exportwert ließ sich nicht abfragen.`,
-        body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte SuperTakt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
+        title: text.withSituation(on, shared.dayGroupPreviewFailedShort),
+        body: `${booked} ${dayGroupPreviewFailed(insight.previewProblem)} ${text.previewFailedTail}`,
       };
     }
     if (insight.blockedReason !== null) {
       return {
         tone: "warning",
-        title: `${on} — aber noch nicht abrechenbar.`,
-        body: `${booked} Für diesen Tag steht auf diesem Todo noch keine Leistung. Ohne sie bleibt die Tagesgruppe (${formatDuration(insight.seconds)}) beim Export stehen.`,
+        title: text.butSituation(on, shared.dayGroupNotBillable),
+        body: `${booked} ${dayGroupMissingNote(insight.seconds)}`,
       };
     }
     if (insight.quarters === null) return { tone: "success", title: `${on}.`, body: booked };
     return {
       tone: "success",
       title: `${on}.`,
-      body: `${booked} An diesem Tag sind für dieses Todo ${formatDuration(insight.seconds)} offen — das ergibt beim Export ${formatQuarters(insight.quarters)}.`,
+      body: `${booked} ${text.openThatDay(formatDuration(insight.seconds), formatQuarters(insight.quarters))}`,
     };
   })();
 

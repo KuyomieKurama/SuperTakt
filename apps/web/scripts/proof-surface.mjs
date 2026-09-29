@@ -517,37 +517,51 @@ const htmlText = (raw) =>
     .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]*>/g, ' ');
 
+/**
+ * An English text bundle: `const en = {…}` or `const THEME_TEXT_EN = {…}` (A-28.2).
+ *
+ * The word rules of section D are German rules (E-080). English words hit their patterns by
+ * accident ("lies", "request"), so the English values are exempt and only the German ones
+ * are read (E-138 point 3). Everything else — the `de` bundles, JSX text, other literals —
+ * is still read, so a German violation outside a bundle stays red as well.
+ */
+const isEnglishBundle = (node) =>
+  ts.isVariableDeclaration(node) &&
+  ts.isIdentifier(node.name) &&
+  (node.name.text === 'en' || node.name.text.endsWith('_EN'));
+
+/** The visible text of one parsed file, English bundles left out. */
+const visibleTextOf = (file) => {
+  const parts = [];
+  const visit = (node) => {
+    if (isEnglishBundle(node)) return;
+    if (ts.isJsxText(node)) {
+      parts.push(node.text);
+    } else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      const parent = node.parent;
+      const isModulePath =
+        parent !== undefined &&
+        (ts.isImportDeclaration(parent) ||
+          ts.isExportDeclaration(parent) ||
+          ts.isImportTypeNode(parent) ||
+          ts.isModuleDeclaration(parent));
+      if (!isModulePath) parts.push(node.text);
+    } else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      parts.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return parts.join('\n');
+};
+
 const visibleTexts = () => {
   const entries = [];
   for (const name of HTML_ENTRY_POINTS) {
     entries.push({ datei: name, text: htmlText(readFileSync(path.join(appRoot, name), 'utf8')) });
   }
   for (const file of parsedSources) {
-    const parts = [];
-    walk(file, (node) => {
-      if (ts.isJsxText(node)) {
-        parts.push(node.text);
-        return;
-      }
-      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-        const parent = node.parent;
-        if (
-          parent !== undefined &&
-          (ts.isImportDeclaration(parent) ||
-            ts.isExportDeclaration(parent) ||
-            ts.isImportTypeNode(parent) ||
-            ts.isModuleDeclaration(parent))
-        ) {
-          return;
-        }
-        parts.push(node.text);
-        return;
-      }
-      if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
-        parts.push(node.text);
-      }
-    });
-    entries.push({ datei: file.fileName, text: parts.join('\n') });
+    entries.push({ datei: file.fileName, text: visibleTextOf(file) });
   }
   return entries;
 };
@@ -3173,6 +3187,17 @@ check('kein Imperativ ohne Fürwort in einem sichtbaren Text', () => {
     [],
     `E-080 Punkt 1: Takt siezt, auch ohne Fürwort:\n        ${treffer.join('\n        ')}`,
   );
+});
+
+check('Gegenprobe (E-138 Punkt 3): nur deutsche Werte zählen, ein deutscher Verstoß bleibt rot', () => {
+  const probe = (source) => withoutExceptions(visibleTextOf(parse('probe.ts', source)));
+  const english = probe('const en = { hint: "Klicke hier, dann lies die Zeile." };');
+  assert.equal(english.match(ANREDE_DU_GLOBAL), null, 'ein englisches Bündel wird gelesen');
+  assert.equal(english.match(ANREDE_IMPERATIV_GLOBAL), null, 'ein englisches Bündel wird gelesen');
+  const german = probe('const de = { hint: "Klicke hier, dann siehst du die Zeile." };');
+  assert.notEqual(german.match(ANREDE_DU_GLOBAL), null, 'ein deutscher Bündelwert wird nicht mehr gelesen');
+  const jsx = probe('export const X = () => <p>Hier kannst du klicken.</p>;');
+  assert.notEqual(jsx.match(ANREDE_DU_GLOBAL), null, 'Text im JSX wird nicht mehr gelesen');
 });
 
 check('die geduldeten Sätze stehen noch da — sonst sind die Ausnahmen fällig', () => {

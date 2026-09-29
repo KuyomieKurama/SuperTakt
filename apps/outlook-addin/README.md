@@ -1,9 +1,9 @@
 # Takt — Outlook-Add-in
 
-Aus einer geöffneten E-Mail eine Aufgabe anlegen oder die Mail samt Anhängen
-zu einer vorhandenen Aufgabe ergänzen: über „Schnell in Inbox“ als Outlook-
-Funktionsbefehl oder „Aufgabe erstellen“ als Seitenleiste. Mail-Ergänzungen
-verändern keine Aufgabenfelder, Zeitbuchungen oder Erledigt-Zustände.
+Aus einer geöffneten E-Mail ein Todo anlegen oder die Mail samt Anhängen
+zu einem vorhandenen Todo ergänzen: über den Menübandbefehl „E-Mail anhängen“,
+der den Aufgabenbereich öffnet (A-10.17). Mail-Ergänzungen verändern keine
+Felder des Todos, Zeitbuchungen oder Erledigt-Zustände.
 
 Stand und Nachweise: [Funktionsabgleich](../../docs/outlook-bridge-alignment.md).
 A-10.11–15 erweitern die bisherigen Regeln gezielt. Lokale Standardvorgaben
@@ -17,9 +17,6 @@ laufen einschließlich der Leertextprüfung ausschließlich im begrenzten Worker
 ```
 manifest.xml                 Office-Manifest, ReadItem, enge AppDomains
 index.html                   Aufgabenbereich, CSP, Einbindung von office.js
-commands.html                ExecuteFunction-Einstieg mit gleichem CSP
-src/commands.ts              Office.actions.associate
-src/quick-command.ts         Schnellbefehl, wartet Sammlung und Speicherung ab
 src/office/save-mail.ts      gemeinsame Metadaten- und Speicherlogik
 src/config.ts                feste Betriebswerte, darunter die Add-in-Herkunft
 src/office/office-js.d.ts    die benutzte Office-Fläche, handgeschrieben

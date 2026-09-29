@@ -17,7 +17,8 @@ import { useTimer } from "./TimerContext";
 import { useAsync } from "../../app/useAsync";
 import { useToday } from "../../app/useToday";
 import { cx } from "../../lib/cx";
-import { doneFlagState, TIME_ENTRY_SOURCE_LABEL } from "../../lib/labels";
+import { doneFlagState, labels } from "../../lib/labels";
+import { timerTexts } from "./texts";
 import {
   formatDuration,
   formatQuarters,
@@ -33,6 +34,8 @@ import { StatTile } from "../../shared/ui/StatTile";
 import { BookingFormDialog } from "../bookings/BookingDialogs";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { todoTexts } from "../todos/texts";
 
 /**
  * Takt — S-05, die Zeiterfassung.
@@ -60,6 +63,7 @@ import { Foreign } from "../../shared/ui/Foreign";
  */
 export function TimeScreen() {
   const timer = useTimer();
+  const text = timerTexts();
   const { version } = useRefresh();
   const [search, setSearch] = useState("");
   const [showDone, setShowDone] = useState(false);
@@ -92,8 +96,9 @@ export function TimeScreen() {
       showDone ? Promise.resolve(null) : listTodos({}, { limit: 1 }),
     ]);
 
+    // A NoExport booking is never open for billing (F-8, A-26.2, A-6.6).
     const openIds = entries.items
-      .filter((entry) => entry.exportStatus === "open")
+      .filter((entry) => entry.exportStatus === "open" && !entry.todoNoExport)
       .map((entry) => entry.id);
 
     /*
@@ -110,7 +115,7 @@ export function TimeScreen() {
       hiddenDone: all === null ? 0 : Math.max(0, all.total - todos.total),
       quarters: preview?.totalQuarters ?? null,
       blockedGroups: preview?.skipped.length ?? 0,
-      previewProblem: outcome.kind === "failed" ? outcome.message : null,
+      previewProblem: outcome.kind === "failed" ? { message: outcome.message, fromService: outcome.fromService } : null,
     };
   }, [today, showDone], [version]);
 
@@ -129,7 +134,7 @@ export function TimeScreen() {
         Ansicht, deren einzige Aufgabe das Laufenlassen einer Uhr ist.
       */}
       <ScreenHeader
-        title="Zeiterfassung"
+        title={text.timeTracking}
         refreshing={data.state.status === "ready" && data.state.refreshing}
       />
 
@@ -153,29 +158,28 @@ export function TimeScreen() {
       */}
       <AsyncBoundary
         state={data.state}
-        label="Zeiterfassung wird geladen"
+        label={text.timeTrackingLoading}
         onRetry={data.reload}
-        fallbackFrame={(content) => <ScreenBody label="Zeiterfassung">{content}</ScreenBody>}
+        fallbackFrame={(content) => <ScreenBody label={text.timeTracking}>{content}</ScreenBody>}
       >
         {(value) => {
           const todaySeconds = value.entries.reduce((sum, entry) => sum + entry.durationSeconds, 0);
           const openSeconds = value.entries
-            .filter((entry) => entry.exportStatus === "open")
+            .filter((entry) => entry.exportStatus === "open" && !entry.todoNoExport)
             .reduce((sum, entry) => sum + entry.durationSeconds, 0);
 
           const candidates = filterTodos(value.todos, search);
 
           return (
-            <ScreenFrame label="Zeiterfassung" className="screen__body--split">
+            <ScreenFrame label={text.timeTracking} className="screen__body--split">
               <div className="time-layout">
                 <div className="time-layout__main">
-                  <Card title="Timer" description="Es läuft höchstens einer.">
+                  <Card title={text.timer} description={text.atMostOne}>
                     {timer.running === null ? (
                       <div className="timer-panel timer-panel--idle">
                         <TimerDisplay state="idle" display="00:00:00" size="lg" />
                         <p className="timer-panel__hint">
-                          Kein Timer läuft. Wählen Sie unten ein Todo — oder starten Sie den Timer
-                          direkt aus der Todo-Liste, dem Kanban-Board oder dem Dashboard.
+                          {text.idleHint}
                         </p>
                       </div>
                     ) : (
@@ -185,12 +189,11 @@ export function TimeScreen() {
                           size="lg"
                           display={formatStopwatch(timer.elapsedSeconds)}
                           todoTitle={timer.running.todoTitle}
-                          detail={`seit ${formatTime(timer.running.entry.startedAt)} Uhr`}
+                          detail={text.since(formatTime(timer.running.entry.startedAt))}
                           onStop={timer.requestStop}
                         />
                         <p className="timer-panel__hint">
-                          Beim Stoppen fragt SuperTakt nach der Leistung. Sie geht in die Abrechnung —
-                          im Unterschied zum Vermerk, der in SuperTakt bleibt.
+                          {text.stopHint}
                         </p>
                       </div>
                     )}
@@ -205,17 +208,17 @@ export function TimeScreen() {
                     Kleingedruckten.
                   */}
                   <Card
-                    title="Todo wählen"
-                    runArea="Todo wählen"
+                    title={text.pickTodo}
+                    runArea={text.pickTodo}
                     anchor
-                    description="Startet der Timer auf einem erledigten Todo, ist es danach wieder offen."
+                    description={text.pickTodoLead}
                     actions={
                       <>
                         <SearchField
-                          label="Todos durchsuchen"
+                          label={text.searchTodos}
                           value={search}
                           onChange={setSearch}
-                          placeholder="Titel oder Call-Nummer …"
+                          placeholder={text.searchPlaceholder}
                         />
                         {/*
                           E-039, Befund C-04. Derselbe Schalter wie in S-02 und
@@ -223,10 +226,10 @@ export function TimeScreen() {
                           der Kartenbeschreibung überhaupt einlösbar ist.
                         */}
                         <FilterToggle
-                          label="Erledigte einblenden"
+                          label={text.showDone}
                           pressed={showDone}
                           onChange={setShowDone}
-                          hint="Voreingestellt ausgeblendet"
+                          hint={text.hiddenByDefault}
                         />
                       </>
                     }
@@ -236,12 +239,10 @@ export function TimeScreen() {
                       <p className="hidden-notice">
                         <Icon name="info" size={14} />
                         <span>
-                          {plural(value.hiddenDone, "erledigtes Todo ist", "erledigte Todos sind")}{" "}
-                          ausgeblendet. Startet der Timer auf einem davon, ist es wieder offen und
-                          erscheint hier erneut.
+                          {text.hiddenDone(plural(value.hiddenDone, text.hiddenDoneOne, text.hiddenDoneMany))}
                         </span>
                         <Button size="sm" variant="ghost" onClick={() => setShowDone(true)}>
-                          Einblenden
+                          {text.show}
                         </Button>
                       </p>
                     ) : null}
@@ -253,25 +254,25 @@ export function TimeScreen() {
                         title={
                           search.trim().length === 0
                             ? showDone
-                              ? "Noch kein Todo"
-                              : "Kein offenes Todo"
-                            : "Kein Treffer"
+                              ? text.noTodoYet
+                              : text.noOpenTodo
+                            : text.noMatch
                         }
                         description={
                           search.trim().length === 0
                             ? showDone
-                              ? "Legen Sie zuerst ein Todo an — Zeit wird immer auf ein Todo gebucht."
-                              : "Alle Todos sind erledigt. Blenden Sie sie ein: Ein Timerstart hebt das Kennzeichen auf und holt das Todo in seine Pools zurück."
+                              ? text.createTodoFirst
+                              : text.allDone
                             : showDone
-                              ? "Kein Todo passt zu dieser Eingabe."
-                              : "Kein offenes Todo passt zu dieser Eingabe. Erledigte sind ausgeblendet."
+                              ? text.noTodoMatches
+                              : text.noOpenTodoMatches
                         }
                         {...(showDone || search.trim().length > 0
                           ? {}
                           : {
                               action: (
                                 <Button variant="secondary" onClick={() => setShowDone(true)}>
-                                  Erledigte einblenden
+                                  {text.showDone}
                                 </Button>
                               ),
                             })}
@@ -295,8 +296,8 @@ export function TimeScreen() {
                               <IconButton
                                 label={
                                   running
-                                    ? `Timer für ${quotedName(todo.title)} stoppen`
-                                    : `Timer für ${quotedName(todo.title)} starten`
+                                    ? text.stopTimerFor(quotedName(todo.title))
+                                    : text.startTimerFor(quotedName(todo.title))
                                 }
                                 icon={running ? "pause" : "play"}
                                 variant={running ? "primary" : "secondary"}
@@ -308,7 +309,7 @@ export function TimeScreen() {
                               <DoneFlag state={doneFlagState(done, reactivated)} />
                               {todo.callNumber === null ? null : (
                                 <span className="pick-row__call">
-                                  Call <Foreign value={todo.callNumber} />
+                                  {text.call} <Foreign value={todo.callNumber} />
                                 </span>
                               )}
                               <Button
@@ -317,7 +318,7 @@ export function TimeScreen() {
                                 iconStart="plus"
                                 onClick={() => setManualFor(todo)}
                               >
-                                Von Hand
+                                {text.manual}
                               </Button>
                             </li>
                           );
@@ -328,23 +329,23 @@ export function TimeScreen() {
                 </div>
 
                 <aside className="time-layout__side">
-                  <Card title="Heute">
+                  <Card title={text.today}>
                     <div className="stat-grid stat-grid--tight">
                       <StatTile
-                        label="Erfasst"
+                        label={text.recorded}
                         value={formatDuration(todaySeconds)}
-                        detail={plural(value.entries.length, "Buchung", "Buchungen")}
+                        detail={plural(value.entries.length, text.booking, text.bookings)}
                       />
                       <StatTile
-                        label="Noch offen"
+                        label={text.stillOpen}
                         value={formatDuration(openSeconds)}
                         tone="warning"
                         detail={
                           value.previewProblem !== null
-                            ? "Was der Export daraus macht, ist gerade nicht abrufbar."
+                            ? text.exportUnavailable
                             : value.quarters === null
-                              ? "Noch nicht exportiert."
-                              : `Ergibt beim Export ${formatQuarters(value.quarters)}.`
+                              ? text.notExportedYet
+                              : text.yieldsAtExport(formatQuarters(value.quarters))
                         }
                       />
                     </div>
@@ -358,9 +359,9 @@ export function TimeScreen() {
                       <p className="daygroup__blocked">
                         <Icon name="alert-triangle" size={14} />
                         <span>
-                          Was der Export aus den offenen Buchungen macht, ließ sich nicht
-                          abrufen: {value.previewProblem} Die erfasste Zeit stimmt trotzdem —
-                          nur der gerundete Wert fehlt, und geraten wird er nicht.
+                          {text.previewProblemLead}
+                          <ServiceText text={value.previewProblem.message} fromService={value.previewProblem.fromService} />
+                          {text.previewProblemTail}
                         </span>
                       </p>
                     )}
@@ -368,21 +369,22 @@ export function TimeScreen() {
                       <p className="daygroup__blocked">
                         <Icon name="alert-triangle" size={14} />
                         <span>
-                          {plural(value.blockedGroups, "Tagesgruppe hat", "Tagesgruppen haben")} noch
-                          keinen Leistungstext und {value.blockedGroups === 1 ? "geht" : "gehen"} so
-                          nicht in den Export. Die Export-Ansicht zeigt, welche.
+                          {text.blockedGroups(
+                            plural(value.blockedGroups, text.groupHas, text.groupsHave),
+                            value.blockedGroups === 1,
+                          )}
                         </span>
                       </p>
                     ) : null}
                   </Card>
 
-                  <Card title="Buchungen von heute" runArea="Buchungen von heute" flush>
+                  <Card title={text.todayBookings} runArea={text.todayBookings} flush>
                     {value.entries.length === 0 ? (
                       <EmptyState
                         compact
                         icon="clock"
-                        title="Heute noch nichts erfasst"
-                        description="Der erste Timerstart legt die erste Buchung an."
+                        title={text.nothingToday}
+                        description={text.nothingTodayBody}
                       />
                     ) : (
                       <ul className="entry-list">
@@ -414,23 +416,29 @@ export function TimeScreen() {
 }
 
 function TodayRow({ entry }: { readonly entry: TimeEntry }) {
+  const text = timerTexts();
   return (
     <li className="entry-row">
-      <ExportStatusBadge
-        state={exportDisplayState(entry.exportStatus, entry.exportCount)}
-        size="sm"
-        iconOnly
-      />
+      {/* A NoExport booking does not read "offen" for billing (F-8); it says why instead. */}
+      {entry.todoNoExport ? (
+        <span className="muted entry-row__no-export">{todoTexts().noExport}</span>
+      ) : (
+        <ExportStatusBadge
+          state={exportDisplayState(entry.exportStatus, entry.exportCount)}
+          size="sm"
+          iconOnly
+        />
+      )}
       <span className="entry-row__period">{formatTimeRange(entry.startedAt, entry.endedAt)}</span>
       <span className="entry-row__duration tabular">{formatDuration(entry.durationSeconds)}</span>
       <span className="entry-row__note grow truncate">
         {entry.note.length === 0 ? (
-          <span className="muted">Ohne Leistung</span>
+          <span className="muted">{text.withoutNote}</span>
         ) : (
           <Foreign value={entry.note} />
         )}
       </span>
-      <span className="entry-row__source">{TIME_ENTRY_SOURCE_LABEL[entry.source]}</span>
+      <span className="entry-row__source">{labels().timeEntrySource[entry.source]}</span>
     </li>
   );
 }

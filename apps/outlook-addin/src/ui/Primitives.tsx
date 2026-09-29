@@ -33,8 +33,7 @@ export type { FieldAria } from './field.ts';
  *
  *  1. **`<bdi>`** isoliert den Text von seiner Umgebung. Ohne diese Klammer
  *     ordnet ein von rechts nach links geschriebener Titel den deutschen Satz
- *     um, in dem er steht — die Beschriftung „15 Minuten auf „…" buchen" ist
- *     der Fall, an dem das am meisten wehtut.
+ *     um, in dem er steht.
  *  2. **{@link visibleText}** nimmt dem Inhalt die Zeichen, die ihn umordnen,
  *     ohne sichtbar zu sein. Die Isolierung allein tut das **nicht**: Ein
  *     `U+202E` im Betreff dreht die Anzeige innerhalb des isolierten Blocks
@@ -70,13 +69,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly full?: boolean;
   readonly children: ReactNode;
   /**
-   * Der Knopf als **Fokusziel** (Entwurf 10.1).
-   *
-   * Seit React 19 ist `ref` eine gewöhnliche Eigenschaft einer Funktions­­
-   * komponente; sie steht hier trotzdem ausgeschrieben, weil
-   * `ButtonHTMLAttributes` sie nicht führt. Gebraucht wird sie für Z5 und Z6:
-   * Nach einem Fehlschlag und nach einem Abbruch springt der Fokus zurück auf
-   * „Neue Aufgabe anlegen" — dorthin, wo der nächste Versuch beginnt.
+   * The button as focus target (draft 10.1). Written out because
+   * `ButtonHTMLAttributes` does not carry `ref`; after a failure or a cancel
+   * (Z5, Z6) focus returns to the main button, where the next attempt starts.
    */
   readonly ref?: Ref<HTMLButtonElement>;
 }
@@ -184,8 +179,8 @@ interface CalloutProps {
   /**
    * Seit T-119 ein Knoten und keine Zeichenkette mehr.
    *
-   * Zwei Überschriften tragen fremden Text: der Titel eines Todos nach einer
-   * Buchung und der eines Angebots. Als Zeichenkette ließe sich er nur
+   * Überschriften tragen fremden Text, etwa den Titel eines Angebots. Als
+   * Zeichenkette ließe sich er nur
    * bereinigen, nicht isolieren; als Knoten kann `<Foreign>` hinein. Jede
    * bisherige Aufrufstelle bleibt gültig — eine Zeichenkette **ist** ein
    * `ReactNode`.

@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { errorMessage } from "../../api/client";
 import { deleteTimeEntry } from "../bookings/api";
 import { markTodoDone } from "../todos/api";
+import { undoFailedTitle } from "../todos/undoDone";
+import { timerTexts } from "./texts";
 import type { ForeignText, Id, PoolMovement } from "../../api/types";
 import { reactivationTitle } from "../../lib/labels";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
@@ -25,6 +27,13 @@ import { stopTimer } from "./api";
  * ein zweiter Weg zu derselben Sache (dieselbe Regel wie in
  * `features/todos/TodoDoneSwitch.tsx`).
  */
+/**
+ * The undo runs three calls without a shared transaction (O-AC). When one
+ * fails, the message names that step and the state it leaves behind.
+ */
+type UndoStep = "stop" | "discard" | "markDone";
+
+
 export function useReactivation(refresh: () => void) {
   const toasts = useToasts();
   const { bump } = useRefresh();
@@ -45,6 +54,7 @@ export function useReactivation(refresh: () => void) {
   const undoReactivation = useCallback(
     (todoId: Id, todoTitle: ForeignText) => {
       void (async () => {
+        let step: UndoStep = "stop";
         try {
           /*
             `stopped.poolMovement` bleibt hier absichtlich ungelesen (T-097):
@@ -54,7 +64,9 @@ export function useReactivation(refresh: () => void) {
             wird. Was hier gilt, sagt der Toast am Ende dieser Funktion.
           */
           const stopped = await stopTimer("");
+          step = "discard";
           if (stopped.kind === "recorded") await deleteTimeEntry(stopped.entry.id);
+          step = "markDone";
           /*
             Diese Bewegung wird **gelesen**, anders als die des Stopps darüber
             (E-060): Das Setzen des Kennzeichens ist der letzte Schritt dieser
@@ -68,14 +80,20 @@ export function useReactivation(refresh: () => void) {
           bump();
           toasts.show({
             tone: "info",
-            title: "Zurückgenommen.",
+            title: timerTexts().undone,
             body: withMovement(
-              `${quotedName(todoTitle)} ist wieder erledigt, die eben entstandene Buchung wurde verworfen.`,
+              timerTexts().doneAgain(quotedName(todoTitle)),
               doneMovementSentence(done.poolMovement, false),
             ),
           });
         } catch (cause) {
-          toasts.failure("Das Zurücknehmen hat nicht geklappt", errorMessage(cause));
+          // Earlier steps may have changed the state; reload so the screen shows it.
+          refresh();
+          bump();
+          toasts.failure(
+            undoFailedTitle(),
+            `${timerTexts().undoStepFailed[step]} ${errorMessage(cause)}`,
+          );
         }
       })();
     },
@@ -124,8 +142,8 @@ export function useReactivation(refresh: () => void) {
       if (!doneCleared) {
         toasts.show({
           tone: "success",
-          title: "Timer gestartet.",
-          body: `Er läuft auf ${quotedName(todoTitle)}.${movementSentence === null ? "" : ` ${movementSentence}`}`,
+          title: timerTexts().timerStarted,
+          body: `${timerTexts().runsOn(quotedName(todoTitle))}${movementSentence === null ? "" : ` ${movementSentence}`}`,
         });
         return;
       }
@@ -144,7 +162,7 @@ export function useReactivation(refresh: () => void) {
         tone: "success",
         title: reactivationTitle(todoTitle),
         ...(movementSentence === null ? {} : { body: movementSentence }),
-        action: { label: "Rückgängig", onSelect: () => undoReactivation(todoId, todoTitle) },
+        action: { label: timerTexts().undo, onSelect: () => undoReactivation(todoId, todoTitle) },
       });
     },
     [bump, refresh, toasts, undoReactivation],

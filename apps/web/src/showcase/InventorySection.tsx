@@ -259,6 +259,16 @@ const INVENTORY: readonly InventoryEntry[] = [
     built: true,
   },
   {
+    // The dialog state machine under every modal dialog (E-076 stage 1, O-CH).
+    name: "Dialoggrundlage",
+    file: "DialogSurface.tsx",
+    purpose:
+      "Zustandsmaschine unter jedem modalen Dialog: Fokusfalle, Escape, Fokusrückgabe an den Auslöser und Rückholung, wenn der Fokus ins Nichts fällt. Aussehen, Rolle und Name kommen vom aufrufenden Dialog.",
+    states: "offen · geschlossen · Escape gesperrt, solange der Dialog arbeitet · Fokus zurückgeholt",
+    screens: "alle Dialoge außer der Sperrfläche der Hülle",
+    built: true,
+  },
+  {
     /*
       Bis T-152 fehlte hier der Baustein, den fast jede Ansicht oeffnet
       (O-BF, T-133 Frage 5). Er stand weder in dieser Aufstellung noch in

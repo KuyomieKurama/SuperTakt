@@ -6,7 +6,7 @@ import {
   markTodoDone,
   updateTodo,
 } from "./api";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import type {
   Todo,
   TodoStatus,
@@ -33,12 +33,14 @@ import { formatCount, plural } from "../../lib/format";
 import { doneFlagState } from "../../lib/labels";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
-import { TableShell } from "../bookings/BookingTable";
+import { TableShell } from "../../shared/ui/TableShell";
 import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { TodoTable } from "./TodoTable";
 import type { TodoTagLabel } from "./TodoTagsCell";
-import { TodoListFilters, DEADLINE_FILTER_LABEL, TODO_SORT_LABEL } from "./TodoListFilters";
+import { deadlineFilterLabel, todoSortLabel, TodoListFilters } from "./TodoListFilters";
+import { useLanguage } from "../../lib/language";
+import { todoTexts } from "./texts";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { foreignText, quotedName } from "../../lib/foreign";
 
@@ -76,7 +78,7 @@ const PAGE_SIZE = 100;
  */
 function asDueState(value: string | undefined): DueState | "" {
   if (value === undefined) return "";
-  return value in DEADLINE_FILTER_LABEL ? (value as DueState) : "";
+  return value in todoTexts().deadlineFilter ? (value as DueState) : "";
 }
 
 export interface TodoListScreenProps {
@@ -182,14 +184,17 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     */
   }, [filter, limit, showDone, today], [version]);
 
+  const language = useLanguage();
+  const text = todoTexts();
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
+    const words = todoTexts();
     const entries: ActiveFilter[] = [];
     if (search.trim().length > 0) {
-      entries.push({ id: "q", field: "Suche", value: search.trim(), onRemove: () => setSearch("") });
+      entries.push({ id: "q", field: words.search, value: search.trim(), onRemove: () => setSearch("") });
     }
     const status = statuses.find((candidate) => candidate.id === statusId);
     if (status !== undefined) {
-      entries.push({ id: "spalte", field: "Status", value: status.name, onRemove: () => setStatusId("") });
+      entries.push({ id: "spalte", field: words.status, value: status.name, onRemove: () => setStatusId("") });
     }
     /*
       Der Name kommt aus **allen** Regeln und nicht nur aus den Pools (E-054):
@@ -202,8 +207,8 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       const poolName = structure.ruleName(poolId);
       entries.push({
         id: "pool",
-        field: "Regel",
-        value: poolName ?? "unbekannte Regel",
+        field: words.rule,
+        value: poolName ?? words.unknownRule,
         onRemove: () => setPoolId(""),
       });
     }
@@ -211,24 +216,24 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       const tag = structure.tagInfo(id);
       entries.push({
         id: `tag-${id}`,
-        field: "Tag",
-        value: tag?.tag.name ?? "Unbekannt",
+        field: words.tag,
+        value: tag?.tag.name ?? words.unknown,
         onRemove: () => setTagIds((previous) => previous.filter((other) => other !== id)),
       });
     }
     if (showDone) {
       entries.push({
         id: "done",
-        field: "Erledigte",
-        value: "eingeblendet",
+        field: words.doneFilter,
+        value: words.shown,
         onRemove: () => setShowDone(false),
       });
     }
     if (deadlineFilter !== "") {
       entries.push({
         id: "frist",
-        field: "Frist",
-        value: DEADLINE_FILTER_LABEL[deadlineFilter],
+        field: words.deadline,
+        value: deadlineFilterLabel(deadlineFilter),
         onRemove: () => setDeadlineFilter(""),
       });
     }
@@ -241,13 +246,14 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     if (sort !== "") {
       entries.push({
         id: "sort",
-        field: "Ordnung",
-        value: TODO_SORT_LABEL[sort],
+        field: words.ordering,
+        value: todoSortLabel(sort),
         onRemove: () => setSort(""),
       });
     }
     return entries;
-  }, [search, statusId, poolId, tagIds, showDone, deadlineFilter, sort, statuses, pools, structure]);
+    // `language`: the chips carry words of the UI language.
+  }, [search, statusId, poolId, tagIds, showDone, deadlineFilter, sort, statuses, pools, structure, language]);
 
   const resetAll = useCallback(() => {
     setSearch("");
@@ -284,19 +290,20 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
             Ansichtseinstellung und nicht an einer Regel.
           */
           const movement = doneMovementSentence(result.poolMovement, wasDone);
-          const unchanged = "Der Status bleibt unverändert.";
+          const words = todoTexts();
+          const unchanged = words.statusStaysSame;
           if (wasDone) {
             toasts.show({
               tone: "info",
-              title: `${quotedName(todo.title)} ist wieder offen.`,
+              title: words.openAgain(quotedName(todo.title)),
               body: withMovement(unchanged, movement),
             });
           } else {
             toasts.show({
               tone: "success",
-              title: `${quotedName(todo.title)} ist erledigt.`,
+              title: words.isDone(quotedName(todo.title)),
               body: withMovement(
-                showDone ? unchanged : `Aus dieser Liste ausgeblendet. ${unchanged}`,
+                showDone ? unchanged : words.hiddenFromList(unchanged),
                 movement,
               ),
               action: undoDoneAction(todo.id, todo.title, toasts, bump),
@@ -304,7 +311,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           }
         })
         .catch((cause: unknown) =>
-          toasts.failure("Das Kennzeichen ließ sich nicht ändern", errorMessage(cause)),
+          toasts.failure(todoTexts().doneFailed, errorMessage(cause), isServiceError(cause)),
         );
     },
     [bump, showDone, timer, toasts],
@@ -319,13 +326,13 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       .then(() => {
         setPendingDelete(null);
         bump();
-        toasts.success("Todo gelöscht.", `${quotedName(todo.title)} ist entfernt.`);
+        toasts.success(todoTexts().todoDeleted, todoTexts().isRemoved(quotedName(todo.title)));
       })
       .catch((cause: unknown) => {
         setDeleteError(
           cause instanceof Error
             ? cause.message
-            : "Das Todo ließ sich nicht löschen.",
+            : todoTexts().todoDeleteFailed,
         );
       })
       .finally(() => setDeleting(false));
@@ -345,28 +352,30 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         .then(() => {
           bump();
           toasts.success(
-            `Status geändert: ${foreignText(status.name)}.`,
-            `${quotedName(todo.title)} steht jetzt auf ${quotedName(status.name)}. Tags und Kanban-Spalten bleiben unberührt.`,
+            todoTexts().statusChanged(foreignText(status.name)),
+            todoTexts().statusChangedBody(quotedName(todo.title), quotedName(status.name)),
           );
         })
         .catch((cause: unknown) =>
-          toasts.failure("Der Status ließ sich nicht ändern", errorMessage(cause)),
+          toasts.failure(todoTexts().statusChangeFailed, errorMessage(cause), isServiceError(cause)),
         );
     },
     [bump, toasts],
   );
 
   const rowMenu = useCallback(
-    (todo: Todo): readonly MenuEntry[] => [
+    (todo: Todo): readonly MenuEntry[] => {
+      const words = todoTexts();
+      return [
       {
         id: "open",
-        label: "Öffnen",
+        label: words.openAction,
         icon: "pencil",
         onSelect: () => navigate("todo", todo.id),
       },
       {
         id: "edit",
-        label: "Bearbeiten",
+        label: words.edit,
         icon: "pencil",
         onSelect: () => {
           setEditing(todo);
@@ -376,23 +385,23 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       { kind: "separator", id: "sep-status" },
       ...statuses.map<MenuEntry>((status) => ({
         id: `status-${status.id}`,
-        label: `Status: ${foreignText(status.name)}`,
+        label: words.statusEntry(foreignText(status.name)),
         icon: "chevron-right",
         disabled: status.id === todo.statusId,
-        ...(status.id === todo.statusId ? { disabledReason: "Aktueller Status" } : {}),
+        ...(status.id === todo.statusId ? { disabledReason: words.currentStatus } : {}),
         onSelect: () => setStatus(todo, status),
       })),
       { kind: "separator", id: "sep-done" },
       {
         id: "done",
-        label: todo.completedAt === null ? "Als erledigt markieren" : "Erledigt zurücknehmen",
+        label: todo.completedAt === null ? words.markDone : words.undoDone,
         icon: todo.completedAt === null ? "check" : "rotate-ccw",
         onSelect: () => toggleDone(todo),
       },
       { kind: "separator", id: "sep" },
       {
         id: "delete",
-        label: "Löschen",
+        label: words.delete,
         icon: "trash",
         tone: "danger",
         onSelect: () => {
@@ -400,16 +409,17 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           setPendingDelete(todo);
         },
       },
-    ],
+      ];
+    },
     [setStatus, statuses, toggleDone],
   );
 
   return (
     <section className="screen todo-screen">
       <ScreenHeader
-        title="Todos"
+        title={text.todosTitle}
         refreshing={list.state.status === "ready" && list.state.refreshing}
-        lead="Alles, wofür Zeit erfasst wird. Erledigte sind ausgeblendet, bis Sie sie einblenden."
+        lead={text.todosLead}
         actions={
           <Button
             variant="primary"
@@ -419,7 +429,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
               setFormOpen(true);
             }}
           >
-            Neues Todo
+            {text.newTodo}
           </Button>
         }
       >
@@ -432,7 +442,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           sort={sort} onSortChange={setSort}
           showDone={showDone} onShowDoneChange={setShowDone}
           busy={list.state.status === "ready" && list.state.refreshing}
-          resultLabel={list.state.status === "ready" ? plural(list.state.value.page.total, "Todo", "Todos") : "wird geladen …"}
+          resultLabel={list.state.status === "ready" ? plural(list.state.value.page.total, text.todoSingular, text.todoPlural) : text.loadingShort}
           activeFilters={activeFilters}
           onResetAll={resetAll}
         />
@@ -473,10 +483,10 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       */}
       <AsyncBoundary
         state={list.state}
-        label="Todos werden geladen"
+        label={text.todosLoading}
         rows={6}
         onRetry={list.reload}
-        fallbackFrame={(content) => <ScreenBody label="Todos">{content}</ScreenBody>}
+        fallbackFrame={(content) => <ScreenBody label={text.todosTitle}>{content}</ScreenBody>}
       >
         {(value) => {
           const hiddenCount = showDone ? 0 : Math.max(0, value.totalWithDone - value.page.total);
@@ -492,13 +502,13 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
             return (
               <>
                 {notice}
-                <ScreenBody label="Todos">
+                <ScreenBody label={text.todosTitle}>
                   <TableShell>
                     {activeFilters.length === 0 ? (
                       <EmptyState
                         icon="inbox"
-                        title="Noch kein Todo"
-                        description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
+                        title={text.noTodoTitle}
+                        description={text.noTodoBody}
                         action={
                           <Button
                             variant="primary"
@@ -508,18 +518,18 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                               setFormOpen(true);
                             }}
                           >
-                            Neues Todo
+                            {text.newTodo}
                           </Button>
                         }
                       />
                     ) : (
                       <EmptyState
                         icon="search"
-                        title="Kein Todo passt zu diesen Filtern"
-                        description="Setzen Sie einen Filter zurück oder blenden Sie erledigte Todos ein."
+                        title={text.noMatchTitle}
+                        description={text.noMatchBody}
                         action={
                           <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                            Filter zurücksetzen
+                            {text.resetFilters}
                           </Button>
                         }
                       />
@@ -535,7 +545,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           return (
             <>
               {notice}
-              <ScreenBody label="Todos" className="table-wrap">
+              <ScreenBody label={text.todosTitle} className="table-wrap">
                 <TodoTable
                   today={today}
                   openTagsTodoId={openTagsTodoId}
@@ -559,7 +569,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                     tagLabels: todo.tagIds.map<TodoTagLabel>((id) => {
                       const info = structure.tagInfo(id);
                       return info === undefined
-                        ? { name: "Unbekannt", path: [] }
+                        ? { name: text.unknown, path: [] }
                         : { name: info.tag.name, path: info.path };
                     }),
                     menu: rowMenu(todo),
@@ -576,8 +586,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                               onClick={() => setLimit((current) => current + PAGE_SIZE)}
                               disabled={todos.length >= value.page.total}
                             >
-                              Weitere laden (
-                              {formatCount(Math.max(0, value.page.total - todos.length))} übrig)
+                              {text.loadMoreLeft(formatCount(Math.max(0, value.page.total - todos.length)))}
                             </Button>
                           </div>
                         ),
@@ -598,17 +607,10 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title="Todo löschen?"
-        description={
-          pendingDelete === null
-            ? ""
-            : `${quotedName(pendingDelete.title)} wird mit allen noch nicht exportierten Zeitbuchungen entfernt.`
-        }
-        consequence={
-          deleteError ??
-          "Hängt an dem Todo eine bereits exportierte Buchung, lehnt SuperTakt das Löschen ab: Abgerechnete Zeit wird nicht durch das Löschen eines Todos entfernt."
-        }
-        confirmLabel="Endgültig löschen"
+        title={text.deleteTodoTitle}
+        description={pendingDelete === null ? "" : text.deleteTodoLead(quotedName(pendingDelete.title))}
+        consequence={deleteError ?? text.deleteTodoConsequence}
+        confirmLabel={text.deleteForGood}
         busy={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
@@ -627,15 +629,13 @@ function HiddenDoneNotice({
   readonly onShow: () => void;
 }) {
   if (count === 0) return null;
+  const text = todoTexts();
   return (
     <p className="hidden-notice">
       <Icon name="info" size={14} />
-      <span>
-        {plural(count, "erledigtes Todo ist", "erledigte Todos sind")} ausgeblendet. Startet der
-        Timer auf einem davon, ist es wieder offen und erscheint hier erneut.
-      </span>
+      <span>{text.hiddenDone(plural(count, text.hiddenDoneOne, text.hiddenDoneMany))}</span>
       <Button size="sm" variant="ghost" onClick={onShow}>
-        Einblenden
+        {text.show}
       </Button>
     </p>
   );

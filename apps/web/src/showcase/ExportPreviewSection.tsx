@@ -6,8 +6,8 @@ import {
   type ExportGroupViewModel,
 } from "../features/export/ExportGroups";
 import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
-import { AUDIT_EVENT_DESCRIPTION, auditEventLabel } from "../features/export/exportAuditRows";
-import { ROUNDING_MODE_LABEL } from "../lib/labels";
+import { auditEventDescription, auditEventLabel } from "../features/export/exportAuditRows";
+import { labels } from "../lib/labels";
 import { AUDIT_ROWS, EXPORT_GROUPS, exportGroupOutcome } from "./data";
 import { Section, SubHeading } from "./Section";
 
@@ -158,7 +158,7 @@ export function ExportPreviewSection() {
         description="Gerundet wird auf die Summe je Todo und Kalendertag, nicht je Buchung (E-020). Maßgeblich ist der Tag, an dem der Timer gestartet wurde (E-025) — eine Buchung von 23:40 bis 00:20 zählt vollständig zum Starttag."
         actions={
           <span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-            Rundung: {ROUNDING_MODE_LABEL.up}, Minimum 0,25
+            Rundung: {labels().roundingMode.up}, Minimum 0,25
           </span>
         }
         flush
@@ -252,7 +252,7 @@ export function ExportPreviewSection() {
           {(["exported", "reset", "not_billed"] as const).map((value) => (
             <div className="auditlegend__item" key={value}>
               <dt className="auditlegend__term">{auditEventLabel(value)}</dt>
-              <dd className="auditlegend__text">{AUDIT_EVENT_DESCRIPTION[value]}</dd>
+              <dd className="auditlegend__text">{auditEventDescription(value)}</dd>
             </div>
           ))}
         </dl>

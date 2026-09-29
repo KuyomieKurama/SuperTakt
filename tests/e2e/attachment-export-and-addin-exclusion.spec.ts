@@ -2,12 +2,20 @@ import { todayAt } from './support/local-time';
 /**
  * Exportdateien vollständig auf ausgeschlossene Daten prüfen. Die Add-in-Aufrufe prüfen konkrete
  * Einschleusversuche, nicht sämtliche Routen.
+ *
+ * Seit E-120/A-10.16 bucht keine Tür unter `/addin` mehr Zeit: `POST
+ * /addin/todos/:todoId/time-entries` ist mit T-389 vollständig aus dem Router
+ * gefallen, nicht nur aus der Add-in-Oberfläche. Der frühere Schmuggeltest
+ * unten, der ein `attachments`-Feld in genau diesen Rumpf einschleuste, maß
+ * damit eine Tür, die es nicht mehr gibt — er ist gestrichen, nicht ersetzt,
+ * weil der Weg, den er prüfte, strukturell fehlt (kein Ersatzweg, den man
+ * stattdessen prüfen könnte). Was bleibt und was neu dazukommt, steht an den
+ * jeweiligen Fällen unten (T-399, E-125).
  */
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 import {
-  addinBookOnTodo,
   addinCreateTodo,
   addinTodoMatches,
   createAttachment,
@@ -16,10 +24,11 @@ import {
   createTodo,
   deleteTodo,
   listAttachmentsByTodo,
+  loadTodoDetail,
 } from './support/api';
 import { runExportFromScreen, readResultFilePath } from './support/actions';
 import { gotoExport, gotoTemplates } from './support/nav';
-import { E2E_EXPORT_DIR } from './support/session';
+import { API_BASE_URL, E2E_EXPORT_DIR, SESSION_SECRET, TOKEN_HEADER, WEB_BASE_URL } from './support/session';
 
 /** Weit in der Zukunft, damit das Datum im Exporttext unverwechselbar ist. */
 function farFutureIsoDay(): string {
@@ -176,7 +185,7 @@ test.describe('TP-ANH-13 — an einem vorhandenen Todo entsteht über das Add-in
     // erkennbar.
   });
 
-  test('Duplikat-Hinweis und Buchungstür: kein Weg, am gefundenen Todo einen Anhang zu erzeugen (A-10.9, E-100)', async () => {
+  test('Duplikat-Hinweis: kein Anhangsfeld am Treffer, keine Handlung am gefundenen Todo (A-10.9, A-10.11/A-10.16)', async () => {
     const callNumber = `CALL-ADDIN-${Date.now()}`;
     const found = await createTodo({ title: `E2E-ADDIN-DUPLIKAT-${Date.now()}`, callNumber });
     expect(await listAttachmentsByTodo(found.id)).toHaveLength(0);
@@ -192,29 +201,55 @@ test.describe('TP-ANH-13 — an einem vorhandenen Todo entsteht über das Add-in
       expect(Object.keys(match as object)).not.toContain('attachments');
     }
 
-    // Die einzige Route unter `/addin`, die heute eine Todo-Kennung im Pfad
-    // entgegennimmt, ist `POST /addin/todos/:todoId/time-entries`. Die
-    // Oberfläche des Aufgabenbereichs ruft sie seit F-21/E-100 nicht mehr auf
-    // (`DuplicateOffer.tsx`: „keine Zeitbuchung, kein Anhang" — und
-    // `apps/outlook-addin/src/api/client.ts` hat keinen Aufrufer von `.book(
-    // …)` mehr) — die Route selbst steht trotzdem, und A-10.9 spricht über die
-    // **Handlung**, nicht über die Existenz einer Route. Dieser Testfall prüft
-    // deshalb die Route direkt: Auch mit einem mitgeschickten `attachments`-
-    // Feld entsteht darüber kein Anhang am gefundenen Todo.
-    await addinBookOnTodo(found.id, {
-      startedAt: todayAt(5, 0),
-      endedAt: todayAt(5, 15),
-      note: 'E2E-Aufräumung',
-      attachments: {
-        sender: null,
-        items: [{ kind: 'link', displayName: 'sollte-nicht-ankommen', url: 'https://beispiel.example/schmuggel' }],
-      },
-    });
-
+    // Der frühere zweite Teil dieses Falls schickte ein eingeschleustes
+    // `attachments`-Feld an `POST /addin/todos/:todoId/time-entries`, um zu
+    // zeigen, dass darüber kein Anhang am gefundenen Todo entsteht. Diese
+    // Route ist mit E-120/T-389 vollständig aus dem Router gefallen (nicht
+    // nur ungenutzt) — es gibt keinen Weg mehr, sie anzusprechen, ohne ihn zu
+    // erfinden. Dass jede so benannte Tür jetzt 404 antwortet, prüft der Fall
+    // unten strukturell für die ganze Fläche statt für ein einzelnes Feld.
+    // Übrig bleibt hier, was A-10.9/A-10.11 tatsächlich noch verlangen: Der
+    // Fund allein verändert das gefundene Todo nicht.
     expect(await listAttachmentsByTodo(found.id)).toHaveLength(0);
 
-    // Kein Aufräumen: `found` trägt jetzt eine Zeitbuchung und lässt sich
-    // deshalb nicht löschen (`time_entry_locked`) — dieselbe Lage wie in
-    // `note-separation.spec.ts` und im ersten Test dieser Datei oben.
+    await deleteTodo(found.id);
+  });
+});
+
+test.describe('A-10.16 — jede Buchungstür unter /addin ist entfallen, nicht nur ungenutzt (E-120, E-125)', () => {
+  test('POST/PUT/PATCH auf jeden bekannten Buchungspfad antwortet 404, der Bestand bleibt unverändert', async () => {
+    const todo = await createTodo({ title: `E2E-ADDIN-404-${Date.now()}` });
+    try {
+      // Dieselbe Namensliste wie die Durchgriffsprobe in `proof-addin.mjs`
+      // (T-389): die frühere Buchungsroute selbst sowie die naheliegenden
+      // Nachbarnamen, die eine wiedereingebaute Tür tragen könnte.
+      const paths = [
+        `/addin/todos/${todo.id}/time-entries`,
+        '/addin/time-entries',
+        `/addin/todos/${todo.id}/timer`,
+        '/addin/timer/start',
+        `/addin/todos/${todo.id}/done`,
+      ];
+      const body = JSON.stringify({ startedAt: todayAt(5, 0), endedAt: todayAt(5, 15), note: 'sollte nie ankommen' });
+
+      for (const path of paths) {
+        for (const method of ['POST', 'PUT', 'PATCH'] as const) {
+          const response = await fetch(`${API_BASE_URL}${path}`, {
+            method,
+            headers: { Origin: WEB_BASE_URL, [TOKEN_HEADER]: SESSION_SECRET, 'Content-Type': 'application/json' },
+            body,
+          });
+          expect(response.status, `${method} ${path}`).toBe(404);
+        }
+      }
+
+      // Gegenprobe: Keiner der Versuche hat trotz der 404-Antwort etwas
+      // bewirkt — weder eine Zeitbuchung noch das Aufheben von „Erledigt".
+      const detail = await loadTodoDetail(todo.id);
+      expect(detail.todo.completedAt).toBeNull();
+      expect(detail.openSeconds).toBe(0);
+    } finally {
+      await deleteTodo(todo.id);
+    }
   });
 });

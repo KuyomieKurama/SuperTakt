@@ -194,7 +194,12 @@ if (process.platform === 'linux') {
   env['APPIMAGE_EXTRACT_AND_RUN'] = '1';
 }
 
-const result = spawnSync(process.execPath, [cli, 'build', ...extraArguments, ...process.argv.slice(2)], {
+const forwardedArguments = process.argv.slice(2);
+if (forwardedArguments[0] === '--') {
+  forwardedArguments.shift();
+}
+
+const result = spawnSync(process.execPath, [cli, 'build', ...extraArguments, ...forwardedArguments], {
   stdio: 'inherit',
   env,
 });

@@ -5,6 +5,8 @@ import { Button, InlineMessage } from "../../shared/ui/Primitives";
 import type { ExportFieldDefinition, SourceCatalog } from "./exportTemplateModel";
 import { quotedName } from "../../lib/foreign";
 import { TemplateFieldRow } from "./TemplateFieldRow";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — die geordnete Feldliste einer Exportvorlage (S-14, I-15, A-8.7).
@@ -100,9 +102,7 @@ export function TemplateFields({
     const target = index + delta;
     if (target < 0 || target >= fields.length) return;
     onMove(key, delta);
-    setAnnouncement(
-      `Feld ${quotedName(name)} steht jetzt an Position ${String(target + 1)} von ${String(fields.length)}.`,
-    );
+    setAnnouncement(exportTexts().fieldMoved(quotedName(name), String(target + 1), String(fields.length)));
   };
 
   const finishDrag = (toIndex: number): void => {
@@ -112,13 +112,12 @@ export function TemplateFields({
       return;
     }
     onDrop(dragIndex, toIndex);
-    setAnnouncement(
-      `Feld an Position ${String(dragIndex + 1)} steht jetzt an Position ${String(toIndex + 1)}.`,
-    );
+    setAnnouncement(exportTexts().fieldDragged(String(dragIndex + 1), String(toIndex + 1)));
     setDragIndex(null);
     setOverIndex(null);
   };
 
+  const text = exportTexts();
   if (fields.length === 0) {
     return (
       <div className="tfields">
@@ -126,14 +125,11 @@ export function TemplateFields({
           <span className="tfields__empty-icon" aria-hidden>
             <Icon name="inbox" size={22} />
           </span>
-          <p className="tfields__empty-title">Noch kein Feld</p>
-          <p className="tfields__empty-text">
-            Eine Vorlage ohne Feld erzeugt keine Datei — der Dienst nimmt sie nicht an. Fügen Sie
-            das erste Feld hinzu; die Vorschau zeigt sofort, was dabei herauskommt.
-          </p>
+          <p className="tfields__empty-title">{text.noFieldTitle}</p>
+          <p className="tfields__empty-text">{text.noFieldBody}</p>
           {readOnly ? null : (
             <Button variant="primary" iconStart="plus" onClick={onAdd}>
-              Erstes Feld hinzufügen
+              {text.addFirstField}
             </Button>
           )}
         </div>
@@ -144,8 +140,7 @@ export function TemplateFields({
   return (
     <div className="tfields">
       <p className="tfields__lead">
-        Die Reihenfolge dieser Liste ist die Reihenfolge der Schlüssel in der Datei. Verschieben
-        lässt sich ein Feld durch Ziehen am Griff oder mit den beiden Pfeilknöpfen.
+        {text.fieldsLead}
       </p>
 
       <ol className="tfield-list">
@@ -197,7 +192,7 @@ export function TemplateFields({
       {readOnly ? null : (
         <div className="tfields__actions">
           <Button variant="secondary" iconStart="plus" onClick={onAdd}>
-            Feld hinzufügen
+            {text.addField}
           </Button>
         </div>
       )}
@@ -237,8 +232,8 @@ export function messageWithoutFieldPrefix(message: string): string {
 /** Sammelmeldung über der Liste, wenn sich der Fehler keiner Zeile zuordnen lässt. */
 export function TemplateSaveError({ message }: { readonly message: string }) {
   return (
-    <InlineMessage tone="danger" title="Die Vorlage wurde nicht gespeichert">
-      {message} Die bisherige Fassung der Vorlage ist unverändert geblieben.
+    <InlineMessage tone="danger" title={exportTexts().templateNotSaved}>
+      <ServiceText text={message} /> {exportTexts().templateUnchanged}
     </InlineMessage>
   );
 }

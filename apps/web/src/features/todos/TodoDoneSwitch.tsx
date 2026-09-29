@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import type { ForeignText, Todo } from "../../api/types";
 import { clearTodoDone, markTodoDone } from "./api";
 import { useRefresh } from "../../app/RefreshContext";
@@ -10,7 +10,8 @@ import { undoDoneAction } from "./undoDone";
 import { cx } from "../../lib/cx";
 import { quotedName } from "../../lib/foreign";
 import { formatDateTime } from "../../lib/format";
-import { DONE_FLAG_LABEL, doneFlagState } from "../../lib/labels";
+import { doneFlagState, labels } from "../../lib/labels";
+import { todoTexts } from "./texts";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { DoneFlag } from "../../shared/ui/DoneFlag";
 import { Icon } from "../../shared/ui/Icon";
@@ -74,9 +75,9 @@ export function TodoDoneSwitch({ todo }: TodoDoneSwitchProps) {
           */
           toasts.show({
             tone: done ? "info" : "success",
-            title: done ? `${quotedName(title)} ist wieder offen.` : `${quotedName(title)} ist erledigt.`,
+            title: done ? todoTexts().openAgain(quotedName(title)) : todoTexts().isDone(quotedName(title)),
             body: withMovement(
-              "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
+              todoTexts().statusUnchanged,
               doneMovementSentence(result.poolMovement, done),
             ),
             /*
@@ -89,7 +90,7 @@ export function TodoDoneSwitch({ todo }: TodoDoneSwitchProps) {
           });
         })
         .catch((cause: unknown) =>
-          toasts.failure("Das Kennzeichen ließ sich nicht ändern", errorMessage(cause)),
+          toasts.failure(todoTexts().doneFailed, errorMessage(cause), isServiceError(cause)),
         );
     },
     [bump, timer, todoId, toasts],
@@ -101,13 +102,13 @@ export function TodoDoneSwitch({ todo }: TodoDoneSwitchProps) {
         <input
           type="checkbox"
           checked={done}
-          aria-label="Aufgabe erledigt"
+          aria-label={todoTexts().taskDone}
           onChange={() => toggleDone(done, todo.title)}
         />
         <span className="done-switch__box" aria-hidden>
           <Icon name={done ? "check" : "square"} size={14} />
         </span>
-        <strong>{DONE_FLAG_LABEL[flagState]}</strong>
+        <strong>{labels().doneFlag[flagState]}</strong>
       </label>
       {flagState === "reopened" ? <DoneFlag state={flagState} /> : null}
       {/*
@@ -120,7 +121,7 @@ export function TodoDoneSwitch({ todo }: TodoDoneSwitchProps) {
       */}
       {flagState === "reopened" ? (
         <p className="done-switch__hint">
-          Der Timerstart hat das Kennzeichen aufgehoben — SuperTakt hat das getan, nicht Sie.
+          {todoTexts().reopenedByTimer}
         </p>
       ) : null}
       {done ? (

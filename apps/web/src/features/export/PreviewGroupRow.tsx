@@ -12,6 +12,7 @@ import {
   plural,
 } from "../../lib/format";
 import { Foreign } from "../../shared/ui/Foreign";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — eine Tagesgruppe der Vorschau des Vorlageneditors (S-14, E-028,
@@ -59,6 +60,7 @@ export function PreviewGroupRow({
   const bodyId = `tpgroup-body-${group.key}`;
   const { outcome, group: summary } = group;
   const blocked = outcome.kind === "blocked";
+  const text = exportTexts();
 
   return (
     <li className={cx("tpgroup", blocked && "tpgroup--blocked")}>
@@ -73,19 +75,19 @@ export function PreviewGroupRow({
           <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
         </span>
         <span className="tpgroup__identity">
-          <Foreign className="tpgroup__title" value={todo?.title ?? "Unbekanntes Todo"} />
+          <Foreign className="tpgroup__title" value={todo?.title ?? text.unknownTodo} />
           <span className="tpgroup__meta">
             {formatDayLabel(summary.day)}
             <span aria-hidden> · </span>
-            {plural(summary.entryCount, "Buchung", "Buchungen")}
+            {plural(summary.entryCount, text.booking, text.bookings)}
             <span aria-hidden> · </span>
-            {formatDuration(summary.seconds)} erfasst
+            {text.recorded(formatDuration(summary.seconds))}
           </span>
         </span>
         <span className="tpgroup__value tabular">
           {outcome.kind === "row" && summary.quarters !== null ? (
             <>
-              <span className="visually-hidden">Gerundete Exportzeit: </span>
+              <span className="visually-hidden">{text.roundedPrefix}</span>
               {formatQuarters(summary.quarters)}
               <span className="tpgroup__unit" aria-hidden>
                 {" h"}
@@ -104,7 +106,7 @@ export function PreviewGroupRow({
               <Icon name="alert-triangle" size={14} />
             </span>
             <div className="tpgroup__blocked-body">
-              <p className="tpgroup__blocked-title">Leistung fehlt</p>
+              <p className="tpgroup__blocked-title">{text.noteMissing}</p>
             </div>
             {group.entries[0] === undefined ? null : (
               /*
@@ -128,10 +130,8 @@ export function PreviewGroupRow({
                   if (first !== undefined) onEditEntry(first);
                 }}
               >
-                Leistung nachtragen
-                <span className="visually-hidden">
-                  , Tagesgruppe {formatDayLabel(summary.day)}
-                </span>
+                {text.addNoteShort}
+                <span className="visually-hidden">{text.dayGroupSuffix(formatDayLabel(summary.day))}</span>
               </Button>
             )}
           </div>
@@ -150,11 +150,8 @@ export function PreviewGroupRow({
 
         <section className="tpsegments">
           <h4 className="erow__pane-title">
-            Die Buchungen dieser Tagesgruppe
-            <span className="tpsegments__hint">
-              {" "}
-              — ihre Leistungstexte führt der Dienst zu einem Text zusammen
-            </span>
+            {text.groupBookingsTitle}
+            <span className="tpsegments__hint">{text.groupBookingsHint}</span>
           </h4>
           <ul className="tpsegment-list">
             {group.entries.map((entry) => {
@@ -170,12 +167,12 @@ export function PreviewGroupRow({
                 <li className="tpsegment" key={entry.id}>
                   <span className="tpsegment__period tabular">{period}</span>
                   <span className="tpsegment__duration tabular">
-                    <span className="visually-hidden">Ungerundete Dauer: </span>
+                    <span className="visually-hidden">{text.unroundedPrefix}</span>
                     {formatDuration(entry.durationSeconds)}
                   </span>
                   <span className="tpsegment__note">
                     {missing ? (
-                      <span className="muted">— keine Leistung erfasst —</span>
+                      <span className="muted">{text.noNote}</span>
                     ) : (
                       <Foreign value={entry.note} />
                     )}
@@ -193,8 +190,8 @@ export function PreviewGroupRow({
                     iconStart="pencil"
                     onClick={() => onEditEntry(entry)}
                   >
-                    {missing ? "Leistung nachtragen" : "Leistung bearbeiten"}
-                    <span className="visually-hidden">, Buchung {period}</span>
+                    {missing ? text.addNoteShort : text.editNote}
+                    <span className="visually-hidden">{text.bookingSuffix(period)}</span>
                   </Button>
                 </li>
               );

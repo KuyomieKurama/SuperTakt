@@ -9,6 +9,8 @@ import { openReleasePage } from "../../app/connection";
 import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useMutation } from "../../app/useAsync";
+import { settingsTexts } from "./texts";
+import { usePreferences } from "./PreferencesContext";
 
 /**
  * Verbindet den lokalen Versionsstand mit der installierten und der
@@ -77,7 +79,8 @@ export function useUpdateNotice(): UpdateNoticeApi {
   const [postponed, setPostponed] = useState<string | null>(null);
   const [openProblem, setOpenProblem] = useState<string | null>(null);
 
-  const facts = useVersionFacts();
+  const { versionCheckEnabled } = usePreferences();
+  const facts = useVersionFacts(versionCheckEnabled);
   const availableUpdate = decideUpdateNotice({ installed: facts?.installed ?? null, latest: facts?.latest ?? null, skipped: null });
   const availableVersion = availableUpdate.show ? availableUpdate.version : null;
   const skipped = structure.status === "ready" ? structure.value.settings.skippedVersion : null;
@@ -119,7 +122,7 @@ export function useUpdateNotice(): UpdateNoticeApi {
     setOpenProblem(null);
     const reportProblem = (message: string) => {
       setOpenProblem(message);
-      if (view.kind !== "available") toasts.failure("Update konnte nicht geöffnet werden", message);
+      if (view.kind !== "available") toasts.failure(settingsTexts().updateOpenFailed, message);
     };
     void openReleasePage(version).then((result) => {
       switch (result.outcome) {
@@ -131,19 +134,15 @@ export function useUpdateNotice(): UpdateNoticeApi {
           setPostponed(version);
           toasts.show({
             tone: "info",
-            title: "Die Release-Seite ist im Browser geöffnet.",
-            body: "Herunterladen und Installieren geschehen dort — SuperTakt tut von sich aus nichts davon.",
+            title: settingsTexts().releasePageOpened,
+            body: settingsTexts().releasePageOpenedBody,
           });
           return;
         case "rejected":
-          reportProblem(
-            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. SuperTakt öffnet dafür keine Seite.",
-          );
+          reportProblem(settingsTexts().versionRejected);
           return;
         case "failed":
-          reportProblem(
-            "Die Release-Seite ließ sich nicht öffnen. Möglicherweise ist auf diesem Rechner kein Browser eingerichtet; der angezeigte Verweis führt von Hand zum selben Ziel.",
-          );
+          reportProblem(settingsTexts().releasePageFailed);
           return;
         case "unavailable":
           reportProblem(result.reason);
@@ -166,8 +165,8 @@ export function useUpdateNotice(): UpdateNoticeApi {
       reloadStructure();
       toasts.show({
         tone: "success",
-        title: `Fassung ${version} wird nicht mehr gemeldet.`,
-        body: "Eine spätere, höhere Fassung meldet sich wieder.",
+        title: settingsTexts().versionSkipped(version),
+        body: settingsTexts().versionSkippedBody,
       });
     })();
   }, [view, skipping, reloadStructure, toasts]);

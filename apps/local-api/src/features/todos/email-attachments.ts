@@ -3,22 +3,22 @@
  * E-108, E-109, A-A-78 bis A-A-84, A-A-88, A-A-96, A-A-97).
  *
  * ===========================================================================
- * Dies ist die **Naht**. Die Tür steht woanders.
+ * This is the **seam**. The door is elsewhere.
  * ===========================================================================
  *
- * Die Route unter `/api/v1/addin` gehört nicht in diese Datei und nicht in
- * dieses Verzeichnis; sie liest die Anfrage, prüft ihre Gestalt und ruft
- * {@link attachEmailToNewTodo}. Was hier steht, ist alles, was **nach** der
- * Gestaltprüfung geschieht: zählen, benennen, ablegen, eintragen, aufräumen,
- * berichten.
+ * The route under `/api/v1/addin` does not live here; it reads the request, checks its shape
+ * and calls {@link attachEmailToNewTodo}. This file does everything after the shape check:
+ * count, name, store, record, clean up, report.
  *
- * Die Trennung ist nicht Ordnung, sondern die Bedingung aus A-A-82 und
- * A-A-21′: **Es gibt keinen Aufruf, der eine Todo-Kennung entgegennimmt und
- * einen Anhang erzeugt.** Diese Datei kann es gar nicht — sie bekommt keine
- * Kennung, sie bekommt eine **Funktion, die eine erzeugt**, und hängt die
- * Anhänge an das, was diese Funktion zurückgegeben hat. Der Unterschied steht
- * im Typ und nicht in einem Satz: Suchen Sie in dieser Datei nach einem
- * Parameter vom Typ `TodoId`. Es gibt keinen.
+ * Which todo receives the attachments is decided by the caller, not here (A-10.11 to A-10.13,
+ * replacing A-A-82 and the old A-19.19 wording). This file takes no `TodoId`; it gets a function
+ * that yields the target todo and attaches to whatever that function returned. Both callers live
+ * under `routes/addin/`: creating a new todo from an e-mail (`service.ts`), and
+ * `createMailAssignment` (`mail-assignment.ts`), the only path that attaches to an existing todo —
+ * and only when that todo carries the same valid call number as the e-mail (A-10.11). Another
+ * call number is refused with 422 before any byte is written. Appending never changes todo
+ * fields, done state, timer, bookings or export state (A-10.12), and mail identity plus request
+ * id keep a repeated request from writing the files twice (A-10.13).
  *
  * ===========================================================================
  * Was hier ausdrücklich **nicht** geschieht

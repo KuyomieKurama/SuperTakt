@@ -1,5 +1,6 @@
 import type { ForeignText, Id, TagFolderNode, TagTree } from "../../api/types";
 import type { TagTreeNode } from "./TagTree";
+import { tagTexts } from "./texts";
 
 /**
  * Vom Baum des Dienstes zur Baumansicht — und zurück zur Auswahl.
@@ -81,7 +82,7 @@ export function findSelection(tree: TagTree, id: Id): Selection {
  */
 export function folderName(tree: TagTree, id: Id): string {
   const path = pathOf(tree, id);
-  return path.length === 0 ? "diesem Ordner" : path.join(" / ");
+  return path.length === 0 ? tagTexts().thisFolder : path.join(" / ");
 }
 
 export function pathOf(tree: TagTree, id: Id): readonly string[] {

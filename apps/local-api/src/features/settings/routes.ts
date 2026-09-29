@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { ExportTemplateId, TagId } from '@takt/domain';
-import { DESIGN_THEMES, RELEASE_TAG_SHAPE, VERSION_MAX_LENGTH } from '@takt/domain';
+import { DESIGN_THEMES, MOTION_INTENSITIES, RELEASE_TAG_SHAPE, UI_LANGUAGES, VERSION_MAX_LENGTH } from '@takt/domain';
 
 import type { AppContext } from '../../context.ts';
 import { data, fail, failValidation } from '../../http/problem.ts';
@@ -27,6 +27,7 @@ const settingsSchema = z.object({
   theme: z.enum(['system', 'light', 'dark']).optional(),
   designTheme: z.enum(DESIGN_THEMES).optional(),
   density: z.enum(['comfortable', 'compact']).optional(),
+  motionIntensity: z.enum(MOTION_INTENSITIES).optional(),
   promptOnTimerStop: z.boolean().optional(),
   idleDetectionEnabled: z.boolean().optional(),
   idleKeepTimerRunning: z.boolean().optional(),
@@ -45,6 +46,10 @@ const settingsSchema = z.object({
    * misst genau das).
    */
   skippedVersion: z.string().max(VERSION_MAX_LENGTH + 1).regex(RELEASE_TAG_SHAPE).nullish(),
+  /** A-28.1 — off means no request and no connection, not even at start. */
+  versionCheckEnabled: z.boolean().optional(),
+  /** A-28.2 — language of the main interface. */
+  uiLanguage: z.enum(UI_LANGUAGES).optional(),
 });
 
 const defaultTagsSchema = z.object({ tagIds: z.array(idSchema).max(100) });
@@ -85,6 +90,7 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.theme === undefined ? {} : { theme: parsed.data.theme }),
       ...(parsed.data.designTheme === undefined ? {} : { designTheme: parsed.data.designTheme }),
       ...(parsed.data.density === undefined ? {} : { density: parsed.data.density }),
+      ...(parsed.data.motionIntensity === undefined ? {} : { motionIntensity: parsed.data.motionIntensity }),
       ...(parsed.data.promptOnTimerStop === undefined ? {} : { promptOnTimerStop: parsed.data.promptOnTimerStop }),
       ...(parsed.data.idleKeepTimerRunning === undefined ? {} : { idleKeepTimerRunning: parsed.data.idleKeepTimerRunning }),
       ...(parsed.data.idleDetectionEnabled === undefined ? {} : { idleDetectionEnabled: parsed.data.idleDetectionEnabled }),
@@ -94,6 +100,8 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.skippedVersion === undefined
         ? {}
         : { skippedVersion: parsed.data.skippedVersion ?? null }),
+      ...(parsed.data.versionCheckEnabled === undefined ? {} : { versionCheckEnabled: parsed.data.versionCheckEnabled }),
+      ...(parsed.data.uiLanguage === undefined ? {} : { uiLanguage: parsed.data.uiLanguage }),
     });
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });

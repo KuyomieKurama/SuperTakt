@@ -135,6 +135,31 @@ export const checkExportStatusTransition: CheckExportStatusTransition = (from, t
   );
 };
 
+/**
+ * "Not billed" for one booking (E-047), refused for a NoExport todo (A-26.3, E-133 point 5).
+ *
+ * A NoExport booking is already outside every export. Marking it would set `exported`, and it
+ * would stay locked after NoExport is switched off instead of becoming billable again.
+ */
+export function checkNotBilled(
+  entry: Pick<TimeEntry, 'exportStatus' | 'todoNoExport'>,
+): Result<
+  ExportStatusTransition,
+  TaktError<'export_status_unchanged' | 'export_status_not_settable' | 'time_entry_no_export'>
+> {
+  const transition = checkExportStatusTransition(entry.exportStatus, 'exported', 'not_billed');
+  if (!transition.ok) return transition;
+  if (entry.todoNoExport) {
+    return err(
+      taktError(
+        'time_entry_no_export',
+        'Diese Buchung gehört zu einem Todo, das nicht abgerechnet wird. Sie geht ohnehin in keinen Export ein.',
+      ),
+    );
+  }
+  return transition;
+}
+
 // Die Menge der Übergänge — gerechnet, nicht abgeschrieben (T-270)
 
 /** Reiner Typ, kein Laufzeitanteil. `Assert<false>` verletzt seine Randbedingung. */

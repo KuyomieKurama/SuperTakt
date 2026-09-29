@@ -8,6 +8,8 @@ import { DeadlineFlag } from "../../shared/ui/DeadlineFlag";
 import { Foreign } from "../../shared/ui/Foreign";
 import { Icon } from "../../shared/ui/Icon";
 import { TagChip } from "../../shared/ui/Tag";
+import { todoTexts } from "./texts";
+import { ServiceText } from "../../shared/ui/ServiceText";
 
 /**
  * Takt — die Nebenspalte der Todo-Detailansicht (S-03).
@@ -32,7 +34,8 @@ export interface TodoDetailAsideProps {
   /** Was der Export daraus macht — `null`, solange nichts exportiert wurde. */
   readonly totalQuarters: number | null;
   /** Der Grund, falls die Vorschau über die offenen Buchungen fehlschlug. */
-  readonly previewProblem: string | null;
+  /** The service message stays German and carries `lang="de"` when it comes from the service. */
+  readonly previewProblem: { readonly message: string; readonly fromService: boolean } | null;
   /** „Bearbeiten" — derselbe Dialog wie in der Kopfzeile. */
   readonly onEdit: () => void;
 }
@@ -47,6 +50,7 @@ export function TodoDetailAside({
   onEdit,
 }: TodoDetailAsideProps) {
   const structure = useStructure();
+  const text = todoTexts();
 
   return (
     <aside className="detail__side">
@@ -58,50 +62,49 @@ export function TodoDetailAside({
         fehlender Wert bedeutet.
       */}
       <Card
-        title="Frist"
-        description="Ein Kalendertag mit optionaler Uhrzeit; sie steht in keinem Export."
+        title={text.deadline}
+        description={text.deadlineCardLead}
         className="detail__deadline-card"
         actions={
           <IconButton
             size="sm"
             icon="pencil"
-            label={todo.dueDate === null ? "Frist setzen" : "Frist ändern"}
+            label={todo.dueDate === null ? text.setDeadline : text.changeDeadline}
             onClick={() => onEdit()}
           />
         }
       >
         {todo.dueDate === null ? (
           <p className="muted">
-            Keine Frist gesetzt. Dieses Todo ist deshalb weder überfällig noch heute fällig — es
-            hat schlicht keinen dieser Zustände.
+            {text.noDeadline}
           </p>
         ) : (
           <>
             <DeadlineFlag dueDate={todo.dueDate} today={today} className="detail__deadline" />
-            {todo.dueTime ? <p className="detail__deadline-time">{todo.dueTime} Uhr · Ortszeit</p> : null}
+            {todo.dueTime ? <p className="detail__deadline-time">{text.deadlineTime(todo.dueTime)}</p> : null}
           </>
         )}
       </Card>
 
-      {todo.noExport ? <Card title="NoExport"><p>Zeit wird erfasst. Diese Aufgabe ist von Buchungen und Export ausgeschlossen.</p></Card> : null}
-      {todo.estimateMinutes ? <Card title="Zeitschätzung"><p>{todo.estimateMinutes} Minuten</p></Card> : null}
-      <Card title="Erfasste Zeit">
+      {todo.noExport ? <Card title={text.noExport}><p>{text.noExportCard}</p></Card> : null}
+      {todo.estimateMinutes ? <Card title={text.estimate}><p>{text.estimateMinutes(todo.estimateMinutes)}</p></Card> : null}
+      <Card title={text.recordedTime}>
         <div className="stat-grid stat-grid--tight">
           <StatTile
-            label="Gesamt"
+            label={text.total}
             value={formatDuration(totalSeconds)}
-            detail={todo.noExport ? "Alle erfassten Zeiten, ungerundet." : "Alle Buchungen, ungerundet."}
+            detail={todo.noExport ? text.allRecordedUnrounded : text.allBookingsUnrounded}
           />
           {todo.noExport ? null : <StatTile
-            label="Noch offen"
+            label={text.stillOpen}
             value={formatDuration(openSeconds)}
             tone="warning"
             detail={
               previewProblem !== null
-                ? "Was der Export daraus macht, ist gerade nicht abrufbar."
+                ? text.exportUnavailable
                 : totalQuarters === null
-                  ? "Noch nicht exportiert."
-                  : `Beim Export ergibt das ${formatQuarters(totalQuarters)} — über alle Tagesgruppen zusammen.`
+                  ? text.notExportedYet
+                  : text.exportYieldsTotal(formatQuarters(totalQuarters))
             }
           />}
         </div>
@@ -114,22 +117,21 @@ export function TodoDetailAside({
           <p className="daygroup__blocked">
             <Icon name="alert-triangle" size={14} />
             <span>
-              Was der Export aus den offenen Buchungen macht, ließ sich nicht
-              abrufen: {previewProblem} Solange fehlt auch die Kennzeichnung
-              der Tagesgruppen, denen die Leistung fehlt.
+              {text.previewProblemLead}
+              <ServiceText text={previewProblem.message} fromService={previewProblem.fromService} />
+              {text.previewProblemTail}
             </span>
           </p>
         )}
       </Card>
 
       <Card
-        title="Tags"
-        description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt."
+        title={text.tags}
+        description={text.tagsCardLead}
       >
         {todo.tagIds.length === 0 ? (
           <p className="muted">
-            Keine Tags. Regeln, die Tags verlangen, treffen dieses Todo damit nicht —
-            Regeln über Status, „Erledigt“ oder den Exportstatus schon.
+            {text.noTags}
           </p>
         ) : (
           <div className="tag-row">
@@ -150,11 +152,11 @@ export function TodoDetailAside({
         )}
       </Card>
 
-      <Card title="Herkunft">
+      <Card title={text.origin}>
         <dl className="facts">
-          <dt>Angelegt</dt>
+          <dt>{text.created}</dt>
           <dd>{formatDateTime(todo.createdAt)}</dd>
-          <dt>Zuletzt geändert</dt>
+          <dt>{text.lastChanged}</dt>
           <dd>{formatDateTime(todo.updatedAt)}</dd>
           {/*
             Der Status ist seit E-054 **keine** Kanban-Spalte mehr;
@@ -162,13 +164,13 @@ export function TodoDetailAside({
             mehr, das ihn zeigte. Geaendert wird er hier — die
             Detailansicht ist neben der Liste der Ort dafuer.
           */}
-          <dt>Status</dt>
+          <dt>{text.status}</dt>
           <dd className="facts__with-action">
             <span>
               <Foreign value={structure.statusName(todo.statusId)} />
             </span>
             <Button size="sm" variant="ghost" iconStart="pencil" onClick={() => onEdit()}>
-              Ändern
+              {text.change}
             </Button>
           </dd>
         </dl>

@@ -76,6 +76,8 @@
  *    der Naht. Trägt die Elementart die Marke, gilt das Zusammenfügen als
  *    fremder Wert und läuft durch dieselben Prüfungen wie er
  *    ({@link isForeignJoin});
+ *  - since T-390 (O-BR) also the loose `==`/`!=` and the angle-bracket
+ *    assertion `<T>x`; both did the same as `===` and `as` and went unseen;
  *  - seit T-133 die **Grenze zum Wert ohne Typ** (Abschnitt 6, O-AT): Aus einem
  *    `unknown` darf Text nur über eine erklärte Übergangsstelle fallen — eine
  *    Funktion, die `unknown` nimmt und fremden Text zurückgibt. Ein
@@ -426,6 +428,20 @@ const where = (node) => {
 };
 
 const shortText = (node) => node.getText().replace(/\s+/g, " ").slice(0, 64);
+
+/**
+ * A type assertion in either spelling: `x as T` or `<T>x` (O-BR, E-121 point 5).
+ * The angle-bracket form is legal in `.ts` files and does exactly the same.
+ */
+const isTypeAssertion = (node) => ts.isAsExpression(node) || ts.isTypeAssertionExpression(node);
+
+/** `===` and `!==`, and their loose twins `==` and `!=` (O-BR). */
+const EQUALITY_OPERATORS = new Set([
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+]);
 
 /**
  * Der **Gipfel** einer Kette: `entry.note` in `entry.note.length === 0` ist
@@ -1354,48 +1370,58 @@ check("es gibt eine erklärte Übergangsstelle vom Wert ohne Typ zu fremdem Text
   }
 });
 
-const rawFromUnknown = [];
-for (const file of sourceFiles) {
-  const walk = (node) => {
-    if (
-      ts.isBinaryExpression(node) &&
-      (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-        node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken)
-    ) {
-      const probe = ts.isTypeOfExpression(node.left)
-        ? { test: node.left, other: node.right }
-        : ts.isTypeOfExpression(node.right)
-          ? { test: node.right, other: node.left }
-          : null;
-      if (
-        probe !== null &&
-        ts.isStringLiteral(probe.other) &&
-        probe.other.text === "string" &&
-        (checker.getTypeAtLocation(probe.test.expression).flags & ts.TypeFlags.Unknown) !== 0 &&
-        !insideCrossing(node)
-      ) {
-        rawFromUnknown.push(`${where(node)}  ${shortText(node)}`);
+/**
+ * Text taken from an `unknown` outside a crossing, measured on any program.
+ *
+ * A function and not a loop in the file body, so that section 8 can run the
+ * same measurement on an overlaid source (the same reason as
+ * {@link scanSilentExits}).
+ *
+ * @param {ReturnType<typeof lensFor>} someLens
+ */
+const scanRawFromUnknown = (someLens) => {
+  const found = [];
+  for (const file of someLens.sourceFiles) {
+    const walk = (node) => {
+      if (ts.isBinaryExpression(node) && EQUALITY_OPERATORS.has(node.operatorToken.kind)) {
+        const probe = ts.isTypeOfExpression(node.left)
+          ? { test: node.left, other: node.right }
+          : ts.isTypeOfExpression(node.right)
+            ? { test: node.right, other: node.left }
+            : null;
+        if (
+          probe !== null &&
+          ts.isStringLiteral(probe.other) &&
+          probe.other.text === "string" &&
+          (someLens.checker.getTypeAtLocation(probe.test.expression).flags & ts.TypeFlags.Unknown) !== 0 &&
+          !insideCrossing(node)
+        ) {
+          found.push(`${where(node)}  ${shortText(node)}`);
+        }
       }
-    }
 
-    /*
-     * Die zweite Gestalt derselben Handlung: `x as string`. Eine Zusicherung
-     * auf einen **Objekttyp** bleibt außen vor — sie behauptet eine Gestalt,
-     * und der Zugriff darauf liefert wieder `unknown`, das durch diese Prüfung
-     * muss.
-     */
-    if (ts.isAsExpression(node) && !insideCrossing(node)) {
-      const from = checker.getTypeAtLocation(node.expression);
-      const to = checker.getTypeFromTypeNode(node.type);
-      if ((from.flags & ts.TypeFlags.Unknown) !== 0 && isTextType(to)) {
-        rawFromUnknown.push(`${where(node)}  ${shortText(node)}`);
+      /*
+       * Die zweite Gestalt derselben Handlung: `x as string` oder `<string>x`.
+       * Eine Zusicherung auf einen **Objekttyp** bleibt außen vor — sie
+       * behauptet eine Gestalt, und der Zugriff darauf liefert wieder
+       * `unknown`, das durch diese Prüfung muss.
+       */
+      if (isTypeAssertion(node) && !insideCrossing(node)) {
+        const from = someLens.checker.getTypeAtLocation(node.expression);
+        const to = someLens.checker.getTypeFromTypeNode(node.type);
+        if ((from.flags & ts.TypeFlags.Unknown) !== 0 && isTextType(to)) {
+          found.push(`${where(node)}  ${shortText(node)}`);
+        }
       }
-    }
 
-    ts.forEachChild(node, walk);
-  };
-  walk(file);
-}
+      ts.forEachChild(node, walk);
+    };
+    walk(file);
+  }
+  return found;
+};
+
+const rawFromUnknown = scanRawFromUnknown(lens);
 
 check("kein anderer Weg macht aus einem Wert ohne Typ Text", () => {
   const found = [...new Set(rawFromUnknown)].sort();
@@ -1502,7 +1528,7 @@ const scanSilentExits = (lens) => {
        * (`x as ForeignText`), und `DraftText` ist der eine erlaubte Ausstieg
        * (E-063 Punkt 1) — dieselben zwei Ziele wie in Abschnitt 4.
        */
-      if (ts.isAsExpression(node) && lens.yieldsForeign(node.expression)) {
+      if (isTypeAssertion(node) && lens.yieldsForeign(node.expression)) {
         const to = lens.checker.getTypeFromTypeNode(node.type);
         if (isTextType(to) && !isForeign(to) && !isDraft(to)) {
           assertions.push(`${where(node)}  ${shortText(node)}`);
@@ -1606,7 +1632,7 @@ check("und das Programm, über das hier geurteilt wird, übersetzt fehlerfrei", 
 heading("8  Gegenprobe — jede eingesetzte Verletzung muss auffallen");
 
 /*
- * Drei Verletzungen, drei Programme, keine Zeile im Bestand.
+ * One inserted violation per program, six in all, no line in the source tree.
  *
  * Die Kunstquelle liegt unter einem Pfad, den es nicht gibt; sie entsteht im
  * Arbeitsspeicher und wird über einen `CompilerHost` untergeschoben
@@ -1660,6 +1686,27 @@ const COUNTER_PROOFS = [
     findings: (lens) => scanSilentExits(lens).stores,
   },
   {
+    title: "`<string>todo.title` — die Zusicherung in Winkelklammern",
+    source:
+      `import type { Todo } from "${TYPES_MODULE}";\n` +
+      "export const titelVon = (todo: Todo) => <string>todo.title;\n",
+    findings: (lens) => scanSilentExits(lens).assertions,
+  },
+  {
+    title: "`typeof wert == \"string\"` an einem `unknown` — der lose Vergleich",
+    source:
+      "export function textVon(wert: unknown): string {\n" +
+      "  if (typeof wert == \"string\") return wert;\n" +
+      "  return \"\";\n" +
+      "}\n",
+    findings: (lens) => scanRawFromUnknown(lens),
+  },
+  {
+    title: "`<string>wert` an einem `unknown` — die Winkelklammer ohne Herkunft",
+    source: "export const textVon = (wert: unknown): string => <string>wert;\n",
+    findings: (lens) => scanRawFromUnknown(lens),
+  },
+  {
     title: "eine verschriebene Typeinfuhr — der Lauf urteilt sonst über `any`",
     source:
       `import type { Todo } from "${TYPES_MODULE}-gibt-es-nicht";\n` +
@@ -1692,7 +1739,7 @@ for (const probe of COUNTER_PROOFS) {
 process.stdout.write(
   `\n${"═".repeat(58)}\n${String(passed)} bestanden, ${String(failed)} fehlgeschlagen.\n` +
     `Darunter ${String(COUNTER_PROOFS.length)} Gegenproben: eine eingesetzte Verletzung je Prüfung ` +
-    `aus Abschnitt 7.\n` +
+    `aus Abschnitt 6 und 7.\n` +
     `${String(sourceFiles.length)} Quelldateien, ${String(treatedCount)} behandelte Übergaben, ` +
     `${String(inputCount)} Eingabefelder, ${String(foreignJoins)} Reihen, ` +
     `${String(crossings.length)} Übergangsstellen mit ${String(crossingCalls)} Aufrufen.\n`,

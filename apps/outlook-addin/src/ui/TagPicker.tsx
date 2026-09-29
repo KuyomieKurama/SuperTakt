@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { filterTags, flattenTagTree, indexTags, type FlatTag } from '../tags/tree.ts';
 import {
@@ -185,19 +185,25 @@ export function TagPicker({
         {folders.map(({ node, ancestors, path }) => {
           if (searching ? !matchingFolders.has(node.folder.id) : ancestors.some(id => collapsed.has(id))) return null;
           const expanded = searching || !collapsed.has(node.folder.id);
-          return <Fragment key={node.folder.id}>
-            <button type="button" className="tagpicker__folder" aria-expanded={expanded}
-              title={visibleText(path.join(' › '))}
-              style={{ paddingInlineStart: `${8 + Math.min(ancestors.length, 4) * 12}px` }}
-              onClick={() => { if (!searching) toggleFolder(node.folder.id); }}>
-              <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 7V5h7l2 2h9v13H3Z" /></svg>
-              <Foreign value={ancestors.length > 4 ? path.join(' › ') : node.folder.name} />
-            </button>
+          const indent = { paddingInlineStart: `${8 + Math.min(ancestors.length, 4) * 12}px` };
+          const folderLabel = <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 7V5h7l2 2h9v13H3Z" /></svg>
+            <Foreign value={ancestors.length > 4 ? path.join(' › ') : node.folder.name} />
+          </>;
+          // While searching every matching folder is open and cannot be collapsed, so it is a group label, not a toggle.
+          return <div role="group" aria-label={visibleText(path.join(' › '))} key={node.folder.id}>
+            {searching
+              ? <div className="tagpicker__folder tagpicker__folder--static" title={visibleText(path.join(' › '))} style={indent}>{folderLabel}</div>
+              : <button type="button" className="tagpicker__folder" aria-expanded={expanded}
+                title={visibleText(path.join(' › '))} style={indent}
+                onClick={() => toggleFolder(node.folder.id)}>
+                <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+                {folderLabel}
+              </button>}
             {expanded && node.tags.length > 0 ? <ul className="tagpicker__list" style={{ marginInlineStart: `${Math.min(ancestors.length + 1, 5) * 12}px` }}>
               {node.tags.filter(tag => matchingIds.has(tag.id)).map(tag => row(byId.get(tag.id)!, false))}
             </ul> : null}
-          </Fragment>;
+          </div>;
         })}
         {filtered.length === 0 ? <p className="tagpicker__none">Kein Tag passt zu dieser Suche.</p> : null}
       </div>

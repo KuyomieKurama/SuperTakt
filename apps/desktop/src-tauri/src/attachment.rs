@@ -133,6 +133,17 @@ pub fn check_link(value: &str) -> Result<Url, Rejection> {
     Ok(parsed)
 }
 
+/// Control characters and the direction marks of `FORBIDDEN_NAME_CHARACTERS` in
+/// `packages/domain/src/characters.ts` (E-126 point 3). A direction mark such as
+/// U+202E can make `rechnung\u{202e}fdp.exe` read like a PDF in the confirmation.
+fn is_forbidden_path_character(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{061C}' | '\u{200E}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
+}
+
 /// Der Dateiname, **wie das Betriebssystem ihn auflöst** (A-A-5′).
 ///
 /// Windows wirft nachgestellte Punkte und Leerzeichen vom letzten
@@ -149,6 +160,8 @@ fn effective_file_name(path: &Path) -> Option<&str> {
 }
 
 /// Trägt der letzte Namensbestandteil einen Doppelpunkt? (A-A-28.)
+///
+/// Requirement A-A-28 in `docs/bedrohungsmodell.md` 22.1.1 (finding T-164-1).
 ///
 /// Unter Windows ist der Doppelpunkt der Trenner eines alternativen
 /// Datenstroms: `datei::$DATA` löst NTFS auf den unbenannten Datenstrom von
@@ -173,12 +186,14 @@ fn has_stream_separator(path: &Path) -> bool {
 
 /// Trägt der Pfad eine der fünf Umleitungsendungen? (A-A-5, A-A-5′.)
 ///
+/// Requirements A-A-5 and A-A-5′ in `docs/bedrohungsmodell.md` (finding T-156-1).
+///
 /// Verglichen wird das **letzte Punktsegment des aufgelösten Dateinamens**,
 /// ohne Rücksicht auf Groß- und Kleinschreibung. `X.LNK` ist dasselbe wie
 /// `x.lnk`; unter Windows entscheidet die Schreibweise über gar nichts.
 ///
-/// **Nicht `Path::extension()`.** Der Grund steht im Kopf dieser Datei unter
-/// „A-A-5′"; kurz: Er sieht `rechnung.lnk.` als endungslos an und `.lnk` als
+/// **Nicht `Path::extension()`.** Der Grund steht in A-A-5′; kurz: Er sieht
+/// `rechnung.lnk.` als endungslos an und `.lnk` als
 /// versteckte Datei, und Windows tut in beiden Fällen etwas anderes. Diese
 /// Zeilen sind die Behebung eines gemessenen Fundes (T-156-1) und keine
 /// Umständlichkeit.
@@ -257,7 +272,7 @@ pub fn check_file(value: &str) -> Result<&Path, Rejection> {
     if value.len() > MAX_PATH_LEN {
         return Err(Rejection::PathTooLong);
     }
-    if value.chars().any(char::is_control) {
+    if value.chars().any(is_forbidden_path_character) {
         return Err(Rejection::PathControlCharacter);
     }
 
@@ -583,6 +598,33 @@ mod tests {
         let einer_zu_viel = format!("{genau_4096}a");
         assert_eq!(einer_zu_viel.len(), 4097);
         assert_eq!(check_file(&einer_zu_viel), Err(Rejection::PathTooLong));
+    }
+
+    #[test]
+    fn check_file_rejects_bidi_and_format_control_characters() {
+        // The pre-existing case above only covers a plain `\n`. `check_link`
+        // already exercises U+202E (via `LinkNotNormalized`, see
+        // `festpunkttabelle_rohfassung_abgewiesen_normalform_angenommen_und_idempotent`),
+        // but `check_file` has no percent-encoding step to catch it through --
+        // `is_forbidden_path_character` is its only defence, and each of these
+        // ranges needs its own case to prove the defence still holds.
+        let markers = [
+            '\u{061c}',
+            '\u{200e}',
+            '\u{200f}',
+            '\u{202a}',
+            '\u{202e}',
+            '\u{2066}',
+            '\u{2069}',
+        ];
+        for marker in markers {
+            let value = format!("/tmp/report{marker}.pdf");
+            assert_eq!(
+                check_file(&value),
+                Err(Rejection::PathControlCharacter),
+                "should be rejected: {value:?}"
+            );
+        }
     }
 
     #[test]

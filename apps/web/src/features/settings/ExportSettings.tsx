@@ -12,7 +12,9 @@ import { navigate } from "../../app/router";
 import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useAsync, useMutation } from "../../app/useAsync";
-import { ROUNDING_MODE_LABEL } from "../../lib/labels";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { settingsTexts } from "./texts";
 import { foreignText } from "../../lib/foreign";
 /* Export — Ordner, Vorlage, Rundung                                    */
 
@@ -33,6 +35,7 @@ export function ExportSettings() {
   const toasts = useToasts();
   const { bump } = useRefresh();
   const mutation = useMutation();
+  const text = settingsTexts();
 
   const structureValue = structure.state.status === "ready" ? structure.state.value : null;
   const settings = structureValue?.settings ?? null;
@@ -89,7 +92,7 @@ export function ExportSettings() {
       setAcknowledgedDirectory(trimmedDirectory.length === 0 ? null : trimmedDirectory);
       structure.reload();
       bump();
-      toasts.success("Einstellungen gespeichert.");
+      toasts.success(settingsTexts().settingsSaved);
     });
   };
 
@@ -107,8 +110,8 @@ export function ExportSettings() {
 
   return (
     <Card
-      title="Export"
-      description="Vor jedem Lauf erneut geprüft."
+      title={text.exportTitle}
+      description={text.exportLead}
       actions={
         <Button
           variant="primary"
@@ -116,7 +119,7 @@ export function ExportSettings() {
           disabled={blocked}
           onClick={save}
         >
-          Speichern
+          {text.save}
         </Button>
       }
     >
@@ -145,21 +148,21 @@ export function ExportSettings() {
       */}
       <p className="field__error" role="status">
         {blocked
-          ? "Solange dieser Ordner eingetragen ist, lässt sich nichts speichern. Wählen Sie einen anderen — die übrigen Einstellungen auf dieser Karte gehen dabei nicht verloren."
+          ? text.folderBlocksSave
           : null}
       </p>
 
       <Select
-        label="Aktive Exportvorlage"
+        label={text.activeTemplate}
         value={templateId}
         onChange={setTemplateId}
         options={[
-          { value: "", label: "Mitgelieferte Standardvorlage" },
+          { value: "", label: labels().builtinTemplateOption },
           ...(templates.state.status === "ready"
             ? templates.state.value.map((template) => ({
                 value: template.id,
                 label: template.isBuiltin
-                    ? `${foreignText(template.name)} (mitgeliefert)`
+                    ? text.builtIn(foreignText(template.name))
                     : foreignText(template.name),
               }))
             : []),
@@ -173,36 +176,34 @@ export function ExportSettings() {
         trotzdem hier, damit auch findet, wer in den Einstellungen sucht.
       */}
       <p className="field__hint">
-        Welche Felder eine Vorlage enthaelt, legen Sie im Vorlageneditor fest.{" "}
+        {text.templateFieldsHint}{" "}
         <Button
           size="sm"
           variant="ghost"
           iconStart="pencil"
           onClick={() => navigate("templates", templateId.length === 0 ? undefined : templateId)}
         >
-          Vorlagen bearbeiten
+          {text.editTemplates}
         </Button>
       </p>
 
       <Select
-        label="Rundung vor dem Export"
+        label={text.roundingBeforeExport}
         value={rounding}
         onChange={(next) => setRounding(next as RoundingMode)}
         options={[
-          { value: "up", label: `${ROUNDING_MODE_LABEL.up} — immer auf die nächste Viertelstunde` },
-          { value: "nearest", label: `${ROUNDING_MODE_LABEL.nearest} — zur nächstgelegenen` },
+          { value: "up", label: text.roundUp(labels().roundingMode.up) },
+          { value: "nearest", label: text.roundNearest(labels().roundingMode.nearest) },
         ]}
       />
 
-      <InlineMessage tone="info" title="Gerundet wird die Tagesgruppe, nicht die einzelne Buchung">
-        Alle noch offenen Buchungen desselben Todos an einem Kalendertag werden addiert, erst dann
-        wird die Summe gerundet — mindestens 0,25. Zehn, zwanzig und fünf Minuten ergeben 0,75 und
-        nicht dreimal 0,25.
+      <InlineMessage tone="info" title={text.roundingGroupTitle}>
+        {text.roundingGroupBody}
       </InlineMessage>
 
       {mutation.error === null ? null : (
-        <InlineMessage tone="danger" title="Die Einstellungen wurden nicht gespeichert">
-          {mutation.error}
+        <InlineMessage tone="danger" title={text.settingsNotSaved}>
+          <ServiceText text={mutation.error} fromService={mutation.errorFromService} />
         </InlineMessage>
       )}
 
@@ -214,12 +215,12 @@ export function ExportSettings() {
       <ConfirmDialog
         open={confirmDirectoryOpen && leadingConcern !== null}
         tone="danger"
-        title={leadingConcern?.title ?? "Diesen Ordner einstellen?"}
+        title={leadingConcern?.title ?? text.setThisFolder}
         description={leadingConcern?.body ?? ""}
-        consequence="Die Exportdatei enthält lesbare Kundennotizen. Base64 ist eine Kodierung, keine Verschlüsselung — wer die Datei öffnen kann, kann sie lesen."
-        confirmLabel="Ordner trotzdem einstellen"
-        cancelLabel="Anderen Ordner wählen"
-        acknowledgeLabel="Ich weiß, dass die Kundennotizen dorthin gelangen, und will es so."
+        consequence={text.readableNotes}
+        confirmLabel={text.setFolderAnyway}
+        cancelLabel={text.chooseOtherFolder}
+        acknowledgeLabel={text.folderAcknowledge}
         busy={mutation.busy}
         onConfirm={() => {
           setAcknowledgedDirectory(trimmedDirectory);

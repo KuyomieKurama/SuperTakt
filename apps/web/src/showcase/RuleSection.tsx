@@ -10,16 +10,7 @@ import {
 } from "../features/structure/RulePickers";
 import { FormSection } from "../features/structure/PoolFormDialog";
 import { RuleSummary } from "../features/structure/RuleSummary";
-import {
-  POOL_AXIS_NEUTRAL_HINT,
-  POOL_COMPLETION_LABEL,
-  POOL_EXPORT_LABEL,
-  POOL_MATCH_MODE_HINT,
-  POOL_MATCH_MODE_LABEL,
-  type PoolCompletionFilter,
-  type PoolExportFilter,
-  type PoolMatchMode,
-} from "../lib/labels";
+import { type PoolCompletionFilter, type PoolExportFilter, type PoolMatchMode, labels } from "../lib/labels";
 import { describeRule, describeRuleReach, ruleSpoken, type RuleAxes } from "../lib/poolRule";
 import {
   NEUTRAL_RULE,
@@ -135,6 +126,7 @@ const RESOLVED_FULL: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: [],
   matchesNothing: false,
+  matchesNothingReason: "none",
 };
 
 /** Eine Regel ohne Tagbedingung — es gibt nichts aufzuloesen und nichts zu melden. */
@@ -146,6 +138,7 @@ const RESOLVED_NO_TAG_AXIS: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: [],
   matchesNothing: false,
+  matchesNothingReason: "none",
 };
 
 /**
@@ -161,6 +154,7 @@ const RESOLVED_EMPTY_FOLDER: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: ["folder-ost"],
   matchesNothing: true,
+  matchesNothingReason: "unresolved_required",
 };
 
 /**
@@ -176,6 +170,7 @@ const RESOLVED_MIXED: PoolResolution = {
   unresolvedExcluded: false,
   emptyRuleFolderIds: ["folder-ost"],
   matchesNothing: true,
+  matchesNothingReason: "unresolved_required",
 };
 
 const SHAPES: ReadonlyArray<{
@@ -237,6 +232,7 @@ const SHAPES: ReadonlyArray<{
       unresolvedExcluded: false,
       emptyRuleFolderIds: [],
       matchesNothing: true,
+      matchesNothingReason: "empty",
     },
     emptyText: "Ohne Bedingung — diese Spalte bleibt leer.",
   },
@@ -331,8 +327,8 @@ export function RuleSection() {
           value={matchMode}
           onChange={setMatchMode}
           options={[
-            { value: "any", label: POOL_MATCH_MODE_LABEL.any, hint: POOL_MATCH_MODE_HINT.any },
-            { value: "all", label: POOL_MATCH_MODE_LABEL.all, hint: POOL_MATCH_MODE_HINT.all },
+            { value: "any", label: labels().poolMatchMode.any, hint: labels().poolMatchModeHint.any },
+            { value: "all", label: labels().poolMatchMode.all, hint: labels().poolMatchModeHint.all },
           ]}
         />
 
@@ -340,16 +336,16 @@ export function RuleSection() {
           label="Erledigt"
           value={completion}
           onChange={setCompletion}
-          neutralNote={POOL_AXIS_NEUTRAL_HINT.toLowerCase()}
+          neutralNote={labels().poolAxisNeutralHint.toLowerCase()}
           options={[
             {
               value: "any",
-              label: POOL_COMPLETION_LABEL.any,
+              label: labels().poolCompletion.any,
               neutral: true,
               hint: "Erledigt entscheidet nicht über die Zugehörigkeit.",
             },
-            { value: "done", label: POOL_COMPLETION_LABEL.done, hint: "Nur erledigte Todos." },
-            { value: "open", label: POOL_COMPLETION_LABEL.open, hint: "Nur unerledigte Todos." },
+            { value: "done", label: labels().poolCompletion.done, hint: "Nur erledigte Todos." },
+            { value: "open", label: labels().poolCompletion.open, hint: "Nur unerledigte Todos." },
           ]}
         />
 
@@ -357,22 +353,22 @@ export function RuleSection() {
           label="Exportstatus"
           value={exportState}
           onChange={setExportState}
-          neutralNote={POOL_AXIS_NEUTRAL_HINT.toLowerCase()}
+          neutralNote={labels().poolAxisNeutralHint.toLowerCase()}
           options={[
             {
               value: "any",
-              label: POOL_EXPORT_LABEL.any,
+              label: labels().poolExport.any,
               neutral: true,
               hint: "Der Exportstatus entscheidet nicht über die Zugehörigkeit.",
             },
             {
               value: "open",
-              label: POOL_EXPORT_LABEL.open,
+              label: labels().poolExport.open,
               hint: "Todos mit mindestens einer abgeschlossenen, offenen Buchung.",
             },
             {
               value: "exported",
-              label: POOL_EXPORT_LABEL.exported,
+              label: labels().poolExport.exported,
               hint: "Todos mit mindestens einer exportierten Buchung — nicht „vollständig abgerechnet“.",
             },
           ]}
@@ -383,11 +379,11 @@ export function RuleSection() {
           value={completion}
           onChange={() => undefined}
           disabled
-          neutralNote={POOL_AXIS_NEUTRAL_HINT.toLowerCase()}
+          neutralNote={labels().poolAxisNeutralHint.toLowerCase()}
           options={[
-            { value: "any", label: POOL_COMPLETION_LABEL.any, neutral: true },
-            { value: "done", label: POOL_COMPLETION_LABEL.done },
-            { value: "open", label: POOL_COMPLETION_LABEL.open },
+            { value: "any", label: labels().poolCompletion.any, neutral: true },
+            { value: "done", label: labels().poolCompletion.done },
+            { value: "open", label: labels().poolCompletion.open },
           ]}
         />
 

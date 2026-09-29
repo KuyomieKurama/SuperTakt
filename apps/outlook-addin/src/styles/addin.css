@@ -829,17 +829,12 @@ bdi {
 }
 
 /*
-  Die Duplikatfläche steht **immer** im Baum, auch ohne Treffer (Y-04,
-  T-247-3). Ein `role="status"`, das erst zusammen mit seinem Inhalt entsteht,
-  wird von vielen Vorlesehilfen nicht angesagt — dieselbe Bauart und derselbe
-  Grund wie bei `.field__live` weiter oben.
-
-  Sie darf deshalb nicht ausgeblendet werden: `display: none` nähme sie aus dem
-  Baum und damit die ganze Wirkung. Leer hat sie die Höhe null; übrig bleibt
-  der `gap` der Bereichsspalte, und genau den nimmt diese Zeile zurück. Wer den
-  Abstand in `.pane` ändert, ändert ihn hier mit.
+  The status sentence of the duplicate offer is a live region and always stays
+  in the tree (Y-04): `display: none` would remove it and silence the
+  announcement. Empty it has zero height; this takes back the gap of the pane
+  column. Whoever changes the gap in `.pane` changes it here too.
 */
-.offer:empty {
+.offer__status:empty {
   margin-block-start: calc(-1 * var(--space-3));
 }
 
@@ -886,11 +881,8 @@ bdi {
   font-size: var(--text-xs);
 }
 
-/*
-  Der bestätigte Leerbefund: „gesucht, nichts gefunden". Ein Satz und keine
-  Hinweisfläche — er soll hörbar sein, nicht laut (Y-04).
-*/
-.offer__none {
+/* The status sentence: audible, not loud (Y-04). */
+.offer__status {
   margin: 0;
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
@@ -1053,3 +1045,5 @@ bdi {
 .tagpicker { scroll-margin-block: 5rem; }
 .tagpicker:focus-within { border-color: var(--accent-bg); }
 .chip__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tagpicker__folder--static { cursor: default; }
+.tagpicker__folder--static:hover { background: var(--bg-subtle); }

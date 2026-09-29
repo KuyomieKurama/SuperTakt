@@ -1,6 +1,15 @@
 import { DateField } from "../../shared/ui/DateField";
 import { listPriorities } from "../settings/api";
-import { enumerateNames, MAX_TITLE_CHARACTERS } from "@takt/domain";
+import {
+  CALL_NUMBER_MAX_LENGTH,
+  CALL_NUMBER_MIN_LENGTH,
+  checkCallNumber,
+  isCalendarDay,
+  MAX_DUE_YEAR,
+  MAX_TITLE_CHARACTERS,
+  MIN_DUE_YEAR,
+  type CallNumberRejection,
+} from "@takt/domain";
 import { useEffect, useId, useState } from "react";
 import {
   createTodo,
@@ -17,6 +26,22 @@ import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useRefresh } from "../../app/RefreshContext";
 import { quotedName } from "../../lib/foreign";
+import { formatList } from "../../lib/format";
+import { todoTexts } from "./texts";
+import { ServiceText } from "../../shared/ui/ServiceText";
+
+/** Names in quotes, enumerated in the UI language ("„A“ und „B“" / "“A” and “B”"). */
+function quotedList(names: readonly string[]): string {
+  return formatList(names.map((name) => quotedName(name)));
+}
+
+/** The UI sentence for a call number the domain rejects (E-121 point 9). */
+function callNumberMessage(reason: CallNumberRejection): string {
+  const rejection = todoTexts().callNumberRejection;
+  if (reason === "too_short") return rejection.too_short(CALL_NUMBER_MIN_LENGTH);
+  if (reason === "too_long") return rejection.too_long(CALL_NUMBER_MAX_LENGTH);
+  return rejection[reason];
+}
 
 /**
  * Takt — Todo anlegen und ändern (I-01, I-02).
@@ -86,6 +111,7 @@ export function TodoFormDialog({
   const [noExport, setNoExport] = useState(false);
   const [estimateMinutes, setEstimateMinutes] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -101,15 +127,31 @@ export function TodoFormDialog({
     setNoExport(todo?.noExport ?? false);
     setPriorityId(todo?.priorityId ?? "");
     setTitleTouched(false);
+    setAttempted(false);
   }, [open, todo, defaultStatusId, presetTagIds]);
 
+  const text = todoTexts();
   const trimmedTitle = title.trim();
-  const titleError =
-    titleTouched && trimmedTitle.length === 0 ? "Ohne Titel lässt sich ein Todo nicht wiederfinden." : undefined;
+  const titleError = titleTouched && trimmedTitle.length === 0 ? text.titleMissing : undefined;
+  /*
+   * The same rules the service applies (E-045, A-19.1), checked before sending
+   * so the UI can say them in its own language (E-121 point 9). The domain
+   * returns the code; the sentence comes from the text bundle.
+   */
+  const callCheck = callNumber.trim().length === 0 ? null : checkCallNumber(callNumber.trim());
+  const callNumberError =
+    attempted && callCheck !== null && !callCheck.ok ? callNumberMessage(callCheck.reason) : undefined;
+  const dueDateError =
+    attempted && dueDate.length > 0 && !isCalendarDay(dueDate)
+      ? text.dueDateInvalid(MIN_DUE_YEAR, MAX_DUE_YEAR)
+      : undefined;
 
   const submit = (): void => {
     setTitleTouched(true);
+    setAttempted(true);
     if (trimmedTitle.length === 0) return;
+    if (callCheck !== null && !callCheck.ok) return;
+    if (dueDate.length > 0 && !isCalendarDay(dueDate)) return;
 
     void mutation.run(async () => {
       if (todo === undefined) {
@@ -142,14 +184,11 @@ export function TodoFormDialog({
           .filter((label): label is string => label !== undefined);
         const fresh = (created.createdTags ?? []).map((tag) => tag.name);
 
-        toasts.success("Todo angelegt.", [
-          `${quotedName(created.todo.title)} ist gespeichert.`,
-          fresh.length === 0
-            ? null
-            : `Neu angelegt ${fresh.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${enumerateNames(fresh)}.`,
-          added.length === 0
-            ? null
-            : `Als Standard-Tag ${added.length === 1 ? "kam" : "kamen"} ${enumerateNames(added)} hinzu.`,
+        const words = todoTexts();
+        toasts.success(words.todoCreated, [
+          words.isSaved(quotedName(created.todo.title)),
+          fresh.length === 0 ? null : words.tagsCreated(fresh.length, quotedList(fresh)),
+          added.length === 0 ? null : words.defaultTagsAdded(added.length, quotedList(added)),
         ]
           .filter((part): part is string => part !== null)
           .join(" "));
@@ -186,11 +225,12 @@ export function TodoFormDialog({
       });
       if (freshTags.length > 0) structure.reload();
       bump();
+      const words = todoTexts();
       toasts.success(
-        "Todo geändert.",
+        words.todoChanged,
         freshTags.length === 0
-          ? `${quotedName(saved.title)} ist gespeichert.`
-          : `${quotedName(saved.title)} ist gespeichert. Neu angelegt ${freshTags.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${enumerateNames(freshTags.map((tag) => tag.name))}.`,
+          ? words.isSaved(quotedName(saved.title))
+          : `${words.isSaved(quotedName(saved.title))} ${words.tagsCreated(freshTags.length, quotedList(freshTags.map((tag) => tag.name)))}`,
       );
       onSaved?.(saved);
       onClose();
@@ -200,34 +240,32 @@ export function TodoFormDialog({
   return (
     <FormDialog
       open={open}
-      title={todo === undefined ? "Neues Todo" : "Todo bearbeiten"}
-      description={
-        todo === undefined
-          ? "Titel genügt. Alles andere lässt sich später ergänzen."
-          : "Änderungen gelten sofort. Die erfassten Zeiten bleiben unberührt."
-      }
-      submitLabel={todo === undefined ? "Anlegen" : "Speichern"}
+      title={todo === undefined ? text.newTodo : text.editTodo}
+      description={todo === undefined ? text.newTodoLead : text.editTodoLead}
+      submitLabel={todo === undefined ? text.create : text.save}
       busy={mutation.busy}
       error={mutation.error}
+      errorFromService={mutation.errorFromService}
       onSubmit={submit}
       onCancel={onClose}
     >
       <TextField
-        label="Titel"
+        label={text.title}
         value={title}
         onChange={setTitle}
         required
         maxLength={MAX_TITLE_CHARACTERS}
         {...(titleError === undefined ? {} : { error: titleError })}
-        placeholder="Wofür wird Zeit erfasst?"
+        placeholder={text.titlePlaceholder}
       />
 
       <TextField
-        label="Call-Nummer"
+        label={text.callNumber}
         value={callNumber}
         onChange={setCallNumber}
         maxLength={64}
-        hint="Aus dem Ticketsystem. Darf leer bleiben; das Add-in trägt sie beim Buchen aus einer E-Mail ein."
+        hint={text.callNumberHint}
+        {...(callNumberError === undefined ? {} : { error: callNumberError })}
       />
 
       {/*
@@ -244,28 +282,32 @@ export function TodoFormDialog({
       */}
       <DateField
         wide
-        label="Frist"
+        label={text.deadline}
         value={dueDate}
         onChange={value => {
           setDueDate(value);
           if (!value) setDueTime("");
         }}
         time={{ value: dueTime, onChange: setDueTime }}
-        hint="Ein Kalendertag mit optionaler Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export. Die Uhrzeit ist 00:00, bis Sie sie ändern."
+        hint={`${text.deadlineHintCore} ${text.deadlineHintDefaultTime}`}
       />
+      {/* Always in the tree so a screen reader notices the message (B-5, O-GQ). */}
+      <div className="field__live" role="alert">
+        {dueDateError === undefined ? null : <p className="field__error">{dueDateError}</p>}
+      </div>
       <label className="todo-export-option">
         <span className="todo-export-option__text">
-          <span className="todo-export-option__title" id={`${noExportHintId}-label`}>NoExport</span>
-          <span className="todo-export-option__hint" id={noExportHintId}>Zeit erfassen, ohne die Aufgabe in Buchungen oder im Export anzuzeigen.</span>
+          <span className="todo-export-option__title" id={`${noExportHintId}-label`}>{text.noExport}</span>
+          <span className="todo-export-option__hint" id={noExportHintId}>{text.noExportHint}</span>
         </span>
         <input className="todo-export-option__switch" type="checkbox" role="switch" checked={noExport}
           onChange={event => setNoExport(event.target.checked)} aria-labelledby={`${noExportHintId}-label`} aria-describedby={noExportHintId} />
       </label>
-      <Select label="Priorität" value={priorityId} onChange={setPriorityId}
-        hint="Die Werte und ihre Gewichtung stehen in den Einstellungen unter „Prioritäten“."
-        options={[{ value: "", label: "Keine Priorität" }, ...(priorities.state.status === "ready" ? priorities.state.value.map(priority => ({ value: priority.id, label: `${priority.name} · ${priority.weight}` })) : [])]} />
-      <p role="alert">{priorities.state.status === "error" ? priorities.state.message : null}</p>
-      <TextField label="Zeitschätzung in Minuten" type="number" value={estimateMinutes} onChange={setEstimateMinutes} />
+      <Select label={text.priority} value={priorityId} onChange={setPriorityId}
+        hint={text.priorityHint}
+        options={[{ value: "", label: text.noPriority }, ...(priorities.state.status === "ready" ? priorities.state.value.map(priority => ({ value: priority.id, label: `${priority.name} · ${priority.weight}` })) : [])]} />
+      <p role="alert">{priorities.state.status === "error" ? <ServiceText text={priorities.state.message} fromService={priorities.state.fromService} /> : null}</p>
+      <TextField label={text.estimateInMinutes} type="number" value={estimateMinutes} onChange={setEstimateMinutes} />
 
 
       {/*
@@ -284,15 +326,15 @@ export function TodoFormDialog({
         fuehrte aus einem Dialog mit ungesicherten Eingaben heraus.
       */}
       <Select
-        label="Status"
+        label={text.status}
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
-        hint="Die Werte stehen in den Einstellungen unter „Status“."
+        hint={text.statusHint}
       />
 
       <TagInput
-        label="Tags"
+        label={text.tags}
         value={tagIds}
         onChange={setTagIds}
         allowCreate
@@ -300,8 +342,8 @@ export function TodoFormDialog({
         onNewNamesChange={setNewTagNames}
         hint={
           todo === undefined
-            ? "Tippen Sie einen Namen: Vorhandene Tags werden vorgeschlagen, ein unbekannter lässt sich als neues Tag anlegen. Die Standard-Tags aus den Einstellungen kommen beim Anlegen von selbst hinzu — sie stehen hier nicht zur Wahl, damit dieselbe Regel nicht zweimal gilt."
-            : "Tippen Sie einen Namen: Vorhandene Tags werden vorgeschlagen, ein unbekannter lässt sich als neues Tag anlegen."
+            ? text.tagsHintNew
+            : text.tagsHintEdit
         }
       />
 

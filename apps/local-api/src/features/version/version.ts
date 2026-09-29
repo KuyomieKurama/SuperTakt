@@ -325,6 +325,11 @@ export interface VersionCheckStorePort {
   write(at: Date): Promise<void>;
 }
 
+/** The stored on/off switch of the version check (A-28.1). Synchronous, see `run()`. */
+export interface VersionCheckSwitchPort {
+  isEnabled(): boolean;
+}
+
 export interface VersionCheckerOptions {
   readonly logger: Logger;
   /** Die Uhr als Port, damit der Boden ohne Zeitmanipulation prüfbar ist. */
@@ -352,6 +357,15 @@ export interface VersionCheckerOptions {
    * könnte, und einen zu erfinden wäre schlimmer als keiner.
    */
   readonly store?: VersionCheckStorePort;
+  /**
+   * The user's switch (A-28.1) — optional for the same reason as `store`: without a database
+   * there is no setting, and the check runs as before.
+   *
+   * Asked before every request and in `current()`. Off means no request, no connection and no
+   * notice, also at start. A switch that throws counts as off for that tick and costs one log
+   * line: A-28.1 promises "no connection" absolutely, the default "on" is only a default.
+   */
+  readonly enabled?: VersionCheckSwitchPort;
   /**
    * Wie lange ein angestoßenes Schreiben schweigen darf, bevor es als
    * ausgefallen gilt — ohne Angabe {@link VERSION_CHECK_STORE_DEADLINE_MS}.
@@ -444,6 +458,26 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
    * nichts annimmt. Verloren geht dann die Tatsache, nicht die Zusage.
    */
   let store: VersionCheckStorePort | null = options.store ?? null;
+
+  const userSwitch: VersionCheckSwitchPort | null = options.enabled ?? null;
+  let switchFailureReported = false;
+  /** A-28.1: whether the user allows the check right now. Never throws. */
+  function allowedByUser(): boolean {
+    if (userSwitch === null) return true;
+    try {
+      return userSwitch.isEnabled();
+    } catch {
+      if (!switchFailureReported) {
+        switchFailureReported = true;
+        options.logger.lifecycle(
+          'warn',
+          'Die Einstellung der Versionsprüfung ließ sich nicht lesen. Es wird nicht gefragt.',
+          'version_check_switch_unreadable',
+        );
+      }
+      return false;
+    }
+  }
 
   /*
    * Die Fristen der angestoßenen Schreibzugriffe, solange sie schweben
@@ -844,6 +878,14 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   async function run(): Promise<void> {
     if (stopped || inFlight) return;
 
+    // A-28.1: switched off means no request at all. The takt keeps ticking so that switching
+    // it on again takes effect at the next interval without a restart.
+    if (!allowedByUser()) {
+      state = { state: 'unknown' };
+      schedule(intervalMs);
+      return;
+    }
+
     /*
      * **Die erste Prüfung eines Prozeßlaufs geht immer hinaus** (T-285).
      *
@@ -1037,7 +1079,7 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   }
 
   return {
-    current: () => state,
+    current: () => (allowedByUser() ? state : { state: 'unknown' }),
 
     start(): void {
       if (stopped || started) return;

@@ -1,77 +1,40 @@
 /**
- * Takt — warum „Neue Aufgabe anlegen" gesperrt ist (V-11 aus T-154).
+ * Why the main button of the task pane is disabled (V-11 from T-154, A-10.11).
  *
- * ## Der Befund
+ * `blocked` and the sentence below the button come from one calculation:
+ * `blocked` is true exactly when `reason` is set. Two separate expressions are
+ * how a disabled button without a reason comes about. No JSX, so `proof:addin`
+ * section 19f can run every case without rendering the pane.
  *
- * Der Hauptknopf des Aufgabenbereichs hatte **vier** Sperrgründe und nannte
- * **keinen**. Zwei davon tragen eine Meldung an ihrem Feld (Call-Nummer,
- * Frist), zwei hatten überhaupt keine (leerer Titel, Dienst nicht bereit). Ein
- * gesperrter Hauptknopf ohne Begründung ist die Fläche, an der ein Benutzer
- * stehenbleibt — und im Aufgabenbereich ist das teurer als in der
- * Hauptanwendung: Er lebt in einem Outlook-Fenster an einer bestimmten
- * Nachricht, und es gibt keine zweite Fläche, auf der sich die Antwort finden
- * ließe.
- *
- * T-165 hat denselben Punkt aus der anderen Richtung bestätigt: Der lange
- * Hinweis am Fristfeld trägt „leer lassen heißt: keine Frist" **auch deshalb**,
- * weil ein Benutzer vor einem gesperrten Knopf das einzige leere Feld
- * verdächtigt. Diese Datei nimmt dem Hinweis diese Last ab.
- *
- * ## Warum das eine Rechnung ist und keine zwei
- *
- * `disabled` und der Satz darunter kommen aus **einem** Aufruf. Zwei Ausdrücke
- * nebeneinander — einer für die Sperre, einer für ihre Begründung — sind die
- * Bauart, aus der ein gesperrter Knopf ohne Grund oder ein Grund ohne Sperre
- * entsteht; dieselbe Klasse wie C-03, nur innerhalb einer Datei. Deshalb gilt
- * hier: **`blocked` ist genau dann wahr, wenn `reason` dasteht.**
- *
- * Ohne JSX, aus demselben Grund wie {@link ./field.ts}: Der Nachweispfad
- * (`proof:addin`, Abschnitt 19) kann die Rechnung über alle Fälle laufen
- * lassen, ohne den Aufgabenbereich zu zeichnen.
- *
- * ## Was hier **nicht** passiert
- *
- * Die Sperre wird nicht gelockert. T-154 Abschnitt 3.3 hat sie ausdrücklich
- * als die richtige Härte bestätigt — sie ersetzt keine Prüfung, denn die Tür
- * des Dienstes misst dieselben Werte noch einmal gegen dieselbe Regel aus
- * `@takt/domain`. Hinzu kommt allein die Auskunft.
+ * The gate does not replace a check: the service door validates the same
+ * values again against the same rules from `@takt/domain`.
  */
 
-/** Der Ladezustand des Aufgabenbereichs, so weit er die Sperre angeht. */
+/** The loading state of the task pane, as far as the gate is concerned. */
 export type Connection = 'loading' | 'ready' | 'failed';
 
 export interface CreateTodoInputs {
-  /** Der Feldinhalt, ungeschnitten — getrimmt wird hier. */
+  /** The raw field value; trimmed here. */
   readonly title: string;
   readonly connection: Connection;
-  /** Die Meldung am Call-Nummer-Feld, oder `null`, wenn dort nichts steht. */
+  /** The message at the call number field, or `null` when there is none. */
   readonly callNumberProblem: string | null;
-  /** Steht im Fristfeld etwas, das kein Tag ist? (`readDueDate` → `invalid`) */
+  /** Does the deadline field hold something that is not a day? */
   readonly dueDateInvalid: boolean;
+  /** Several todos match and none is chosen yet (A-10.11: ambiguous matches require a choice). */
+  readonly targetChoiceMissing: boolean;
 }
 
 export interface CreateTodoGate {
   readonly blocked: boolean;
-  /**
-   * Der **erste** offene Grund, als ganzer Satz — oder `null`.
-   *
-   * Einer und nicht alle: Vier Sätze unter einem Knopf sind eine Liste, die
-   * niemand liest, und der Benutzer räumt sie ohnehin nacheinander weg. Nach
-   * jedem behobenen Grund steht der nächste da.
-   */
+  /** The first open reason as a whole sentence, or `null`. One, not all: the user clears them in turn. */
   readonly reason: string | null;
 }
 
-/**
- * Der Satz je Grund — kurz, ohne Anrede (E-078, E-080 Punkt 4).
- *
- * Zwei der Gründe haben ihre ausführliche Meldung bereits am Feld
- * (`CALL_NUMBER_INPUT_MESSAGE`, `DUE_DATE_MESSAGE`, beide aus der Domäne). Der
- * Satz hier wiederholt sie nicht, er **zeigt auf sie**: Er sagt, welches Feld
- * den Knopf hält, und das Feld sagt, was daran nicht stimmt.
- */
+/** One short sentence per reason, without address (E-078, E-080 point 4). */
 const REASON = Object.freeze({
   call_number: 'Die Call-Nummer stimmt noch nicht.',
+  target_choice: 'Mehrere Todos passen. Bitte eines auswählen.',
   title: 'Der Titel fehlt.',
   due_date: 'Die Frist stimmt noch nicht.',
   loading: 'Die Tags werden noch geladen.',
@@ -79,36 +42,26 @@ const REASON = Object.freeze({
 });
 
 /**
- * Sperre und Grund in einem.
+ * Block and reason in one.
  *
- * **Die Reihenfolge ist die Lesereihenfolge der Fläche** — Call-Nummer, Titel,
- * Frist, und danach der Zustand der Verbindung. Sie ist kein Rang nach
- * Schwere: Wer von oben nach unten liest, findet den genannten Grund dort, wo
- * er zuerst hinsieht.
- *
- * Die Verbindung steht **zuletzt**, obwohl ohne sie nichts entsteht. Sie ist
- * der einzige Grund, der schon eine eigene sichtbare Fläche hat (Ladebild
- * beziehungsweise Meldung an der Stelle der Tagauswahl); als letzter Grund
- * erscheint der Satz genau dann, wenn er der einzige ist — und dann trägt er.
+ * The order is the reading order of the pane (call number, the matching todos
+ * right below it, title, deadline), followed by the connection. The connection
+ * comes last because it already has its own visible surface in the tag field.
  */
 export function createTodoGate({
   title,
   connection,
   callNumberProblem,
   dueDateInvalid,
+  targetChoiceMissing,
 }: CreateTodoInputs): CreateTodoGate {
-  const reason =
-    callNumberProblem !== null
-      ? REASON.call_number
-      : title.trim().length === 0
-        ? REASON.title
-        : dueDateInvalid
-          ? REASON.due_date
-          : connection === 'loading'
-            ? REASON.loading
-            : connection === 'failed'
-              ? REASON.failed
-              : null;
+  let reason: string | null = null;
+  if (callNumberProblem !== null) reason = REASON.call_number;
+  else if (targetChoiceMissing) reason = REASON.target_choice;
+  else if (title.trim().length === 0) reason = REASON.title;
+  else if (dueDateInvalid) reason = REASON.due_date;
+  else if (connection === 'loading') reason = REASON.loading;
+  else if (connection === 'failed') reason = REASON.failed;
 
   return { blocked: reason !== null, reason };
 }

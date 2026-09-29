@@ -7,6 +7,8 @@ import { useToasts } from "../../app/ToastContext";
 import { useAsync, useMutation } from "../../app/useAsync";
 import { plural } from "../../lib/format";
 import { listDefaultTags, setDefaultTags } from "./api";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { settingsTexts } from "./texts";
 /* Standard-Tags (S-10, I-12)                                           */
 
 export function DefaultTagSettings() {
@@ -18,10 +20,12 @@ export function DefaultTagSettings() {
   const current = useAsync(() => listDefaultTags(), []);
   const value = selected ?? (current.state.status === "ready" ? current.state.value.map((tag) => tag.tagId) : []);
 
+  const text = settingsTexts();
+
   return (
     <Card
-      title="Standard-Tags"
-      description="Auch aus dem Add-in."
+      title={text.defaultTags}
+      description={text.defaultTagsLead}
       actions={
         <Button
           variant="primary"
@@ -32,11 +36,11 @@ export function DefaultTagSettings() {
               await setDefaultTags(value);
               setSelected(null);
               current.reload();
-              toasts.success("Standard-Tags gespeichert.");
+              toasts.success(settingsTexts().defaultTagsSaved);
             });
           }}
         >
-          Speichern
+          {text.save}
         </Button>
       }
     >
@@ -44,28 +48,28 @@ export function DefaultTagSettings() {
         <EmptyState
           compact
           icon="tag"
-          title="Noch kein Tag"
-          description="Legen Sie unten unter „Tags und Ordner“ einen Tag an. Danach können Sie ihn hier als Standard auswählen."
+          title={text.noTagYet}
+          description={text.noTagYetBody}
 
         />
       ) : (
         <TagInput
-          label="Standard-Tags"
+          label={text.defaultTags}
           hideLabel
           value={value}
           onChange={setSelected}
-          placeholder="Tag suchen …"
+          placeholder={text.searchTag}
           hint={
             value.length === 0
-              ? "Kein Standard-Tag gesetzt. Neue Todos entstehen ohne Tags — Regeln, die Tags verlangen, treffen sie damit zunächst nicht."
-              : `${plural(value.length, "Tag wird", "Tags werden")} an jedes neue Todo gehängt.`
+              ? text.noDefaultTag
+              : text.attachedToEveryTodo(plural(value.length, text.tagIs, text.tagsAre))
           }
         />
       )}
 
       {mutation.error === null ? null : (
-        <InlineMessage tone="danger" title="Die Standard-Tags wurden nicht gespeichert">
-          {mutation.error}
+        <InlineMessage tone="danger" title={text.defaultTagsNotSaved}>
+          <ServiceText text={mutation.error} fromService={mutation.errorFromService} />
         </InlineMessage>
       )}
     </Card>

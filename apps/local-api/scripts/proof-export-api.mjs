@@ -1,4 +1,4 @@
-import { waitForPortFree } from './port-probe.mjs';
+import { checkNoHardcodedPort, proofPort, waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis der beiden Erweiterungen aus T-033 (E-049, E-051).
  *
@@ -38,7 +38,6 @@ import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
-import { dienstEinstieg } from './source-resolve.mjs';
 
 /**
  * Die Liste des Motors — **eingebunden, nicht abgeschrieben**.
@@ -51,9 +50,13 @@ import { dienstEinstieg } from './source-resolve.mjs';
 const { EXPORT_SOURCE_PATHS, EXPORT_TRANSFORMATIONS } = await import('@takt/export');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
-const ENTRY = dienstEinstieg();
-const PORT = 17843;
+/*
+ * The proof entry, not `src/index.ts`: it starts the same `main()`, takes its port from
+ * TAKT_PROOF_PORT (E-121 point 8) and uses a release source that never leaves the process,
+ * so this run sends no request to GitHub (T-145-1).
+ */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
+const PORT = proofPort();
 
 /** Die Herkunft der Oberfläche im Entwicklungsbetrieb (config.ts). */
 const UI_ORIGIN = 'http://127.0.0.1:5173';
@@ -138,6 +141,9 @@ function call(path, { method = 'GET', token, origin = UI_ORIGIN, body, sammeln =
 }
 
 // Aufbau
+
+section('Port aus TAKT_PROOF_PORT, nicht hartkodiert (E-121 Punkt 8, T-397a)');
+await checkNoHardcodedPort(check, [fileURLToPath(import.meta.url), ENTRY]);
 
 if (!(await waitForPortFree(PORT))) {
   console.error(
@@ -649,7 +655,28 @@ try {
   );
   check(
     'und kein Token steht in der Protokollausgabe (B-2.4)',
-    !/takt_[A-Za-z0-9_-]{43}/.test(ausgabe),
+    !/takt_[A-Za-z0-9_-]{43}/.test(ausgabe) && !ausgabe.includes(secret),
+  );
+
+  /*
+   * W-6: the line above had nothing to find, because this run never put the secret where it
+   * could reach the log. Here it goes into the path on purpose; its log line is collected like
+   * MARKE above and must carry the redaction mark instead of the secret.
+   */
+  const imPfad = await get(`/${secret}`);
+  for (let versuch = 0; versuch < 60 && !`${stdout}\n${stderr}`.includes('/api/v1/takt_<geschwaerzt>'); versuch += 1) {
+    await sleep(50);
+  }
+  const ausgabeMitPfad = `${stdout}\n${stderr}`;
+  check('das Sitzungsgeheimnis im Pfad wird abgewiesen (400)', imPfad.status === 400, `Status ${imPfad.status}`);
+  check(
+    'seine Protokollzeile liegt vor und trägt takt_<geschwaerzt> statt des Geheimnisses (B-2.4)',
+    ausgabeMitPfad.split('\n').some((line) => line.includes('"path":"/api/v1/takt_<geschwaerzt>"') && line.includes('"status":400')),
+    ausgabeMitPfad.split('\n').filter((line) => line.includes('"status":400')).join(' | ').slice(0, 400),
+  );
+  check(
+    'und das Geheimnis selbst steht nirgends in der Ausgabe',
+    !ausgabeMitPfad.includes(secret) && !ausgabeMitPfad.includes(secret.slice(5)),
   );
 } finally {
   child.kill('SIGTERM');

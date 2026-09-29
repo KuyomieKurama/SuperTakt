@@ -249,6 +249,56 @@ output {
 /* Bewegungsvorbehalt                                                   */
 /* -------------------------------------------------------------------- */
 
+/* Die gespeicherte Bewegungsstufe überschreibt ausschließlich die zentralen
+   Tokens. So bleiben Interaktionen überall gleich schnell, statt je Fläche
+   eigene Dauern und Kurven zu erfinden. */
+:root {
+  --motion-instant: 80ms;
+  --motion-fast: 140ms;
+  --motion-base: 200ms;
+  --motion-slow: 280ms;
+  --motion-rise-y: 8px;
+  --motion-rise-scale: 0.98;
+  --motion-popover-y: -2px;
+  --motion-card-lift: 0px;
+  --motion-button-lift: 0px;
+  --motion-nav-shift: 0px;
+}
+
+:root[data-motion-intensity="reduced"] {
+  --motion-instant: 1ms;
+  --motion-fast: 1ms;
+  --motion-base: 1ms;
+  --motion-slow: 1ms;
+  --motion-rise-y: 0px;
+  --motion-rise-scale: 1;
+  --motion-popover-y: 0px;
+  --motion-card-lift: 0px;
+  --motion-button-lift: 0px;
+  --motion-nav-shift: 0px;
+}
+
+:root[data-motion-intensity="reduced"] *,
+:root[data-motion-intensity="reduced"] *::before,
+:root[data-motion-intensity="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-motion-intensity="expressive"] {
+  --motion-fast: 180ms;
+  --motion-base: 300ms;
+  --motion-slow: 300ms;
+  --motion-rise-y: 18px;
+  --motion-rise-scale: 0.94;
+  --motion-popover-y: -10px;
+  --motion-card-lift: -4px;
+  --motion-button-lift: -2px;
+  --motion-nav-shift: 5px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

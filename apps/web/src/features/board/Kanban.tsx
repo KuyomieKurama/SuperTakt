@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import type { CalendarDay, ForeignText } from "../../api/types";
 import { cx } from "../../lib/cx";
-import { DONE_FLAG_LABEL, doneFlagState } from "../../lib/labels";
+import { doneFlagState, labels } from "../../lib/labels";
+import { boardTexts } from "./texts";
 import { DeadlineFlag } from "../../shared/ui/DeadlineFlag";
 import type { ExportSummary } from "../../shared/ui/ExportStatus";
 import { ExportSummaryStrip } from "../../shared/ui/ExportSummaryStrip";
@@ -76,7 +77,8 @@ export interface KanbanCardData {
   readonly callNumber: ForeignText | null;
   readonly tags: readonly KanbanTagRef[];
   readonly tagCount?: number;
-  readonly priorityName?: ForeignText;
+  /** The todo's priority; `weight` decides the arrow (only a positive weight points up). */
+  readonly priority?: { readonly name: ForeignText; readonly weight: number };
   /** Bereits formatierte Gesamtdauer, zum Beispiel "4:15 h". */
   readonly trackedDisplay: string;
   readonly exportSummary: ExportSummary;
@@ -145,6 +147,7 @@ export function KanbanCard({
   today,
 }: KanbanCardProps) {
   const [tagsOpen, setTagsOpen] = useState(false);
+  const text = boardTexts();
   const cardFlagState = doneFlagState(card.done, card.reactivated === true);
   const others = card.appearance?.otherColumns ?? [];
 
@@ -179,7 +182,7 @@ export function KanbanCard({
             />
             {/* Die Woerter stehen in `lib/labels.ts`, damit die Karte nicht
                 etwas anderes sagt als die Zeile daneben (Befund C-23). */}
-            {DONE_FLAG_LABEL[cardFlagState]}
+            {labels().doneFlag[cardFlagState]}
           </span>
           {/*
             Die dritte Marke, und sie ist die einzige, die **fehlen** darf: Ein
@@ -203,18 +206,22 @@ export function KanbanCard({
             className={cx("kcard__also", highlighted && "kcard__also--on")}
             aria-pressed={highlighted}
             onClick={onHighlight}
-            title={`Dieselbe Karte steht auch in: ${others.map(foreignText).join(", ")}`}
+            title={text.alsoInTitle(others.map(foreignText).join(", "))}
           >
             <Icon name="copy" size={12} />
             <span>
-              Steht auch in {others.length === 1 ? "" : `${String(others.length)} Spalten: `}
-              {others.map((name) => `${quotedName(name)}`).join(", ")}
+              {text.alsoIn(others.length, others.map((name) => quotedName(name)).join(", "))}
             </span>
           </button>
         ) : null}
 
         <div className="kcard__tags">
-          {card.priorityName ? <span className="kcard__priority"><Icon name="arrow-up" size={12} /><Foreign value={card.priorityName} /></span> : null}
+          {card.priority ? (
+            <span className="kcard__priority">
+              {card.priority.weight > 0 ? <Icon name="arrow-up" size={12} /> : null}
+              <Foreign value={card.priority.name} />
+            </span>
+          ) : null}
           <TodoTagsCell count={card.tagCount ?? card.tags.length} tags={card.tags.map(tag => ({ name: tag.label, path: tag.path ?? [] }))} open={tagsOpen} onOpenChange={setTagsOpen} />
         </div>
 
@@ -230,7 +237,7 @@ export function KanbanCard({
             ihn zu sehen, geaendert wird er in S-02 und S-03. Das Kartenmenue
             fuehrt dorthin. */}
         <p className="kcard__status">
-          <span className="kcard__status-label">Status</span>
+          <span className="kcard__status-label">{text.status}</span>
           <Foreign className="kcard__status-value" value={card.statusName} />
         </p>
       </div>
@@ -242,8 +249,8 @@ export function KanbanCard({
              Bereich. */
           label={
             card.timerRunning
-              ? `Timer für ${quotedName(card.title)} stoppen`
-              : `Timer für ${quotedName(card.title)} starten`
+              ? text.stopTimer(quotedName(card.title))
+              : text.startTimer(quotedName(card.title))
           }
           icon={card.timerRunning ? "square" : "play"}
           size="sm"
@@ -252,7 +259,7 @@ export function KanbanCard({
         />
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Aktionen für ${foreignText(card.title)}`}
+          triggerLabel={text.cardActions(foreignText(card.title))}
           triggerClassName="kcard__menu"
           align="end"
           entries={entries}
@@ -298,12 +305,13 @@ export function KanbanColumn({
   addLabel,
   children,
 }: KanbanColumnProps) {
+  const text = boardTexts();
   const full = total ?? count;
   const partial = full > count;
   const accessibleName = [
-    `Spalte ${foreignText(title)}`,
-    partial ? `${String(count)} von ${String(full)} Karten geladen` : `${String(full)} Karten`,
-    doneCount === 0 ? null : `davon ${String(doneCount)} erledigt`,
+    text.columnName(foreignText(title)),
+    partial ? text.cardsLoaded(count, full) : text.cardsTotal(full),
+    doneCount === 0 ? null : text.ofWhichDone(doneCount),
   ]
     .filter((part): part is string => part !== null)
     .join(", ");
@@ -318,7 +326,7 @@ export function KanbanColumn({
           {doneCount > 0 ? (
             <p className="kcolumn__done-count" aria-hidden>
               <Icon name="check" size={11} />
-              {doneCount} erledigt
+              {text.doneCount(doneCount)}
             </p>
           ) : null}
         </div>
@@ -327,7 +335,7 @@ export function KanbanColumn({
         </span>
         {onAdd !== undefined ? (
           <IconButton
-            label={addLabel ?? `Todo in ${foreignText(title)} anlegen`}
+            label={addLabel ?? text.addInTitle(foreignText(title))}
             icon="plus"
             size="sm"
             onClick={onAdd}
@@ -335,7 +343,7 @@ export function KanbanColumn({
         ) : null}
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Spalte ${foreignText(title)} verwalten`}
+          triggerLabel={text.manageColumn(foreignText(title))}
           triggerClassName="kcolumn__menu"
           align="end"
           entries={entries}

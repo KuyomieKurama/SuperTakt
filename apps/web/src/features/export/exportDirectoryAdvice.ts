@@ -51,6 +51,7 @@ import {
   shapeOf,
   syncFolderEvidence,
 } from "../../lib/pathInspection";
+import { exportTexts } from "./texts";
 
 /* Gestalt                                                              */
 
@@ -198,8 +199,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
         {
           kind: "not_absolute",
           verdict: "reject",
-          title: "Das ist kein vollständiger Pfad",
-          body: "SuperTakt braucht den ganzen Weg zum Ordner — unter Windows mit Laufwerksbuchstaben, etwa C:\\Takt\\Export. Ein Pfad ohne Anfang zeigt je nach Arbeitsverzeichnis woandershin.",
+          title: exportTexts().directoryAdvice.not_absolute.title,
+          body: exportTexts().directoryAdvice.not_absolute.body,
           evidence: path,
         },
       ],
@@ -211,8 +212,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "drive_root",
       verdict: "reject",
-      title: "Das ist die Wurzel eines Laufwerks",
-      body: "Dorthin schreibt SuperTakt nicht. Exportdateien in der Laufwerkswurzel sind für jedes Programm sichtbar, das das Laufwerk durchsucht, und lassen sich später von den Dateien des Systems nicht mehr auseinanderhalten. Legen Sie einen eigenen Unterordner an.",
+      title: exportTexts().directoryAdvice.drive_root.title,
+      body: exportTexts().directoryAdvice.drive_root.body,
       evidence: shape.kind === "windows" ? `${shape.anchor}\\` : "/",
     });
   }
@@ -226,8 +227,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
       found.push({
         kind: "system_directory",
         verdict: "reject",
-        title: "Das ist ein Verzeichnis des Betriebssystems",
-        body: "Dorthin gehört nichts, was SuperTakt schreibt. Der Export enthält Kundendaten, die in einem Systemordner niemand vermutet und die dort bei der nächsten Aktualisierung oder Bereinigung ohne Vorwarnung verschwinden können. Wählen Sie einen Ordner unter Ihrem Benutzerprofil.",
+        title: exportTexts().directoryAdvice.system_directory.title,
+        body: exportTexts().directoryAdvice.system_directory.body,
         evidence: shape.kind === "windows" ? `${shape.anchor}\\${first}` : `/${first}`,
       });
     }
@@ -239,8 +240,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "network_share",
       verdict: "confirm",
-      title: "Dieser Ordner liegt nicht auf diesem Rechner",
-      body: "Die Exportdatei enthält lesbare Kundennotizen und verlässt damit diesen Rechner — bei einem Produkt, das laut E-001 vollständig lokal arbeitet. Und der Export schlägt fehl, sobald die Verbindung gerade nicht steht: Das Laufwerk ist getrennt, der Server nicht erreichbar, das Notebook nicht im Firmennetz. Wenn das Ihr Übergabeweg an die Abrechnung ist, ist es der richtige Ordner — dann wissen Sie jetzt, was darin liegt.",
+      title: exportTexts().directoryAdvice.network_share.title,
+      body: exportTexts().directoryAdvice.network_share.body,
       evidence: networkEvidence,
     });
   }
@@ -251,8 +252,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "sync_folder",
       verdict: "confirm",
-      title: "Dieser Ordner wird in einen Onlinespeicher synchronisiert",
-      body: "Alles, was SuperTakt hier ablegt, wird kurz darauf hochgeladen — automatisch, ohne weitere Rückfrage und ohne dass es jemand sieht. Die Exportdatei enthält lesbare Kundennotizen; Base64 ist eine Kodierung, keine Verschlüsselung. Damit liegen die Daten Ihrer Kunden bei einem Anbieter, und die Entscheidung dafür trifft man besser hier als später beim Aufräumen.",
+      title: exportTexts().directoryAdvice.sync_folder.title,
+      body: exportTexts().directoryAdvice.sync_folder.body,
       evidence: syncSegment,
     });
   }
@@ -263,8 +264,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "roaming_profile",
       verdict: "confirm",
-      title: "Dieser Ordner gehört zum servergespeicherten Profil",
-      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Die Exportdateien mit ihren lesbaren Kundennotizen wandern dann mit. Genau deswegen liegen die Daten von SuperTakt unter AppData\\Local (E-018) — dort bleiben sie auf diesem Rechner.",
+      title: exportTexts().directoryAdvice.roaming_profile.title,
+      body: exportTexts().directoryAdvice.roaming_profile.body,
       evidence: roamingEvidence,
     });
   }
@@ -283,8 +284,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "redirected_folder",
       verdict: "warn",
-      title: "Dieser Ordner ist auf verwalteten Rechnern häufig nach OneDrive umgeleitet",
-      body: "Desktop, Dokumente und Bilder werden auf geschäftlichen Windows-Rechnern regelmäßig über „Bekannte Ordner verschieben“ in OneDrive gelegt. Von außen sieht der Pfad unverändert aus. Prüfen Sie im Explorer, ob der Ordner ein Wolkensymbol trägt — wenn ja, gehen die Exportdateien in den Onlinespeicher.",
+      title: exportTexts().directoryAdvice.redirected_folder.title,
+      body: exportTexts().directoryAdvice.redirected_folder.body,
       evidence: redirected,
     });
   }
@@ -294,8 +295,8 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
     found.push({
       kind: "volatile_folder",
       verdict: "warn",
-      title: "Der Downloads-Ordner wird von Aufräumwerkzeugen geleert",
-      body: "Windows-Speicheroptimierung und die meisten Bereinigungswerkzeuge löschen hier ohne Rückfrage. Eine Exportdatei, die noch nicht in der Abrechnung angekommen ist, wäre dann weg — und die Buchungen darin sind bereits als exportiert markiert.",
+      title: exportTexts().directoryAdvice.volatile_folder.title,
+      body: exportTexts().directoryAdvice.volatile_folder.body,
       evidence: "Downloads",
     });
   }

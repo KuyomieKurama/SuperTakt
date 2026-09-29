@@ -354,17 +354,67 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     const { database, context } = await setup();
     opened = database;
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15, now: NOW });
+      await unit.settings.update({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', motionIntensity: 'expressive', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15, now: NOW });
     });
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(10);
+    expect(archive.schemaVersion).toBe(12);
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5, now: NOW });
+      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', motionIntensity: 'subtle', promptOnTimerStop: true, idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5, now: NOW });
     });
     expect((await importDataArchive(context, archive)).ok).toBe(true);
     await database.transactions.inTransaction(async (unit) => {
-      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15 });
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', motionIntensity: 'expressive', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15 });
     });
+  });
+
+  it('A-28.1/A-28.2: eine Fassung-10-Sicherung liest neue Darstellungswerte als Vorgabe; Fassung 12 überlebt abweichende Werte im Rundlauf; Fassung 13 wird abgewiesen (T-397)', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ versionCheckEnabled: false, uiLanguage: 'en', motionIntensity: 'expressive', now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    expect(archive.schemaVersion).toBe(12);
+    expect(archive.data.tables.app_setting[0]?.['version_check_enabled']).toBe(0);
+    expect(archive.data.tables.app_setting[0]?.['ui_language']).toBe('en');
+    expect(archive.data.tables.app_setting[0]?.['motion_intensity']).toBe('expressive');
+
+    // Fassung 10 kennt die beiden Spalten noch nicht — die Vorgabe greift (an/de).
+    const legacy = {
+      ...archive,
+      schemaVersion: 10,
+      data: {
+        ...archive.data,
+        tables: {
+          ...archive.data.tables,
+          app_setting: archive.data.tables.app_setting.map((row) => {
+            const { version_check_enabled: _a, ui_language: _b, motion_intensity: _c, ...rest } = row;
+            return rest;
+          }),
+        },
+      },
+    };
+    expect((await importDataArchive(context, legacy)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ versionCheckEnabled: true, uiLanguage: 'de', motionIntensity: 'subtle' });
+    });
+
+    // Fassung 12 mit ausdrücklich abweichenden Werten überlebt den Rundlauf unverändert.
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ versionCheckEnabled: false, uiLanguage: 'en', motionIntensity: 'expressive', now: NOW });
+    });
+    const archiveV12 = await exportDataArchive(context);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ versionCheckEnabled: true, uiLanguage: 'de', motionIntensity: 'reduced', now: NOW });
+    });
+    expect((await importDataArchive(context, archiveV12)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ versionCheckEnabled: false, uiLanguage: 'en', motionIntensity: 'expressive' });
+    });
+
+    // Fassung 13 liegt über der höchsten lesbaren und wird abgewiesen, nicht geraten.
+    const tooNew = { ...archive, schemaVersion: 13 };
+    expect((await importDataArchive(context, tooNew)).ok).toBe(false);
   });
 
   it('T-280/T-279: last_version_check_at nimmt am Round-Trip teil — Export, Bestandsänderung, Import stellen denselben Wert wieder her (A-20.4, Migration 0022)', async () => {
@@ -623,7 +673,7 @@ describe('A-19.34 — die Bytes der übernommenen Dateien reisen mit dem Archiv 
     });
 
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(10);
+    expect(archive.schemaVersion).toBe(12);
     expect(archive.data.files).toHaveLength(1);
     expect(archive.data.files[0]?.base64).toBe(bytes.toString('base64'));
     // Die Bytes sind da — die Sicherung meldet keinen Verlust.
@@ -727,7 +777,7 @@ describe('T-301/T-305 — die alte Richtung: eine Fassung-6-Sicherung überschre
     });
 
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(10);
+    expect(archive.schemaVersion).toBe(12);
     expect(archive.data.tables.app_setting[0]?.['idle_keep_timer_running']).toBe(0);
 
     // Der Bestand ändert sich, bevor die Sicherung wieder eingespielt wird —
@@ -762,7 +812,7 @@ describe('parseArchive — die neun Abweisungen aus T-301 Abschnitt 4 (Fassung 6
   type Mutator = (archive: TaktDataArchive) => unknown;
 
   const CASES: readonly (readonly [string, Mutator])[] = [
-    ['Fassung 11 — über der höchsten lesbaren', (a) => ({ ...a, schemaVersion: 11 })],
+    ['Fassung 13 — über der höchsten lesbaren', (a) => ({ ...a, schemaVersion: 13 })],
     ['Fassung 0', (a) => ({ ...a, schemaVersion: 0 })],
     ['die Fassung als Zeichenkette "6" statt einer Zahl', (a) => ({ ...a, schemaVersion: '6' })],
     [

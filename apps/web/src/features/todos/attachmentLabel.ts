@@ -1,4 +1,8 @@
-import { INDIRECT_EXTENSIONS, attachmentLabel as domainAttachmentLabel } from "@takt/domain";
+import {
+  INDIRECT_EXTENSIONS,
+  attachmentLabel as domainAttachmentLabel,
+  hasPathStreamSeparator,
+} from "@takt/domain";
 import type {
   ForeignText,
   UncappedText,
@@ -7,6 +11,7 @@ import type {
   Attachment,
   AttachmentKind,
 } from "./api";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — die Bezeichnung eines Anhangs und die Wörter der Rückfrage
@@ -212,17 +217,6 @@ export function effectiveFileNameOf(path: ForeignText): UncappedText {
 }
 
 /**
- * Trägt der Dateiname einen Doppelpunkt? (A-A-28.)
- *
- * Gefragt wird nur der **Dateiname**, damit der Laufwerksbuchstabe (`C:`) nicht
- * mitfällt. Dieselbe Frage stellt `has_stream_separator` in `attachment.rs` —
- * dort als Abweisung, hier nur als Wortwahl.
- */
-function hasStreamSeparator(path: ForeignText): boolean {
-  return fileNameOf(path).includes(":");
-}
-
-/**
  * Die Endung eines Pfades, kleingeschrieben und ohne Punkt. Leer, wenn es
  * keine gibt — `readme` hat keine.
  *
@@ -239,7 +233,8 @@ function hasStreamSeparator(path: ForeignText): boolean {
  */
 export function extensionOf(path: ForeignText): UncappedText {
   const name = effectiveFileNameOf(path);
-  if (hasStreamSeparator(path)) return "";
+  // The domain asks the same question as `has_stream_separator` in attachment.rs (A-A-28).
+  if (hasPathStreamSeparator(path)) return "";
   const dot = name.lastIndexOf(".");
   if (dot === -1 || dot === name.length - 1) return "";
   /*
@@ -290,7 +285,7 @@ export type ForeseeableRefusal = "path_stream_separator" | "path_indirect_extens
  * die Endung. Ein Name mit Doppelpunkt hat keine beurteilbare Endung mehr.
  */
 export function foreseeableRefusalOf(path: ForeignText): ForeseeableRefusal | null {
-  if (hasStreamSeparator(path)) return "path_stream_separator";
+  if (hasPathStreamSeparator(path)) return "path_stream_separator";
   if (INDIRECT_EXTENSIONS.includes(extensionOf(path))) return "path_indirect_extension";
   return null;
 }
@@ -316,6 +311,10 @@ export function foreseeableRefusalOf(path: ForeignText): ForeseeableRefusal | nu
  * eigenen Kopfkommentar — die Behandlung bleibt Sache der Anzeige.
  */
 export function attachmentLabel(attachment: Attachment): UncappedText {
+  // Without any name the domain falls back to a German kind word; the UI uses its
+  // own key instead (E-121 point 9, `attachmentLabel` in packages/domain).
+  const ownName = (attachment.title ?? "").trim() + (attachment.displayName ?? "").trim();
+  if (ownName === "" && attachment.target === "") return attachmentKindLabel(attachment.kind);
   return domainAttachmentLabel(
     attachment.kind,
     attachment.title,
@@ -324,21 +323,15 @@ export function attachmentLabel(attachment: Attachment): UncappedText {
   );
 }
 
-/** „Verweis", „Bild", „Datei" — die Wörter aus A-19.9, an einer Stelle. */
-export const ATTACHMENT_KIND_LABEL: Readonly<Record<AttachmentKind, string>> = {
-  link: "Verweis",
-  image: "Bild",
-  file: "Datei",
-};
+/** „Verweis", „Bild", „Datei" — the words of A-19.9, in one place. */
+export function attachmentKindLabel(kind: AttachmentKind): string {
+  return todoTexts().attachmentKind[kind];
+}
 
 /**
- * Die Beschriftung des Pflichtfeldes je Art (A-19.10, wörtlich).
- *
- * Verweis → **Adresse**, Bild → **Bild**, Datei → **Dateipfad**. Nicht „URL",
- * nicht „Link", nicht „Pfad", nicht „Speicherort".
+ * The label of the required field per kind (A-19.10, literally): Verweis →
+ * Adresse, Bild → Bild, Datei → Dateipfad.
  */
-export const ATTACHMENT_VALUE_LABEL: Readonly<Record<AttachmentKind, string>> = {
-  link: "Adresse",
-  image: "Bild",
-  file: "Dateipfad",
-};
+export function attachmentValueLabel(kind: AttachmentKind): string {
+  return todoTexts().attachmentValue[kind];
+}

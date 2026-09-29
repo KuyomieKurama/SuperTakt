@@ -47,7 +47,7 @@
  *
  *      | Paar                            | Wirkung               | Aufrufer |
  *      |---------------------------------|-----------------------|----------|
- *      | {@link bookingMovementStates}   | `BOOKING_EFFECT`      | Buchung aus dem Add-in (Ankündigung und Bestätigung), `POST /timer/start`, wenn er einen Timer desselben Todos verdrängt |
+ *      | {@link bookingMovementStates}   | `BOOKING_EFFECT`      | `POST /timer/start`, wenn er einen Timer desselben Todos verdrängt |
  *      | {@link closedEntryMovementStates} | `ENTRY_CLOSED_EFFECT` | `POST /timer/stop`, `POST /timer/orphaned/resolve`, `POST /time-entries` (E-061 Nachtrag, O-V) |
  *      | {@link completionMovementStates} | Erledigt-Achse        | `PUT`/`DELETE /todos/{todoId}/done`, `POST /timer/start` sonst |
  *
@@ -60,9 +60,9 @@
  *    ersten.** `POST /time-entries` legt eine abgeschlossene Buchung an und
  *    faßt `todo.completed_at` nicht an — kein Trigger tut es, und A-2.5
  *    spricht vom **Starten** der Zeiterfassung. Ihre Wirkung ist damit die des
- *    Stopps und nicht die des Add-ins, dessen Buchungsroute „Erledigt"
- *    ausdrücklich mit aufhebt (`clearDone` in derselben Transaktion). Der
- *    **Anlaß** des Satzes ist bei allen dreien `'booking'`.
+ *    Stopps. Der **Anlaß** des Satzes ist bei allen dreien `'booking'`.
+ *    (The add-in booking route, which also cleared "done", fell with E-120;
+ *    the add-in match answer no longer computes a movement, E-125.)
  *  - Die **Bewegung** rechnet `poolMovementNamer` aus, wie bisher.
  *
  * Keine Aufrufstelle bildet das Paar noch selbst.
@@ -336,10 +336,8 @@ export function completionMovementStates(
 /**
  * Der Ausschnitt der Speicherung, den diese Rechnung braucht.
  *
- * Zwei Methoden, und keine davon schreibt. Der Ausschnitt ist derselbe, den
- * `AddinUnit.pools` seit T-086 führt (`Pick<PoolPort, 'list' | 'resolveAxes'>`)
- * — absichtlich: Der Add-in-Dienst soll in Welle B auf diesen Anwendungsfall
- * umstellen können, ohne seinen Port-Ausschnitt anzufassen.
+ * Two methods, neither writes. The add-in service no longer uses this slice:
+ * it books nothing and computes no movement (E-120, E-125).
  */
 export interface PoolMovementUnit {
   readonly pools: Pick<PoolPort, 'list' | 'resolveAxes'>;

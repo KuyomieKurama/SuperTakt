@@ -1,0 +1,88 @@
+name: Windows installer
+
+# T-396, E-120: The Windows installer was never exercised outside a release.
+# This job builds the NSIS installer, installs it silently into a throwaway
+# directory, and checks that the task pane lands where the local service looks
+# for it (`<install dir>/taskpane/index.html`, see tauri.conf.json `resources`).
+# It does not sign anything and publishes nothing. `WindowsUser` with a domain
+# account and a screen reader stay a documented manual check (E-120).
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/local-api/**'
+      - 'apps/outlook-addin/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/windows-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    name: NSIS install and task pane path
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm install --frozen-lockfile
+
+      - name: Build the NSIS installer only
+        shell: bash
+        run: pnpm --filter @takt/desktop run app:build -- --bundles nsis
+
+      - name: Install silently and check the task pane path
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem -Path 'apps/desktop/src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'No NSIS installer was built.' }
+          $target = Join-Path $env:RUNNER_TEMP 'supertakt-install'
+          # NSIS expects /D last and unquoted.
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$target" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)." }
+          $pane = Join-Path $target 'taskpane\index.html'
+          if (-not (Test-Path $pane)) {
+            Get-ChildItem -Recurse $target | Select-Object -ExpandProperty FullName
+            throw "Task pane not found at $pane."
+          }
+          if ((Get-Item $pane).Length -eq 0) { throw 'Task pane index.html is empty (placeholder shipped).' }
+          $sidecar = Get-ChildItem -Path $target -Filter 'takt-local-api*.exe' -Recurse | Select-Object -First 1
+          if (-not $sidecar) { throw 'Local service binary not found next to the app.' }
+          Write-Output "Task pane: $pane"
+          Write-Output "Service:   $($sidecar.FullName)"
+
+      - name: Uninstall silently
+        if: always()
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'supertakt-install'
+          $uninstaller = Join-Path $target 'uninstall.exe'
+          if (Test-Path $uninstaller) {
+            Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait
+          }

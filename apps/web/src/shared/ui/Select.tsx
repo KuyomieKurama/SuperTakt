@@ -1,4 +1,4 @@
-import { useId, useMemo, type KeyboardEvent } from "react";
+import { useId, useMemo } from "react";
 import { Portal } from "@ark-ui/react/portal";
 import { Select as Ark, createListCollection } from "@ark-ui/react/select";
 import { cx } from "../../lib/cx";
@@ -6,6 +6,7 @@ import { Icon } from "./Icon";
 import type { ControlSize } from "./Primitives";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "./Foreign";
+import { labels } from "../../lib/labels";
 
 /**
  * Takt — Auswahlfeld (E-052, T-059).
@@ -91,19 +92,6 @@ export interface SelectProps<TValue extends string = string> {
   readonly className?: string;
 }
 
-/**
- * Escape und Tabulator gehören der geöffneten Liste, nicht dem Dialog dahinter.
- *
- * Die Liste hängt im Portal am Dokumentkörper, aber im React-Baum steht sie
- * weiterhin unter dem Feld — und damit unter dem Dialog. Ohne diese Bremse
- * schlösse ein Escape in der offenen Liste **beides**: Zag hat die Taste da
- * schon in der Erfassungsphase behandelt, und der Dialog bekäme sie danach
- * ein zweites Mal.
- */
-function stopClosingKeys(event: KeyboardEvent<HTMLElement>): void {
-  if (event.key === "Escape" || event.key === "Tab") event.stopPropagation();
-}
-
 export function Select<TValue extends string = string>({
   label,
   value,
@@ -114,7 +102,7 @@ export function Select<TValue extends string = string>({
   disabled = false,
   invalid = false,
   hint,
-  placeholder = "Bitte wählen",
+  placeholder = labels().nothingSelected,
   name,
   className,
 }: SelectProps<TValue>) {
@@ -209,9 +197,9 @@ export function Select<TValue extends string = string>({
 
       <Portal>
         <Ark.Positioner className="popover-layer">
-          <Ark.Content className="select__content" onKeyDown={stopClosingKeys}>
+          <Ark.Content className="select__content">
             {entries.length === 0 ? (
-              <p className="select__empty">Nichts zur Auswahl.</p>
+              <p className="select__empty">{labels().selectEmpty}</p>
             ) : (
               entries.map((entry, index) =>
                 isGroup(entry) ? (

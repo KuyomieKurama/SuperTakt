@@ -69,6 +69,8 @@ export interface RadioRowOption<TValue extends string> {
   readonly hint?: string;
   /** Dieser Wert schränkt nicht ein. Der Zusatz steht dann an der Beschriftung. */
   readonly neutral?: boolean;
+  /** Language of the label when it differs from the page, e.g. "English" in a German UI (WCAG 3.1.2). */
+  readonly lang?: string;
 }
 
 export interface RadioRowProps<TValue extends string> {
@@ -116,7 +118,7 @@ export function RadioRow<TValue extends string>({
                 {...(option.hint === undefined ? {} : { "aria-describedby": `${optionId}-hint` })}
               />
               {option.icon === undefined ? null : <Icon name={option.icon} size={16} />}
-              <span className="radio-row__label">{option.label}</span>
+              <span className="radio-row__label" lang={option.lang}>{option.label}</span>
               {option.neutral === true && neutralNote !== undefined ? (
                 <span className="radio-row__neutral">{neutralNote}</span>
               ) : null}

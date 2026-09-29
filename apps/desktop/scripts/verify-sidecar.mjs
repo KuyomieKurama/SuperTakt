@@ -439,13 +439,15 @@ try {
         `Status ${String(index.status)}${index.error ? `, ${index.error}` : ''}`,
       );
 
+      // The quick command ("Schnell in Inbox") and its `commands.html` fell with T-398c
+      // (E-134 point 2): it attached a foreign mail without the user's choice. The page must
+      // not be delivered any more — a leftover file in the bundle would be served again.
       const commands = await taskpaneRequestOrNull('/commands.html', ca);
-      check('Der echte Schnellbefehl wird aus dem gebauten Paket ausgeliefert', commands.status === 200 && /<script[^>]*src="[^"]*commands[^"]*\.js"/.test(commands.body), `Status ${commands.status}`);
-      const scriptPaths = [...commands.body.matchAll(/<script[^>]*src="([^"]+)"/g)].map(match => match[1]).filter(path => !path.startsWith('https:'));
-      for (const script of scriptPaths) {
-        const resource = await taskpaneRequestOrNull(new URL(script, 'https://localhost/commands.html').pathname, ca);
-        check(`Funktionsskript im Paket erreichbar: ${script}`, resource.status === 200 && resource.body.length > 0, `Status ${resource.status}`);
-      }
+      check(
+        'Der entfernte Schnellbefehl wird nicht mehr ausgeliefert: GET /commands.html ergibt 404',
+        commands.status === 404 && !/<script/i.test(commands.body),
+        `Status ${String(commands.status)}${commands.error ? `, ${commands.error}` : ''}`,
+      );
 
       const pem = await taskpaneRequestOrNull('/nicht-ausliefern.pem', ca);
       check(
@@ -461,8 +463,8 @@ try {
         `Status ${String(escape.status)}`,
       );
     } else {
-      failed += 3;
-      process.stdout.write('  ----  Die drei Prüfungen am Aufgabenbereich entfallen: Der Port kam nicht hoch.\n');
+      failed += 4;
+      process.stdout.write('  ----  Die vier Prüfungen am Aufgabenbereich entfallen: Der Port kam nicht hoch.\n');
     }
 
     // 18 — Rechte des Anwendungsdatenverzeichnisses (B-7.2)

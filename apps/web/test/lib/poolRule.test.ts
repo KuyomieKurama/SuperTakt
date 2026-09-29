@@ -45,6 +45,8 @@ function resolution(overrides: Partial<PoolResolution> = {}): PoolResolution {
     emptyRuleFolderIds: [],
     matchesNothing: false,
     ...overrides,
+    matchesNothingReason: overrides.matchesNothingReason
+      ?? (overrides.unresolvedRequired ? "unresolved_required" : overrides.isEmpty ? "empty" : "none"),
   };
 }
 

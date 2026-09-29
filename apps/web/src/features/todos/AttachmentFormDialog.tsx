@@ -5,7 +5,8 @@ import { createAttachment, type AttachmentKind } from "./api";
 import { chooseAttachmentFile } from "../../app/connection";
 import { useMutation } from "../../app/useAsync";
 import { useToasts } from "../../app/ToastContext";
-import { ATTACHMENT_VALUE_LABEL } from "./attachmentLabel";
+import { attachmentKindLabel, attachmentValueLabel } from "./attachmentLabel";
+import { todoTexts } from "./texts";
 import { Button } from "../../shared/ui/Primitives";
 import { FormDialog, TextField } from "../../shared/ui/FormDialog";
 import { RadioRow } from "../../shared/ui/RadioRow";
@@ -77,10 +78,8 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
     stünde die Meldung da, während der Benutzer im Systemdialog gerade dabei
     ist, sie zu erledigen.
   */
-  const valueError =
-    touched && !picking && trimmed.length === 0
-      ? `Ohne ${ATTACHMENT_VALUE_LABEL[kind]} lässt sich der Anhang nicht öffnen.`
-      : undefined;
+  const text = todoTexts();
+  const valueError = touched && !picking && trimmed.length === 0 ? text.valueMissing[kind] : undefined;
 
   const pick = useCallback(() => {
     setPicking(true);
@@ -93,7 +92,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
           setTouched(true);
           return;
         case "cancelled":
-          setPickerNote("Auswahl abgebrochen.");
+          setPickerNote(todoTexts().pickCancelled);
           return;
         case "unavailable":
           /*
@@ -101,7 +100,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
             das Textfeld daneben, und der Grund steht darunter (dieselbe Lehre
             wie am Exportordnerfeld, T-133).
           */
-          setPickerNote(`${choice.reason} Tragen Sie den vollständigen Pfad von Hand ein — SuperTakt prüft ihn genauso.`);
+          setPickerNote(todoTexts().typePathByHand(choice.reason));
       }
     });
   }, [kind]);
@@ -129,7 +128,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
         (E-059). Der Rückweg ist der Entfernen-Knopf in der Zeile, und der Toast
         sagt, dass es ihn gibt.
       */
-      toasts.success("Anhang hinzugefügt.", "Entfernen über das Papierkorbsymbol in der Zeile.");
+      toasts.success(todoTexts().attachmentAdded, todoTexts().attachmentAddedBody);
       onSaved();
       onClose();
     });
@@ -138,12 +137,13 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
   return (
     <FormDialog
       open={open}
-      title="Anhang hinzufügen"
-      description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört."
-      submitLabel="Hinzufügen"
+      title={text.addAttachment}
+      description={text.addAttachmentLead}
+      submitLabel={text.add}
       submitDisabled={trimmed.length === 0}
       busy={mutation.busy}
       error={mutation.error}
+      errorFromService={mutation.errorFromService}
       onSubmit={submit}
       onCancel={onClose}
     >
@@ -153,7 +153,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
         da, und der gewählte ist ohne Klick erkennbar.
       */}
       <RadioRow<AttachmentKind>
-        label="Art"
+        label={text.kind}
         className="attachment-kind"
         value={kind}
         onChange={(next) => {
@@ -163,39 +163,35 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
           setPickerNote(null);
         }}
         options={[
-          { value: "link", label: "Verweis", icon: "link" },
-          { value: "image", label: "Bild", icon: "image" },
-          { value: "file", label: "Datei", icon: "folder" },
+          { value: "link", label: attachmentKindLabel("link"), icon: "link" },
+          { value: "image", label: attachmentKindLabel("image"), icon: "image" },
+          { value: "file", label: attachmentKindLabel("file"), icon: "folder" },
         ]}
       />
 
       {kind === "link" ? (
         <TextField
-          label={ATTACHMENT_VALUE_LABEL.link}
+          label={attachmentValueLabel("link")}
           value={value}
           onChange={setValue}
           onTouched={() => setTouched(true)}
           required
           maxLength={2048}
-          placeholder="https://…"
-          hint="Nur „http“ und „https“. SuperTakt speichert die Adresse, nicht die Seite."
+          placeholder={text.linkPlaceholder}
+          hint={text.linkHint}
           {...(valueError === undefined ? {} : { error: valueError })}
         />
       ) : (
         <div className="attachment-pick">
           <TextField
-            label={ATTACHMENT_VALUE_LABEL[kind]}
+            label={attachmentValueLabel(kind)}
             value={value}
             onChange={setValue}
             onTouched={() => setTouched(true)}
             required
             maxLength={4096}
-            placeholder={kind === "image" ? "Pfad der Bilddatei" : "Vollständiger Pfad zur Datei"}
-            hint={
-              kind === "image"
-                ? "SuperTakt legt eine Kopie neben seinen Daten ab. Verschieben Sie die Quelle später, bleibt das Vorschaubild."
-                : "SuperTakt merkt sich den Pfad und kopiert nichts. Verschwindet die Datei, sagt der Anhang das."
-            }
+            placeholder={kind === "image" ? text.imagePathPlaceholder : text.filePathPlaceholder}
+            hint={kind === "image" ? text.imageHint : text.fileHint}
             {...(valueError === undefined ? {} : { error: valueError })}
           />
           <Button
@@ -205,7 +201,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
             onClick={pick}
             className="attachment-pick__button"
           >
-            Auswählen …
+            {text.choose}
           </Button>
         </div>
       )}
@@ -216,11 +212,11 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
       </p>
 
       <TextField
-        label="Titel"
+        label={text.title}
         value={title}
         onChange={setTitle}
         maxLength={200}
-        hint="Optional. Ohne Titel steht in der Liste ein lesbares Stück der Adresse beziehungsweise des Pfades."
+        hint={text.titleHint}
       />
     </FormDialog>
   );

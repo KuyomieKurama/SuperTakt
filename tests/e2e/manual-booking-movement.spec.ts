@@ -16,8 +16,11 @@
  * (`BookingFormDialog.submit`) den Satz aus `bookingSentence`
  * (`apps/web/src/lib/movement.ts`, letztlich `poolMovementSentence` aus
  * `@takt/domain`) an den Toast „Zeit gebucht auf „X“." — Titel nennt das
- * Todo, der Rumpf beginnt mit „Gebucht: <Dauer>." und trägt den Bewegungssatz
- * danach, oder gar nichts, wenn `poolMovement` bzw. der daraus gebildete Satz
+ * Todo, der Rumpf beginnt mit „Gebucht: <Dauer>.". Seit A-28.7 (T-400) folgt
+ * darauf, gleiche Bauart wie beim Timerstopp (`stopMessage.ts`,
+ * `text.openThatDay`), die Zeile der Tagesgruppe mit ihrem gerundeten
+ * Exportwert — und erst danach, oder gar nicht, der Bewegungssatz aus
+ * `bookingSentence`, wenn `poolMovement` bzw. der daraus gebildete Satz
  * `null` ist.
  *
  * Die Erwartung kommt aus der Domänenfunktion selbst (`@takt/domain`,
@@ -146,7 +149,14 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
       await expect(toast.locator('.toast__title')).toHaveText(`Zeit gebucht auf „${todo.title}“.`);
       // 45 Minuten ohne Sekundenrest — `formatDuration` (`lib/format.ts`)
       // liefert dafür `0:45 h`, kein `?? ''` und keine eigene Rechnung hier.
-      await expect(toast.locator('.toast__body')).toHaveText(`Gebucht: 0:45 h. ${expected}`);
+      // A-28.7 (T-400): Der Rumpf nennt zusätzlich die Tagesgruppe und ihren
+      // gerundeten Wert (`stopMessage.ts`, `text.openThatDay`). Diese erste
+      // Buchung ist zugleich die ganze offene Tagesgruppe: 45 Minuten sind
+      // exakt 3 Viertelstunden, auch im Standard-Rundungsmodus `up`
+      // (`0002_seed_defaults.up.sql`) — macht 0,75.
+      await expect(toast.locator('.toast__body')).toHaveText(
+        `Gebucht: 0:45 h. An diesem Tag sind für dieses Todo 0:45 h offen — das ergibt beim Export 0,75. ${expected}`,
+      );
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
       await deleteTodo(todo.id).catch(() => undefined);
@@ -206,9 +216,15 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
 
       const toast = page.locator('.toast').filter({ hasText: 'Zeit gebucht' });
       await expect(toast.locator('.toast__title')).toHaveText(`Zeit gebucht auf „${todo.title}“.`);
-      // Kein angehängter Satz — `withMovement` (`lib/movement.ts`) lässt den
-      // Rumpf bei `poolMovement: null` unverändert, kein Leerzeichen am Ende.
-      await expect(toast.locator('.toast__body')).toHaveText('Gebucht: 0:15 h.');
+      // Kein Bewegungssatz am Ende — `withMovement` (`lib/movement.ts`) lässt
+      // den Rumpf bei `poolMovement: null` unverändert, kein Leerzeichen dort.
+      // Die Tagesgruppe bekommt trotzdem ihre Zeile (A-28.7, T-400): Die
+      // Vorbuchung (20 Min.) und diese Buchung (15 Min.) ergeben zusammen
+      // 0:35 h offen, im Standard-Rundungsmodus `up` gerundet auf 3
+      // Viertelstunden = 0,75.
+      await expect(toast.locator('.toast__body')).toHaveText(
+        'Gebucht: 0:15 h. An diesem Tag sind für dieses Todo 0:35 h offen — das ergibt beim Export 0,75.',
+      );
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
       await deleteTodo(todo.id).catch(() => undefined);
@@ -272,9 +288,13 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
       await expect(toast.locator('.toast__title')).toHaveText(`Zeit gebucht auf „${todo.title}“.`);
       // `poolMovementSentence` mit einem Tripel, in dem `enters` und `leaves`
       // leer sind, liefert `null` für den Anlass `'booking'` (E-058-Tabelle,
-      // `appears` zählt dort nicht) — keine angehängte Zeile.
+      // `appears` zählt dort nicht) — kein Bewegungssatz am Ende. Die
+      // Tagesgruppe bekommt trotzdem ihre Zeile (A-28.7, T-400): 30 Minuten
+      // sind 2 Viertelstunden im Standard-Rundungsmodus `up` = 0,50.
       expect(poolMovementSentence(movement as PoolMovement, 'past', 'booking')).toBeNull();
-      await expect(toast.locator('.toast__body')).toHaveText('Gebucht: 0:30 h.');
+      await expect(toast.locator('.toast__body')).toHaveText(
+        'Gebucht: 0:30 h. An diesem Tag sind für dieses Todo 0:30 h offen — das ergibt beim Export 0,50.',
+      );
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
       await deleteTodo(todo.id).catch(() => undefined);

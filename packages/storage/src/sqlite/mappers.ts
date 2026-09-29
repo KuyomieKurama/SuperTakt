@@ -377,6 +377,7 @@ export function toTimeEntry(row: SqlRow): TimeEntry {
     exportStatus: text(row, 'export_status') === 'exported' ? 'exported' : 'open',
     exportCount: integer(row, 'export_count'),
     source: toSource(text(row, 'source')),
+    todoNoExport: row['todo_no_export'] === 1,
     createdAt: asTimestamp(text(row, 'created_at')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
@@ -486,6 +487,7 @@ export function toAppSettings(row: SqlRow): AppSettings {
     theme: toTheme(text(row, 'theme')),
     designTheme: DESIGN_THEMES.find(value => value === row['design_theme']) ?? 'classic',
     density: row['density'] === 'compact' ? 'compact' : 'comfortable',
+    motionIntensity: row['motion_intensity'] === 'reduced' || row['motion_intensity'] === 'expressive' ? row['motion_intensity'] : 'subtle',
     promptOnTimerStop: row['prompt_on_timer_stop'] !== 0,
     idleDetectionEnabled: row['idle_detection_enabled'] !== 0,
     idleKeepTimerRunning: row['idle_keep_timer_running'] !== 0,
@@ -505,6 +507,9 @@ export function toAppSettings(row: SqlRow): AppSettings {
      * vergleicht nicht `v1.2.3` gegen `1.2.3`.
      */
     skippedVersion: normalizeVersion(textOrNull(row, 'skipped_version')),
+    // Default on unless explicitly 0; `isEnabled` of the version-check port reads it the same way (E-132 point 4).
+    versionCheckEnabled: row['version_check_enabled'] !== 0,
+    uiLanguage: row['ui_language'] === 'en' ? 'en' : 'de',
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
 }

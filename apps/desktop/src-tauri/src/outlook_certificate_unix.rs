@@ -251,7 +251,7 @@ fn browser_stores(home: &Path) -> Vec<BrowserStore> {
 
 fn nss_installed(tool: &Path, store: &BrowserStore, certificate: &Certificate) -> bool {
     let database = format!("sql:{}", store.path.display());
-    let nickname = format!("SuperTakt localhost {}", certificate.fingerprint);
+    let nickname = format!("{NSS_NICKNAME_PREFIX}{}", certificate.fingerprint);
     let Ok(output) = execute(
         tool,
         &["-L", "-d", &database, "-n", &nickname, "-a"],
@@ -284,12 +284,59 @@ fn nss_installed(tool: &Path, store: &BrowserStore, certificate: &Certificate) -
         })
 }
 
+/// Prefix of every nickname this product writes. Everything after it is the fingerprint.
+const NSS_NICKNAME_PREFIX: &str = "SuperTakt localhost ";
+
+/// Nicknames written by an earlier certificate of this product (E-134 point 5, R-23).
+///
+/// A renewed certificate gets a new fingerprint and therefore a new nickname; without this the
+/// old one stays trusted for a full year. Only our own prefix is collected, never a foreign entry.
+fn stale_nss_nicknames(tool: &Path, database: &str, keep: &str) -> Result<Vec<String>, String> {
+    let list = execute(tool, &["-L", "-d", database], &[], Duration::from_secs(5))?;
+    if !list.status.success() {
+        return Err(TOOL_FAILED.into());
+    }
+    let mut stale = Vec::new();
+    for line in String::from_utf8_lossy(&list.stdout).lines() {
+        // The trust attributes are the last column; the nickname may contain spaces.
+        let trimmed = line.trim_end();
+        let Some(cut) = trimmed.rfind(char::is_whitespace) else {
+            continue;
+        };
+        let nickname = trimmed[..cut].trim_end();
+        if nickname.starts_with(NSS_NICKNAME_PREFIX) && nickname != keep {
+            stale.push(nickname.to_string());
+        }
+    }
+    Ok(stale)
+}
+
+fn remove_stale_nss(tool: &Path, database: &str, keep: &str) -> Result<(), String> {
+    for nickname in stale_nss_nicknames(tool, database, keep)? {
+        let output = execute(
+            tool,
+            &["-D", "-d", database, "-n", &nickname],
+            &[],
+            Duration::from_secs(5),
+        )?;
+        if !output.status.success() {
+            return Err(TOOL_FAILED.into());
+        }
+    }
+    Ok(())
+}
+
 fn install_nss(tool: &Path, store: &BrowserStore, certificate: &Certificate) -> Result<(), String> {
     use std::os::unix::fs::DirBuilderExt;
+    let database = format!("sql:{}", store.path.display());
+    let nickname = format!("{NSS_NICKNAME_PREFIX}{}", certificate.fingerprint);
+    // Before the early return: an entry for the current fingerprint does not remove an older one.
+    if store.path.join("cert9.db").is_file() {
+        remove_stale_nss(tool, &database, &nickname)?;
+    }
     if nss_installed(tool, store, certificate) {
         return Ok(());
     }
-    let database = format!("sql:{}", store.path.display());
     if !store.path.join("cert9.db").is_file() {
         // Missing shared database may be initialized only during the confirmed write command.
         fs::DirBuilder::new()
@@ -307,7 +354,6 @@ fn install_nss(tool: &Path, store: &BrowserStore, certificate: &Certificate) -> 
             return Err(TOOL_FAILED.into());
         }
     }
-    let nickname = format!("SuperTakt localhost {}", certificate.fingerprint);
     // P trusts this server certificate, not a certificate authority. Feed the checked bytes via stdin.
     let output = execute(
         tool,
@@ -337,6 +383,81 @@ fn trust_stores(home: &Path, certificate: &Certificate, install: bool) -> Result
     Ok((stores, failed))
 }
 
+/// SHA-1 hashes of earlier SuperTakt server certificates in the user keychain (E-134 point 5, R-23).
+///
+/// Only self-signed certificates with our own subject and a different SHA-256 fingerprint are
+/// collected; a foreign `localhost` certificate of another tool keeps its subject and stays.
+#[cfg(target_os = "macos")]
+fn stale_keychain_hashes(
+    security: &Path,
+    keychain: &str,
+    certificate: &Certificate,
+) -> Result<Vec<String>, String> {
+    // `-Z -p` prints both hashes and then the PEM block of every match; no match is not a failure.
+    let found = execute(
+        security,
+        &["find-certificate", "-a", "-c", "localhost", "-Z", "-p", keychain],
+        &[],
+        Duration::from_secs(10),
+    )?;
+    if !found.status.success() {
+        return Ok(Vec::new());
+    }
+    let text = String::from_utf8_lossy(&found.stdout);
+    let mut hashes = Vec::new();
+    let mut sha1: Option<String> = None;
+    let mut pem = String::new();
+    let mut inside = false;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("SHA-1 hash: ") {
+            sha1 = Some(value.trim().to_string());
+            continue;
+        }
+        if line.starts_with("-----BEGIN CERTIFICATE-----") {
+            inside = true;
+            pem.clear();
+        }
+        if !inside {
+            continue;
+        }
+        pem.push_str(line);
+        pem.push('\n');
+        if !line.starts_with("-----END CERTIFICATE-----") {
+            continue;
+        }
+        inside = false;
+        let Some(hash) = sha1.take() else { continue };
+        let Ok(stored) = inspect_certificate(pem.as_bytes()) else {
+            continue;
+        };
+        let usable = !hash.is_empty() && hash.chars().all(|character| character.is_ascii_hexdigit());
+        if usable && stored.subject == certificate.subject && stored.fingerprint != certificate.fingerprint {
+            hashes.push(hash);
+        }
+    }
+    Ok(hashes)
+}
+
+#[cfg(target_os = "macos")]
+fn remove_stale_keychain(
+    security: &Path,
+    keychain: &str,
+    certificate: &Certificate,
+) -> Result<(), String> {
+    for hash in stale_keychain_hashes(security, keychain, certificate)? {
+        let output = execute(
+            security,
+            &["delete-certificate", "-Z", &hash, "-t", keychain],
+            &[],
+            Duration::from_secs(180),
+        )?;
+        if !output.status.success() {
+            return Err(TOOL_FAILED.into());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn trust_stores(
     _home: &Path,
@@ -361,6 +482,9 @@ fn trust_stores(
         .to_string();
     if !Path::new(&keychain).is_absolute() {
         return Err(TOOL_FAILED.into());
+    }
+    if install {
+        remove_stale_keychain(security, &keychain, certificate)?;
     }
     let failed = install
         && !execute(

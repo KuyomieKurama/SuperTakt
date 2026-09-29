@@ -17,7 +17,7 @@
  * die Oberfläche erzeugt keine davon selbst.
  */
 
-import type { PoolMovement, DesignTheme, Density, ExportStatus } from "@takt/domain";
+import type { PoolMovement, DesignTheme, Density, ExportStatus, TodoMatchOrigin, UiLanguage } from "@takt/domain";
 import type {
   PoolCompletionFilter,
   PoolExportFilter,
@@ -513,7 +513,18 @@ export interface PoolResolution {
    * gespeicherte Stand daneben noch `matchesNothing: true` sagt.
    */
   readonly matchesNothing: boolean;
+  /**
+   * Warum die Regel nichts trifft — als **ein** Wert statt aus mehreren
+   * Wahrheitswerten zusammengereimt (O-J, T-397).
+   *
+   * `unresolved_required` hat Vorrang vor `empty`, weil ein leerer
+   * erforderlicher Ordner eine andere Handlung verlangt als eine Regel ohne
+   * Bedingung. Es gilt immer `matchesNothing === (matchesNothingReason !== "none")`.
+   */
+  readonly matchesNothingReason: PoolMatchesNothingReason;
 }
+
+export type PoolMatchesNothingReason = "none" | "empty" | "unresolved_required";
 
 export interface Pool {
   readonly id: Id;
@@ -524,8 +535,8 @@ export interface Pool {
   readonly placement: PoolPlacement;
   /** Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board. */
   readonly position: number;
-  /** Die erforderlichen Tags und Ordner. */
-  readonly rule: readonly PoolRuleTerm[];
+  /** The required tags and folders (wire name since O-D; the service still echoes `rule`). */
+  readonly requiredTags: readonly PoolRuleTerm[];
   /** Die ausgeschlossenen Tags und Ordner (T-076). Keiner darf am Todo hängen. */
   readonly excludedTags: readonly PoolRuleTerm[];
   /** Die Status der Regel (T-076). Leer heißt „Alle" und schränkt nicht ein. */
@@ -551,7 +562,7 @@ export interface PoolWrite {
   /** Ohne Angabe legt der Dienst einen Pool an, keine Spalte. */
   readonly placement?: PoolPlacement;
   readonly position?: number;
-  readonly rule: readonly PoolRuleTerm[];
+  readonly requiredTags: readonly PoolRuleTerm[];
   /**
    * Die vier Achsen aus T-076 sind alle weglassbar und stehen dann neutral.
    * Ein Aufrufer aus der Zeit davor legt damit dieselbe Regel an wie zuvor.
@@ -595,6 +606,11 @@ export interface TimeEntry {
    */
   readonly exportCount: number;
   readonly source: TimeEntrySource;
+  /**
+   * Read-only copy of the todo's NoExport flag (F-8, E-124 point 6). Such a booking is never
+   * "open for billing" (A-26.2, A-6.6).
+   */
+  readonly todoNoExport: boolean;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -616,6 +632,12 @@ export interface TimeEntryFilter {
   /** R-10 — schon einmal exportierte, inzwischen offene Buchungen. */
   readonly onlyPreviouslyExported?: boolean;
   readonly includeNoExport?: boolean;
+  /** C-14: bookings whose todo carries one of these tags (not their folder). */
+  readonly tagIds?: readonly Id[];
+  /** C-14: bookings whose todo belongs to one of these pools now (A-3.4). */
+  readonly poolIds?: readonly Id[];
+  /** C-14: with or without a billing note (A-7.3); never the todo's internal note. */
+  readonly hasNote?: boolean;
 }
 
 /* Export                                                               */
@@ -711,10 +733,15 @@ export interface AppSettings {
   readonly theme: ThemeSetting;
   readonly designTheme: DesignTheme;
   readonly density: Density;
+  readonly motionIntensity: 'reduced' | 'subtle' | 'expressive';
   readonly promptOnTimerStop: boolean;
   readonly idleDetectionEnabled: boolean;
   readonly idleKeepTimerRunning: boolean;
   readonly idleThresholdMinutes: number;
+  /** A-28.1: the version check may contact GitHub. Stored in the Bestand, default on. */
+  readonly versionCheckEnabled: boolean;
+  /** A-28.2: language of the main UI, stored in the Bestand. */
+  readonly uiLanguage: UiLanguage;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20). `null`
    * heißt: nichts übersprungen.
@@ -741,10 +768,13 @@ export interface AppSettingsUpdate {
   readonly theme?: ThemeSetting;
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
+  readonly motionIntensity?: 'reduced' | 'subtle' | 'expressive';
   readonly promptOnTimerStop?: boolean;
   readonly idleDetectionEnabled?: boolean;
   readonly idleKeepTimerRunning?: boolean;
   readonly idleThresholdMinutes?: number;
+  readonly versionCheckEnabled?: boolean;
+  readonly uiLanguage?: UiLanguage;
   /**
    * `null` setzt „nichts übersprungen" zurück, ein Wert überspringt genau
    * diese eine Fassung — nicht die Prüfung (E-064 Punkt 5).
@@ -863,13 +893,24 @@ export interface SettingsView {
    * kein Befund heißt deshalb nur „im Pfad steht nichts".
    */
   readonly databasePath: FileSystemPath | null;
+  /**
+   * How many data files are more open than `0600` (A-28.8). `null` means "not measurable"
+   * (Windows ACL, in-memory store) and is not a finding.
+   */
+  readonly databaseFilesTooPermissive: number | null;
 }
 
 /* Suche (E-038)                                                        */
 
+export type { TodoMatchOrigin };
+
+/** A todo hit of the global search: the todo plus where it matched (C-22, K-1). Never note text (K-3). */
+export type TodoSearchHit = Todo & { readonly origins: readonly TodoMatchOrigin[] };
+
 export interface SearchResult {
-  readonly todos: Page<Todo>;
-  /** Getroffen über den Leistungstext. Der Vermerk ist kein Suchfeld (A-7.1). */
+  /** Matched by title, call number or internal note; the note itself is never in the answer. */
+  readonly todos: Page<TodoSearchHit>;
+  /** Matched through the billing note (A-7.3). */
   readonly timeEntries: readonly TimeEntry[];
 }
 

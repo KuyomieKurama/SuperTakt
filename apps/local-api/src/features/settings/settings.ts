@@ -13,6 +13,7 @@ import type {
   DefaultTag,
   DesignTheme,
   Density,
+  MotionIntensity,
   ExportDirectoryTrait,
   ExportTemplateId,
   LocationTrait,
@@ -20,6 +21,7 @@ import type {
   TagId,
   Theme,
   Timestamp,
+  UiLanguage,
 } from '@takt/domain';
 import { checkVersion, err, taktError } from '@takt/domain';
 import type { UnitOfWork } from '@takt/storage';
@@ -151,6 +153,7 @@ export interface SettingsUpdate {
   readonly theme?: Theme;
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
+  readonly motionIntensity?: MotionIntensity;
   readonly promptOnTimerStop?: boolean;
   readonly idleDetectionEnabled?: boolean;
   readonly idleKeepTimerRunning?: boolean;
@@ -162,6 +165,8 @@ export interface SettingsUpdate {
    * Tür geprüft, nicht erst in der Datenbank.
    */
   readonly skippedVersion?: string | null;
+  readonly versionCheckEnabled?: boolean;
+  readonly uiLanguage?: UiLanguage;
 }
 
 /**

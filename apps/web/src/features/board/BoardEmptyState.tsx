@@ -4,6 +4,7 @@ import { Button, Card, EmptyState, InlineMessage } from "../../shared/ui/Primiti
 import { plural } from "../../lib/format";
 import { axesOf } from "../../lib/poolRule";
 import { Foreign } from "../../shared/ui/Foreign";
+import { boardTexts } from "./texts";
 
 /**
  * Kein Board heißt hier **nicht** „nichts zu tun".
@@ -57,11 +58,12 @@ export function BoardEmptyState({
   onOpenSetup,
   onAdopt,
 }: BoardEmptyStateProps) {
+  const text = boardTexts();
   return (
     <div className="board-setup">
       <EmptyState
         icon="square"
-        title="Das Board hat noch keine Spalte"
+        title={text.noColumnTitle}
         /*
           „Seit der Umstellung …" ist mit T-181 (ST-05) gefallen: eine
           Formulierung, die an ein Ereignis gebunden ist, altert. Was bleibt,
@@ -78,10 +80,10 @@ export function BoardEmptyState({
           Erfuellung einer Auflage behauptet, nennt entweder die Stelle, an der
           sie gemessen wird, oder er behauptet sie nicht.
         */
-        description="Sie richten die Spalten selbst ein. SuperTakt erfindet keine."
+        description={text.noColumnBody}
         action={
           <Button variant="primary" iconStart="plus" onClick={onOpenSetup}>
-            Erste Spalte einrichten
+            {text.firstColumn}
           </Button>
         }
       />
@@ -124,16 +126,13 @@ export function BoardEmptyState({
       */}
 
       {!poolsKnown ? null : pools.length === 0 ? (
-        <InlineMessage tone="info" title="Sie haben noch keine Regel">
-          Eine Spalte nennt Bedingungen — zum Beispiel „alles unter Kunden“, „Tag Wartet“ oder
-          „erledigt und noch nicht abgerechnet“. Wer noch keine Tags vergeben hat, fängt am besten
-          damit an; über Status, „Erledigt“ und den Exportstatus kommt man auch ganz ohne Tag zu
-          einer Spalte.
+        <InlineMessage tone="info" title={text.noRuleTitle}>
+          {text.noRuleBody}
         </InlineMessage>
       ) : (
         <Card
-          title="Vorhandene Regeln als Spalte aufnehmen"
-          description="Diese Regeln gibt es bereits in Ihren Pools. Sie werden dadurch nicht kopiert — dieselbe Regel erscheint zusätzlich auf dem Board."
+          title={text.adoptTitle}
+          description={text.adoptBody}
         >
           <ul className="rule-list">
             {pools.map((pool) => (
@@ -142,10 +141,10 @@ export function BoardEmptyState({
                   <Foreign value={pool.name} />
                 </span>
                 <span className="rule-row__count">
-                  {plural(countPoolRuleConditions(axesOf(pool)), "Bedingung", "Bedingungen")}
+                  {plural(countPoolRuleConditions(axesOf(pool)), text.condition, text.conditions)}
                 </span>
                 <Button size="sm" variant="secondary" iconStart="plus" onClick={() => onAdopt(pool)}>
-                  Als Spalte aufnehmen
+                  {text.adopt}
                 </Button>
               </li>
             ))}

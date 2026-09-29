@@ -25,6 +25,9 @@ import { AttachmentOpenDialog } from "./AttachmentOpenDialog";
 import { AttachmentRow } from "./AttachmentRow";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Button, EmptyState, InlineMessage, LoadingBlock } from "../../shared/ui/Primitives";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — Anhänge am Todo (A-19.8 bis A-19.15, E-071, E-072).
@@ -107,30 +110,6 @@ import { Button, EmptyState, InlineMessage, LoadingBlock } from "../../shared/ui
  * und `https`" ist eine **Regel**. Ohne den ausgeschriebenen Grund sähe die
  * zweite wie eine Störung aus (R-22).
  */
-const REFUSAL_TEXT: Readonly<Record<string, string>> = {
-  link_empty: "Dieser Verweis hat keine Adresse.",
-  link_too_long: "Diese Adresse ist zu lang, um sie zu öffnen.",
-  link_control_character: "Diese Adresse enthält unsichtbare Steuerzeichen. SuperTakt öffnet sie nicht.",
-  link_unparsable: "Diese Adresse lässt sich nicht lesen.",
-  link_scheme_rejected:
-    "Diese Adresse lässt sich nicht öffnen: SuperTakt öffnet nur „http“ und „https“. Ein Netzwerkpfad ist keine Adresse, sondern eine Anmeldung an einem fremden Rechner.",
-  link_not_normalized:
-    "Diese Adresse steht nicht in der Form, die SuperTakt beim Anlegen erzeugt. Sie wird nicht geöffnet — sonst stünde hier eine andere Adresse, als geöffnet würde.",
-  link_no_host: "Dieser Adresse fehlt der Rechnername.",
-  link_userinfo:
-    "Diese Adresse trägt Zugangsdaten vor dem Rechnernamen. Sie sieht dann nach einem anderen Ziel aus, als sie ansteuert, und wird nicht geöffnet.",
-  path_empty: "Dieser Anhang hat keinen Pfad.",
-  path_too_long: "Dieser Pfad ist zu lang, um ihn zu öffnen.",
-  path_control_character: "Dieser Pfad enthält unsichtbare Steuerzeichen. SuperTakt öffnet ihn nicht.",
-  path_unc:
-    "Dieser Pfad zeigt auf eine Netzwerkfreigabe. SuperTakt öffnet keine, weil ein solcher Zugriff zugleich eine Anmeldung an einem fremden Rechner ist.",
-  path_not_absolute: "Dieser Pfad ist nicht vollständig. SuperTakt öffnet nur vollständige Pfade.",
-  path_stream_separator:
-    "Der Dateiname trägt einen Doppelpunkt. Unter Windows benennt er einen zweiten Datenstrom derselben Datei — geöffnet würde dann nicht das, was hier steht. SuperTakt öffnet ihn deshalb nicht.",
-  path_indirect_extension:
-    "Diese Datei ist eine Verknüpfung. Ihr Ziel steht woanders — die Rückfrage könnte darüber nicht die Wahrheit sagen, deshalb öffnet SuperTakt sie nicht.",
-  path_missing: "Diese Datei ist an diesem Pfad nicht mehr vorhanden.",
-};
 
 /**
  * Der Satz zu einer Absage, die **vor** dem Klick feststeht (V-07). `null`,
@@ -144,7 +123,7 @@ const REFUSAL_TEXT: Readonly<Record<string, string>> = {
 function foreseenRefusalText(target: ForeignText): string | null {
   const key = foreseeableRefusalOf(target);
   if (key === null) return null;
-  return REFUSAL_TEXT[key] ?? null;
+  return todoTexts().refusal[key] ?? null;
 }
 
 /** Der Satz zu einem Ausgang der Hülle. `null`, wenn alles gut ging. */
@@ -153,12 +132,9 @@ function refusalText(result: AttachmentOpen): string | null {
     case "opened":
       return null;
     case "rejected":
-      return (
-        REFUSAL_TEXT[result.reason] ??
-        "SuperTakt hat das Öffnen abgewiesen. Der Anhang bleibt bestehen; der Grund lässt sich hier nicht genauer benennen."
-      );
+      return todoTexts().refusal[result.reason] ?? todoTexts().refusedUnknown;
     case "failed":
-      return "Das Öffnen ist fehlgeschlagen. Möglicherweise ist auf diesem Rechner keine Anwendung dafür eingerichtet.";
+      return todoTexts().openFailed;
     case "unavailable":
       return result.reason;
   }
@@ -253,9 +229,11 @@ export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: Atta
       setPendingRemove(null);
       noteFailure(attachment.id, null);
       list.reload();
-      toasts.success("Anhang entfernt.", `${quotedName(attachmentLabel(attachment))} gehört nicht mehr zu diesem Todo.`);
+      toasts.success(todoTexts().attachmentRemoved, todoTexts().attachmentRemovedBody(quotedName(attachmentLabel(attachment))));
     });
   }, [pendingRemove, removal, todoId, list, noteFailure, toasts]);
+
+  const text = todoTexts();
 
   return (
     <>
@@ -263,7 +241,7 @@ export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: Atta
         {list.state.status === "loading" ? (
           /* Zustand „lädt": Skelettzeilen im Bereich, kein Ladeanzeiger über
              der ganzen Karte. */
-          <LoadingBlock label="Anhänge werden geladen" rows={3} />
+          <LoadingBlock label={text.attachmentsLoading} rows={3} />
         ) : list.state.status === "error" ? (
           /*
             Zustand „Fehler": **nicht** ausblenden. Sonst sähe „keine Anhänge"
@@ -272,35 +250,35 @@ export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: Atta
           */
           <InlineMessage
             tone="danger"
-            title="Die Anhänge ließen sich nicht laden"
+            title={text.attachmentsFailed}
             action={
               <Button variant="secondary" iconStart="rotate-ccw" onClick={list.reload}>
-                Erneut versuchen
+                {labels().retry}
               </Button>
             }
           >
-            {list.state.message}
+            <ServiceText text={list.state.message} fromService={list.state.fromService} />
           </InlineMessage>
         ) : list.state.value.items.length === 0 ? (
           <EmptyState
             icon="paperclip"
             compact
-            title="Keine Anhänge"
+            title={text.noAttachments}
             /*
               Der zweite Satz gehört genau hierhin: Er ist die Erwartung, an der
               sonst A-19.15 scheitert — wer glaubt, Takt hebe die Datei auf,
               hält ihr Verschwinden für einen Fehler von Takt.
             */
-            description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört. SuperTakt kopiert nur Bilder; Verweise und Dateien merkt es sich als Adresse beziehungsweise Pfad."
+            description={text.noAttachmentsBody}
             action={
               <Button variant="secondary" iconStart="plus" onClick={() => setFormOpen(true)}>
-                Anhang hinzufügen
+                {text.addAttachment}
               </Button>
             }
           />
         ) : (
           <>
-            <ul className="attachment-list" aria-label="Anhänge">
+            <ul className="attachment-list" aria-label={text.attachments}>
               {chronologicalAttachments(list.state.value.items, mails).map((attachment) => (
                 <AttachmentRow
                   key={attachment.id}
@@ -314,7 +292,7 @@ export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: Atta
               ))}
             </ul>
             <Button variant="ghost" iconStart="plus" onClick={() => setFormOpen(true)}>
-              Anhang hinzufügen
+              {text.addAttachment}
             </Button>
           </>
         )}
@@ -352,19 +330,17 @@ export function Attachments({ todoId, todoTitle, mails = [], version = 0 }: Atta
 
       <ConfirmDialog
         open={pendingRemove !== null}
-        title="Anhang entfernen"
+        title={text.removeTitle}
         description={
           pendingRemove === null
             ? ""
-            : `${quotedName(attachmentLabel(pendingRemove))} gehört danach nicht mehr zu ${quotedName(todoTitle)}.`
+            : text.removeLead(quotedName(attachmentLabel(pendingRemove)), quotedName(todoTitle))
         }
-        consequence={
-          pendingRemove?.kind === "image"
-            ? "Die Kopie des Bildes im Datenverzeichnis von SuperTakt wird mit gelöscht. Die Datei, aus der sie stammt, bleibt unberührt."
-            : "SuperTakt vergisst die Adresse beziehungsweise den Pfad. Die Datei oder die Seite dahinter bleibt unberührt."
-        }
-        refusal={removal.error}
-        confirmLabel="Entfernen"
+        consequence={pendingRemove?.kind === "image" ? text.removeImage : text.removeOther}
+        {...(removal.error === null
+          ? {}
+          : { refusal: <ServiceText text={removal.error} fromService={removal.errorFromService} /> })}
+        confirmLabel={text.remove}
         tone="danger"
         busy={removal.busy}
         onConfirm={remove}

@@ -3,7 +3,7 @@ import { PoolAdministration } from "../tags/PoolAdministration";
 import { PrioritySettings } from "./PrioritySettings";
 import { THEME_PRESETS, themePreset } from "./themePresets";
 import { useEffect } from "react";
-import { listSecurityNotices, type SecurityNoticeKind } from "./api";
+import { listSecurityNotices } from "./api";
 import { OutlookSetup } from "./OutlookSetup";
 import { BillingUserFact, DatabaseLocationFact } from "./WorkstationFacts";
 import { RadioRow } from "../../shared/ui/RadioRow";
@@ -16,7 +16,6 @@ import { useStructure } from "../../app/StructureContext";
 import { useAsync } from "../../app/useAsync";
 import { cx } from "../../lib/cx";
 import { formatDateTime, plural } from "../../lib/format";
-import type { Density } from "./theme";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
 import { RunArea, ScreenFrame } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
@@ -26,6 +25,8 @@ import { DefaultTagSettings } from "./DefaultTagSettings";
 import { ExportSettings } from "./ExportSettings";
 import { StatusSettings } from "./StatusSettings";
 import { readIdleActivity } from "../../app/connection";
+import { type Language } from "../../lib/language";
+import { settingsTexts, themeText } from "./texts";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -57,13 +58,6 @@ import { readIdleActivity } from "../../app/connection";
  * dem Benutzer erklären müsste.
  */
 
-const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
-  auth_failure_burst: "Gehäufte Anmeldeversuche ohne gültigen Nachweis",
-  token_in_url: "Ein Nachweis stand in einer Adresszeile und wurde abgewiesen",
-  origin_rejected: "Eine Anfrage kam von einer fremden Herkunft",
-  host_rejected: "Eine Anfrage nannte einen fremden Hostnamen",
-  file_permissions_wide: "Eine Datei im Datenordner hat zu weite Rechte",
-};
 
 /* Die Bereiche                                                         */
 
@@ -73,10 +67,7 @@ type SettingsArea = (typeof AREAS)[number];
 
 interface AreaDescriptor {
   readonly area: SettingsArea;
-  readonly label: string;
   readonly icon: IconName;
-  /** Ein Satz, der sagt, was in diesem Bereich zu finden ist. */
-  readonly hint: string;
 }
 
 /**
@@ -102,32 +93,20 @@ interface AreaDescriptor {
   nicht hier, sondern in der Karte (`StatusSettings`, Auflage Z-01).
 */
 const AREA_LIST = [
-  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Themes, Farbmodus und Zeilendichte" },
-  { area: "timer", label: "Timer", icon: "clock", hint: "Leistung beim Stoppen" },
-  { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
-  { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
-  {
-    area: "tags",
-    label: "Tags",
-    icon: "tag",
-    hint: "Tags, Ordner und Standard-Tags",
-  },
-  { area: "regeln", label: "Regeln", icon: "filter", hint: "Pools und Kanban-Spalten" },
-  { area: "prioritaeten", label: "Prioritäten", icon: "arrow-up", hint: "Prioritäten und ihre Gewichtung" },
-  { area: "status", label: "Status", icon: "inbox", hint: "Statuswerte eines Todos" },
-  { area: "addin", label: "Outlook-Add-in", icon: "shield", hint: "Zugang des Add-ins" },
-  {
-    area: "arbeitsplatz",
-    label: "Arbeitsplatz",
-    icon: "monitor",
-    hint: "Abrechnungsname, Ablageort, Meldungen",
-  },
+  { area: "darstellung", icon: "sun" },
+  { area: "timer", icon: "clock" },
+  { area: "export", icon: "download" },
+  { area: "daten", icon: "folder-open" },
+  { area: "tags", icon: "tag" },
+  { area: "regeln", icon: "filter" },
+  { area: "prioritaeten", icon: "arrow-up" },
+  { area: "status", icon: "inbox" },
+  { area: "addin", icon: "shield" },
+  { area: "arbeitsplatz", icon: "monitor" },
   /*
-    `as const satisfies` und nicht `: readonly AreaDescriptor[]` (T-334): Die
-    Liste ist seit der Streichung von `PANEL_LABEL` **die** Quelle des
-    Bereichsnamens, und `panelLabel` braucht dafuer ein erstes Element, das der
-    Typpruefer kennt. Gepruft wird trotzdem gegen `AreaDescriptor` — ein
-    falscher Schluessel oder ein unbekanntes Zeichen bricht hier ab.
+    Label and hint of each area live in `settingsTexts().areas` (A-28.2); the
+    list keeps order and icon. `satisfies` checks each entry against
+    `AreaDescriptor`, so a wrong key breaks here.
   */
 ] as const satisfies readonly AreaDescriptor[];
 
@@ -157,12 +136,13 @@ export interface SettingsScreenProps {
  * in der Schiene.
  */
 function panelLabel(area: SettingsArea): string {
-  return AREA_LIST.find((item) => item.area === area)?.label ?? AREA_LIST[0].label;
+  return settingsTexts().areas[area].label;
 }
 
 export function SettingsScreen({ query }: SettingsScreenProps) {
   const structure = useStructure();
   const active = readArea(query);
+  const text = settingsTexts();
 
   return (
     <section className="screen">
@@ -179,7 +159,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
         `aria-current`, Kartentitel und Adresse (`?bereich=…`).
       */}
       <ScreenHeader
-        title="Einstellungen"
+        title={text.settingsTitle}
         refreshing={structure.state.status === "ready" && structure.state.refreshing}
       />
 
@@ -205,7 +185,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
       */}
       <ScreenFrame>
         <div className="settings-layout">
-          <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
+          <nav className="settings-rail" aria-label={text.areasNav}>
             <ul className="settings-rail__list">
               {AREA_LIST.map((item) => (
                 <li key={item.area} className={["export", "tags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
@@ -221,8 +201,8 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
                       <Icon name={item.icon} size={16} />
                     </span>
                     <span className="settings-rail__text">
-                      <span className="settings-rail__label">{item.label}</span>
-                      <span className="settings-rail__hint">{item.hint}</span>
+                      <span className="settings-rail__label">{text.areas[item.area].label}</span>
+                      <span className="settings-rail__hint">{text.areas[item.area].hint}</span>
                     </span>
                   </a>
                 </li>
@@ -233,7 +213,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
           <RunArea label={panelLabel(active)} className="settings-panel" anchor>
             <AsyncBoundary
               state={structure.state}
-              label="Einstellungen werden geladen"
+              label={text.settingsLoading}
               rows={4}
               onRetry={structure.reload}
             >
@@ -276,6 +256,7 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
       return (
         <>
           <WorkstationFacts />
+          <VersionCheckSettings />
           <SecurityNotices />
         </>
       );
@@ -284,21 +265,18 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
 
 /* Darstellung                                                          */
 
-const DENSITY_LABEL: Readonly<Record<Density, string>> = {
-  comfortable: "Normal — mehr Luft zwischen den Zeilen",
-  compact: "Kompakt — mehr Zeilen auf dem Bildschirm",
-};
 
 /** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
 function TimerSettings() {
-  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleKeepTimerRunning, setIdleKeepTimerRunning, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
+  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
   const activity = useAsync(readIdleActivity, []);
   useEffect(() => {
     const interval = window.setInterval(activity.reload, 5000);
     return () => window.clearInterval(interval);
   }, [activity.reload]);
+  const text = settingsTexts();
   return (
-    <Card title="Timer" description="Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.">
+    <Card title={text.timerTitle} description={text.timerLead}>
       <label className="choice__option">
         <input
           type="checkbox"
@@ -307,75 +285,95 @@ function TimerSettings() {
           onChange={(event) => setPromptOnTimerStop(event.target.checked)}
           aria-describedby="timer-prompt-hint"
         />
-        <span>Leistung beim Stoppen abfragen</span>
+        <span>{text.promptOnStop}</span>
       </label>
       <p className="field__hint" id="timer-prompt-hint">
-        Ausgeschaltet wird die Zeit sofort gebucht, auch beim Wechsel zu einem anderen Timer.
-        Vorhandene Leistung bleibt erhalten;
-        fehlenden Text können Sie später in der Buchungsübersicht ergänzen.
+        {text.promptOnStopHint}
       </p>
-      <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>Inaktive Zeit erkennen</span></label>
-      <p className="field__hint" id="idle-detection-hint">Bei Ihrer Rückkehr können Sie die inaktive Zeit als Pause auslassen, einer Aufgabe zuordnen oder aufteilen. Offene Zuordnungen bleiben beim Ausschalten dieser Einstellung erhalten.</p>
-      <Select label="Timer bei Inaktivität" value={idleKeepTimerRunning ? 'continue' : 'pause'} onChange={value => setIdleKeepTimerRunning(value === 'continue')} disabled={saving || !idleDetectionEnabled}
-        options={[{ value: 'continue', label: 'Weiterlaufen lassen' }, { value: 'pause', label: 'Bis zur Zuordnung pausieren' }]} />
-      <Select label="Inaktivität erkennen nach" value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
-        options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} ${value === 1 ? 'Minute' : 'Minuten'}` }))} />
-      <p role="status">{activity.state.status === 'loading' ? 'Inaktivitätserkennung wird geprüft …' : activity.state.status === 'ready' && activity.state.value?.supported ? 'Systemweite Erkennung verfügbar — auch Eingaben in anderen Programmen zählen als Aktivität.' : 'Systemweite Erkennung ist hier nicht verfügbar. Sie benötigt die Desktop-App und eine unterstützte Systemschnittstelle.'}</p>
-      <p className="field__hint">Es werden nur Zeitpunkte gelesen, keine Tasten, Texte oder Programminhalte aufgezeichnet.</p>
+      <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>{text.detectIdle}</span></label>
+      <p className="field__hint" id="idle-detection-hint">{text.detectIdleHint}</p>
+      <Select label={text.detectIdleAfter} value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
+        options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: text.minutes(value) }))} />
+      <p role="status">{activity.state.status === 'loading' ? text.idleChecking : activity.state.status === 'ready' && activity.state.value?.supported ? text.idleSupported : text.idleUnsupported}</p>
+      <p className="field__hint">{text.idlePrivacy}</p>
     </Card>
   );
 }
 
 function DisplaySettings() {
-  const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity } = usePreferences();
+  const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity, motionIntensity, setMotionIntensity, uiLanguage, setUiLanguage } = usePreferences();
 
   const preset = themePreset(designTheme);
+  const text = settingsTexts();
 
   return (
-    <Card
-      title="Darstellung"
-      description="Theme, Farbmodus und Zeilendichte wirken sofort und bleiben beim nächsten Start erhalten."
-    >
+    <Card title={text.displayTitle} description={text.displayLead}>
+      {/*
+        First in the card (welle-18.md 2.1): the language decides how the rest
+        reads. Each option is written in its own language with its `lang`, so a
+        user who switched by mistake finds the way back (WCAG 3.1.2). The value
+        is stored in the Bestand (A-28.2).
+      */}
+      <RadioRow<Language>
+        className="appearance-language"
+        label={text.language}
+        value={uiLanguage}
+        onChange={setUiLanguage}
+        options={[
+          { value: "de", label: "Deutsch", lang: "de" },
+          { value: "en", label: "English", lang: "en" },
+        ]}
+      />
+      <p className="field__hint">{text.languageHint}</p>
       <RadioRow
         className="appearance-mode"
-        label="Farbmodus"
+        label={text.colorMode}
         value={preset.mode === "auto" ? theme : preset.mode}
         onChange={setTheme}
         disabled={saving || preset.mode !== "auto"}
         options={[
-          { value: "system", label: "System", icon: "monitor", hint: "Folgt dem Farbmodus des Betriebssystems." },
-          { value: "dark", label: "Dunkel", icon: "moon" },
-          { value: "light", label: "Hell", icon: "sun" },
+          { value: "system", label: text.modeSystem, icon: "monitor", hint: text.modeSystemHint },
+          { value: "dark", label: text.modeDark, icon: "moon" },
+          { value: "light", label: text.modeLight, icon: "sun" },
         ]}
       />
       {preset.mode === "auto" ? null : (
-        <p className="field__hint">Dieses Theme verwendet feste {preset.mode === "dark" ? "dunkle" : "helle"} Farben. Die freie Farbwahl steht bei Klassisch und den anpassbaren Themes zur Verfügung.</p>
+        <p className="field__hint">{text.fixedColors(preset.mode === "dark")}</p>
       )}
       <Select
         className="settings-field-section"
-        label="Theme auswählen"
+        label={text.chooseTheme}
         value={preset.value}
         onChange={setDesignTheme}
         disabled={saving}
         options={THEME_PRESETS.map(item => ({
           value: item.value,
-          label: item.label,
-          hint: `${item.mode === "dark" ? "Dunkel · " : item.mode === "light" ? "Hell · " : "Hell & Dunkel · "}${item.hint}`,
+          label: themeText(item).label,
+          hint: `${text.themeMode[item.mode]}${themeText(item).hint}`,
         }))}
-        hint="Alle Themes verwenden das klassische Layout. Klassisch ist der Standard."
+        hint={text.themeHint}
       />
 
       <Select
         className="settings-field-section"
-        label="Zeilendichte"
+        label={text.rowDensity}
         value={density}
         onChange={setDensity}
         disabled={saving}
         options={(["comfortable", "compact"] as const).map((value) => ({
           value,
-          label: DENSITY_LABEL[value],
+          label: text.density[value],
         }))}
-        hint="Bestimmt die Abstände in Tabellen und Listen, unabhängig vom gewählten Theme."
+        hint={text.rowDensityHint}
+      />
+      <Select
+        className="settings-field-section"
+        label={text.motionIntensity}
+        value={motionIntensity}
+        onChange={setMotionIntensity}
+        disabled={saving}
+        options={(['reduced', 'subtle', 'expressive'] as const).map((value) => ({ value, label: text.motion[value] }))}
+        hint={text.motionIntensityHint}
       />
     </Card>
   );
@@ -412,15 +410,41 @@ function WorkstationFacts() {
       Gemessen haengt heute kein Pruefall daran — genau deshalb hat der
       Pruefer ihn benannt.
     */
-    <Card title="Arbeitsplatz" description="Meldet der Dienst. Hier nicht änderbar.">
+    <Card title={settingsTexts().workstation} description={settingsTexts().workstationLead}>
       {value === null ? (
-        <p className="muted">Die Auskünfte werden geladen.</p>
+        <p className="muted">{settingsTexts().factsLoading}</p>
       ) : (
         <div className="workstation">
           <BillingUserFact user={value.windowsUser} />
-          <DatabaseLocationFact path={value.databasePath} />
+          <DatabaseLocationFact path={value.databasePath} filesTooPermissive={value.databaseFilesTooPermissive} />
         </div>
       )}
+    </Card>
+  );
+}
+
+/* Versionsprüfung (A-28.1)                                             */
+
+/** The one outward connection of the product can be switched off (A-28.1, E-064). */
+function VersionCheckSettings() {
+  // Not `disabled` while saving: that would drop focus to <body> (welle-18-fluss.md 1.4);
+  // the preferences context ignores a second change while one is in flight.
+  const { versionCheckEnabled, setVersionCheckEnabled } = usePreferences();
+  const text = settingsTexts();
+  return (
+    <Card title={text.versionCheckTitle}>
+      <label className="choice__option">
+        <input
+          type="checkbox"
+          checked={versionCheckEnabled}
+          onChange={(event) => setVersionCheckEnabled(event.target.checked)}
+          aria-describedby="version-check-hint"
+        />
+        <span>{text.versionCheckLabel}</span>
+      </label>
+      <p className="field__hint" id="version-check-hint">
+        {text.versionCheckHint}
+      </p>
     </Card>
   );
 }
@@ -429,38 +453,39 @@ function WorkstationFacts() {
 
 function SecurityNotices() {
   const notices = useAsync(() => listSecurityNotices(), []);
+  const text = settingsTexts();
 
   return (
     <Card
-      title="Sicherheitsmeldungen"
-      description="Zählwerte und Zeitpunkte, keine Inhalte."
+      title={text.securityNotices}
+      description={text.securityNoticesLead}
       actions={
         <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={notices.reload}>
-          Aktualisieren
+          {text.refresh}
         </Button>
       }
     >
-      <AsyncBoundary state={notices.state} label="Meldungen werden geladen" rows={2} onRetry={notices.reload}>
-        {(value) =>
-          value.notices.length === 0 ? (
+      <AsyncBoundary state={notices.state} label={text.noticesLoading} rows={2} onRetry={notices.reload}>
+        {(value) => {
+          // The permission finding is shown at the data location instead (A-28.8, welle-18-fluss.md 6.1).
+          const notices = value.notices.filter((notice) => notice.kind !== "file_permissions_wide");
+          return notices.length === 0 ? (
             <p className="muted">
-              <Icon name="check-circle" size={14} /> Nichts aufgefallen. Die Liste ist beim nächsten
-              Start wieder leer — sie liegt im Arbeitsspeicher und nicht in einer Datei neben
-              Kundendaten.
+              <Icon name="check-circle" size={14} /> {text.nothingNoticed}
             </p>
           ) : (
             <ul className="notice-list">
-              {value.notices.map((notice) => (
+              {notices.map((notice) => (
                 <li key={notice.kind} className="notice-row">
                   <Icon name="alert-triangle" size={14} />
-                  <span className="grow">{NOTICE_LABEL[notice.kind]}</span>
-                  <span className="notice-row__count">{plural(notice.count, "Mal", "Mal")}</span>
-                  <span className="notice-row__time">zuletzt {formatDateTime(notice.lastAt)}</span>
+                  <span className="grow">{text.noticeLabel[notice.kind]}</span>
+                  <span className="notice-row__count">{plural(notice.count, text.times, text.timesPlural)}</span>
+                  <span className="notice-row__time">{text.lastAt(formatDateTime(notice.lastAt))}</span>
                 </li>
               ))}
             </ul>
-          )
-        }
+          );
+        }}
       </AsyncBoundary>
     </Card>
   );

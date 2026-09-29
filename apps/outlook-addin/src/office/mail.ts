@@ -7,30 +7,11 @@
  * ohne laufendes Outlook prüfbar.
  */
 
-import { MAX_TITLE_CHARACTERS } from '@takt/domain';
+// The note cap is the door's own (`MAIL_NOTE_MAX_LENGTH`), so a prepared note never earns a 422.
+import { MAIL_NOTE_MAX_LENGTH, MAX_TITLE_CHARACTERS } from '@takt/domain';
 
 import { cutToCharacterBoundary } from '../text/cut.ts';
 import { dropHidden } from '../text/hidden.ts';
-
-/**
- * Obergrenze für übernommenen Text (B-12.3 Punkt 3).
- *
- * **Diese Zahl steht noch zweimal im Baum**, und zwar hier und als
- * `ADDIN_NOTE_MAX_LENGTH` in `apps/local-api/src/routes/addin/schema.ts`. Es ist
- * dieselbe Wahrheit in derselben Bauart wie {@link MAX_TITLE_CHARACTERS} vor
- * T-134: Was `prepareNote` vorbereitet, muss die Tür annehmen — sonst bekommt
- * der Benutzer ein 422 für einen Text, den nicht er geschrieben hat, sondern
- * der Knopf „Inhalt der E-Mail übernehmen".
- *
- * Auflösen lässt sie sich nur dort, wo beide Seiten lesen können, also in
- * `@takt/domain` (`packages/domain/src/text-length.ts`, das sie ausdrücklich als
- * offene Frage führt). Das ist nicht die Hoheit des Add-ins; T-134 meldet es,
- * statt es halb zu tun — eine halb umgestellte Zahl sieht aus wie erledigt.
- * Bis dahin misst `scripts/proof-addin.mjs` Abschnitt 16 beide Seiten
- * gegeneinander: ein Vergleich, der den Schaden bewacht und nicht die Ursache
- * (E-063 Punkt 5), aber besser als der Kommentar, der es bis T-134 nur hoffte.
- */
-export const MAX_TAKEOVER_CHARACTERS = 4000;
 
 /**
  * Was am Ende eines gekürzten Vermerks steht (T-134).
@@ -164,7 +145,7 @@ export const suggestTitle = (subject: string): string => {
  * Dritten stammt, ist Kontext für die eigene Arbeit und nichts, was ungefragt
  * an das Abrechnungstool geht. Diese Aufteilung ist in S-12 auch beschriftet.
  *
- * Gekürzt wird auf {@link MAX_TAKEOVER_CHARACTERS} Zeichen, und an einer
+ * Gekürzt wird auf {@link MAIL_NOTE_MAX_LENGTH} Zeichen, und an einer
  * Zeilengrenze, damit kein Satz mitten im Wort abbricht. Leerzeilenfolgen
  * fallen zusammen — ein Zitatverlauf besteht zur Hälfte daraus.
  *
@@ -192,14 +173,14 @@ export const prepareNote = (mail: MailFacts): string => {
   const body = mail.body.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   const combined = `${head}\nBetreff: ${mail.subject}\n\n${body}`;
 
-  if (combined.length <= MAX_TAKEOVER_CHARACTERS) return combined;
+  if (combined.length <= MAIL_NOTE_MAX_LENGTH) return combined;
 
   /*
    * **Der Hinweis muss unter den Deckel passen, nicht neben ihn** (T-134).
    *
-   * Bis T-134 wurde auf {@link MAX_TAKEOVER_CHARACTERS} geschnitten und der
-   * Hinweis **danach** angehängt. Der Vermerk war damit 4011 Zeichen lang, die
-   * Tür nimmt 4000 — und zwar in jedem Fall, in dem die zweite Hälfte des
+   * Bis T-134 wurde auf {@link MAIL_NOTE_MAX_LENGTH} geschnitten und der
+   * Hinweis **danach** angehängt. Der Vermerk war damit elf Zeichen zu lang für
+   * die Tür — und zwar in jedem Fall, in dem die zweite Hälfte des
    * Textes keinen Zeilenumbruch trägt: eine lange Mail ohne Absätze, ein
    * Zitatverlauf aus einer Zeile, ein Textkörper aus Emoji.
    *
@@ -213,7 +194,7 @@ export const prepareNote = (mail: MailFacts): string => {
    * abzüglich des Hinweises, und `proof-addin.mjs` Abschnitt 16 hält das
    * Ergebnis gegen die **Tür** statt gegen eine Zahl.
    */
-  const budget = MAX_TAKEOVER_CHARACTERS - TRUNCATION_HINT.length;
+  const budget = MAIL_NOTE_MAX_LENGTH - TRUNCATION_HINT.length;
   const cut = cutToCharacterBoundary(combined, budget);
   const lastBreak = cut.lastIndexOf('\n');
   const trimmed = lastBreak > budget / 2 ? cut.slice(0, lastBreak) : cut;

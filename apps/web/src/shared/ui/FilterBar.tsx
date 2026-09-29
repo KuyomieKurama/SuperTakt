@@ -5,6 +5,7 @@ import { Icon } from "./Icon";
 import { Button, IconButton, Spinner } from "./Primitives";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "./Foreign";
+import { labels } from "../../lib/labels";
 
 /**
  * Suche und Filter — A-3.3, A-13.7, I-10.
@@ -34,7 +35,7 @@ export function SearchField({
   value,
   onChange,
   label,
-  placeholder = "Suchen …",
+  placeholder = labels().search.placeholder,
   busy = false,
   disabled = false,
   hint,
@@ -67,9 +68,9 @@ export function SearchField({
           }
         }}
       />
-      {busy ? <Spinner size={14} className="search__busy" label="Suche läuft" /> : null}
+      {busy ? <Spinner size={14} className="search__busy" label={labels().search.busy} /> : null}
       {value !== "" && !busy ? (
-        <IconButton label="Suche leeren" icon="x" size="sm" onClick={() => onChange("")} />
+        <IconButton label={labels().search.clear} icon="x" size="sm" onClick={() => onChange("")} />
       ) : null}
       {hint !== undefined ? (
         <span className="visually-hidden" id={hintId}>
@@ -117,7 +118,7 @@ export function FilterBar({
         {controls}
       </div>
       {secondaryControls === undefined ? null : (
-        <div className="filterbar__secondary" role="group" aria-label="Ansichtsoptionen">
+        <div className="filterbar__secondary" role="group" aria-label={labels().filterBar.viewOptions}>
           {secondaryControls}
         </div>
       )}
@@ -140,7 +141,7 @@ export function FilterBar({
                   <button
                     type="button"
                     className="filter-chip__remove"
-                    aria-label={`Filter ${filter.field} ${foreignText(filter.value)} entfernen`}
+                    aria-label={labels().filterBar.removeFilter(filter.field, foreignText(filter.value))}
                     onClick={filter.onRemove}
                   >
                     <Icon name="x" size={12} />
@@ -150,12 +151,12 @@ export function FilterBar({
             ))}
             <li>
               <Button variant="ghost" size="sm" onClick={onResetAll}>
-                Alle Filter zurücksetzen
+                {labels().filterBar.resetAll}
               </Button>
             </li>
           </ul>
         ) : (
-          <p className="filterbar__hint muted">Kein Filter aktiv</p>
+          <p className="filterbar__hint muted">{labels().filterBar.noneActive}</p>
         )}
       </div>
     </div>

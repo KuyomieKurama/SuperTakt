@@ -14,8 +14,9 @@ import type {
   TimeEntry,
   Todo,
 } from "../../api/types";
-import { EXPORT_STATE, type ExportDisplayState } from "../../shared/ui/ExportStatus";
-import { EXPORT_AUDIT_EVENT_LABEL, type ExportAuditEvent } from "../../lib/labels";
+import type { ExportDisplayState } from "../../shared/ui/ExportStatus";
+import { labels, type ExportAuditEvent } from "../../lib/labels";
+import { exportTexts } from "./texts";
 import { formatDateTime, formatDuration, formatPeriod } from "../../lib/format";
 
 /**
@@ -199,7 +200,7 @@ function toRowModel(
     auditRun = {
       id: item.exportRunId,
       filePath: "",
-      fileName: "Lauf nicht mehr lesbar",
+      fileName: exportTexts().runUnreadable,
       writtenAt: "",
     };
   }
@@ -216,7 +217,7 @@ function toRowModel(
         ? null
         : {
             todoId: entry.todoId,
-            todoTitle: todo?.title ?? "Unbekanntes Todo",
+            todoTitle: todo?.title ?? exportTexts().unknownTodo,
             callNumber: todo?.callNumber ?? null,
             period: formatPeriod(entry.startedAt, entry.endedAt),
             duration: formatDuration(entry.durationSeconds),
@@ -237,7 +238,7 @@ function toRowModel(
  */
 function statusLabel(status: "open" | "exported"): string {
   const state: ExportDisplayState = status;
-  return EXPORT_STATE[state].label;
+  return labels().exportState[state].label;
 }
 
 /** Der Dateiname aus einem Pfad. Windows und POSIX, ohne Pfadbibliothek. */
@@ -252,7 +253,7 @@ function distinct(values: readonly Id[]): readonly Id[] {
 
 /** Beschriftung eines Ereignisses, groß geschrieben für Etiketten. */
 export function auditEventLabel(event: ExportAuditEvent): string {
-  const label = EXPORT_AUDIT_EVENT_LABEL[event];
+  const label = labels().exportAuditEvent[event];
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -265,14 +266,9 @@ export function auditEventLabel(event: ExportAuditEvent): string {
  * als Export zu führen beantwortet die Frage „wie viel Zeit haben wir nie
  * abgerechnet" nicht mehr.
  */
-export const AUDIT_EVENT_DESCRIPTION: Readonly<Record<ExportAuditEvent, string>> = {
-  exported:
-    "In eine Exportdatei geschrieben. Die Datei steht daneben; die Buchung war danach gesperrt.",
-  reset:
-    "Der Exportstatus wurde zurückgesetzt. Diese Zeit geht beim nächsten Export erneut in die Abrechnung — genau dafür gibt es dieses Protokoll.",
-  not_billed:
-    "Von Hand ausgebucht: Diese Zeit wird nicht abgerechnet. Eine Exportdatei hat sie nie enthalten, deshalb steht hier kein Lauf.",
-};
+export function auditEventDescription(event: ExportAuditEvent): string {
+  return exportTexts().eventDescription[event];
+}
 
 /** Zu welchem Anzeigezustand ein Ereignis führt — für Symbol und Färbung. */
 export const AUDIT_EVENT_STATE: Readonly<Record<ExportAuditEvent, ExportDisplayState>> = {

@@ -63,6 +63,10 @@ export function listTimeEntries(
       ...(filter.fromDay === undefined ? {} : { fromDay: filter.fromDay }),
       ...(filter.toDay === undefined ? {} : { toDay: filter.toDay }),
       ...(filter.onlyPreviouslyExported === true ? { onlyPreviouslyExported: "true" } : {}),
+      // C-14: filtered in the service before the page limit (E-124 point 5).
+      ...(filter.tagIds === undefined || filter.tagIds.length === 0 ? {} : { tagId: filter.tagIds }),
+      ...(filter.poolIds === undefined || filter.poolIds.length === 0 ? {} : { poolId: filter.poolIds }),
+      ...(filter.hasNote === undefined ? {} : { hasNote: filter.hasNote ? "true" : "false" }),
       ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
       ...(page.limit === undefined ? {} : { limit: page.limit }),
     },

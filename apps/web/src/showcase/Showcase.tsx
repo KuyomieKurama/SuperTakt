@@ -1,7 +1,7 @@
 import { ToastProvider } from "../app/ToastContext";
 import { Icon, type IconName } from "../shared/ui/Icon";
 import { cx } from "../lib/cx";
-import { THEME_LABEL } from "../lib/labels";
+import { labels } from "../lib/labels";
 import { useDensity, useThemePreference, type Density, type ThemePreference } from "../features/settings/theme";
 import { BoardSection } from "./BoardSection";
 import { ControlsSection } from "./ControlsSection";
@@ -116,7 +116,7 @@ function ShowcasePage() {
                 onClick={() => setTheme(option.value)}
               >
                 <Icon name={option.icon} size={13} />
-                {THEME_LABEL[option.value]}
+                {labels().theme[option.value]}
               </button>
             ))}
           </div>

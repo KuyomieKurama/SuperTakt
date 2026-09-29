@@ -52,6 +52,7 @@ import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { IconButton, InlineMessage } from "../../../src/shared/ui/Primitives";
+import { labels } from "../../../src/lib/labels";
 
 function isReactElement(node: ReactNode): node is ReactElement<Record<string, unknown>> {
   return typeof node === "object" && node !== null && "type" in node && "props" in node;
@@ -101,8 +102,18 @@ describe("InlineMessage (Primitives.tsx) — die Schließen-Schaltfläche trägt
 });
 
 describe("ToastItem (ToastContext.tsx) — dieselbe Beschriftung, am Quelltext gemessen (O-FW, schwächerer Wächter — s. Dateikopf)", () => {
-  it('die Aufrufstelle der Schließen-Schaltfläche im Meldungsstapel trägt label="Meldung schließen"', () => {
+  /**
+   * T-400a (A-28.2, E-138): Der Text steht nicht mehr als Literal an dieser
+   * Aufrufstelle, sondern als Schlüssel `labels().dismissMessage`. Ein reiner
+   * Quelltextvergleich auf die alte Stelle würde bei einer Streichung des
+   * Satzes im Bündel weiterhin grün bleiben — deshalb prüft dieser Fall BEIDE
+   * Hälften: dass die Aufrufstelle wirklich den Schlüssel liest (kein Rückfall
+   * auf ein eigenes Literal), UND dass der Wert im Bündel selbst noch der
+   * richtige ist. Nur zusammen wird eine künftige Streichung des Satzes rot.
+   */
+  it('die Aufrufstelle liest label={labels().dismissMessage}, und labels().dismissMessage ist noch "Meldung schließen"', () => {
     const source = sourceOf("src/app/ToastContext.tsx");
-    expect(source).toMatch(/<IconButton\s+label="Meldung schließen"/);
+    expect(source).toMatch(/<IconButton\s+label=\{labels\(\)\.dismissMessage\}/);
+    expect(labels().dismissMessage).toBe("Meldung schließen");
   });
 });

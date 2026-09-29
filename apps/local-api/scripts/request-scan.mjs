@@ -55,6 +55,7 @@
  * in einer Liste, die jemand vergessen könnte.
  */
 
+import ts from 'typescript';
 import { stripComments } from './fetch-scan.mjs';
 
 /**
@@ -96,6 +97,51 @@ export const BLIND_REQUEST_CALL = /(?<![\w.])request\s*[<(]/;
 /** Ersetzt einen Treffer durch gleich viele Leerzeichen, Umbrüche bleiben. */
 const blank = (match) => match.replace(/[^\n]/g, ' ');
 
+/**
+ * The same text with the **string contents** of English text bundles blanked, length- and
+ * line-true (E-138 point 3, E-135 point 2).
+ *
+ * An English UI text may say "request" ("Send the request again."); that is a word, not a
+ * way to the service. Only the literal contents inside `const en = {…}` or `const *_EN = {…}`
+ * are blanked — code inside such a bundle stays, so `request(` hidden there is still found,
+ * and so is a German or any other literal outside the bundles (`client['request']`).
+ */
+export function withoutEnglishBundleTexts(code, fileName = 'source.tsx') {
+  const kind = fileName.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.TSX;
+  const file = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, kind);
+  const ranges = [];
+  const collectTexts = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      ranges.push([node.getStart(file), node.end]);
+      return;
+    }
+    ts.forEachChild(node, collectTexts);
+  };
+  const findBundles = (node) => {
+    const isEnglishBundle =
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      (node.name.text === 'en' || node.name.text.endsWith('_EN'));
+    if (isEnglishBundle && node.initializer !== undefined) {
+      collectTexts(node.initializer);
+      return;
+    }
+    ts.forEachChild(node, findBundles);
+  };
+  findBundles(file);
+  let rest = code;
+  for (const [start, end] of ranges.reverse()) {
+    rest = rest.slice(0, start) + blank(rest.slice(start, end)) + rest.slice(end);
+  }
+  return rest;
+}
+
 /** Derselbe Text ohne die benannten Nicht-Aufrufe, längen- und zeilentreu. */
 export function withoutNonCallerForms(code) {
   let rest = code;
@@ -111,8 +157,8 @@ export function withoutNonCallerForms(code) {
  * trotzdem aus der rohen Quelle, damit ein Leser die Zeile wiederfindet, wie
  * sie dasteht.
  */
-export function findRequestAccess(source) {
-  const scanned = withoutNonCallerForms(stripComments(source)).split('\n');
+export function findRequestAccess(source, fileName = 'source.tsx') {
+  const scanned = withoutNonCallerForms(stripComments(withoutEnglishBundleTexts(source, fileName))).split('\n');
   const raw = source.split('\n');
   const hits = [];
   for (const [index, line] of scanned.entries()) {
@@ -135,7 +181,7 @@ export function strayRequestAccess(files, allowed) {
   const stray = [];
   for (const file of files) {
     if (allowed.includes(file.name)) continue;
-    const hits = findRequestAccess(file.source);
+    const hits = findRequestAccess(file.source, file.name);
     if (hits.length > 0) stray.push({ name: file.name, hits });
   }
   return stray;

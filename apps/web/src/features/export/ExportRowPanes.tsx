@@ -3,6 +3,7 @@ import { Foreign } from "../../shared/ui/Foreign";
 import { cx } from "../../lib/cx";
 import type { ExportRow, ExportValue, ForeignText } from "../../api/types";
 import type { ExportFieldDefinition, SourceCatalog } from "./exportTemplateModel";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — eine Exportzeile, zweispaltig: was in der Datei steht und was es
@@ -53,15 +54,16 @@ export function ExportRowPanes({
   row,
   fields,
   catalog,
-  clearTextHint = "Der Klartext steht unten bei den Buchungen.",
+  clearTextHint = exportTexts().clearTextBelow,
   className,
 }: ExportRowPanesProps) {
+  const text = exportTexts();
   const missing = missingFieldNames(fields, row);
 
   return (
     <div className={cx("erow", className)}>
       <section className="erow__pane">
-        <h4 className="erow__pane-title">So steht es in der Datei</h4>
+        <h4 className="erow__pane-title">{text.asInFile}</h4>
         {/*
           Auch der Abzug der Zeile ist eine **Anzeige** und keine Datei (O-AT,
           T-133). Er trägt zweierlei fremden Text: die Werte und die
@@ -80,7 +82,7 @@ export function ExportRowPanes({
       </section>
 
       <section className="erow__pane">
-        <h4 className="erow__pane-title">Feld für Feld</h4>
+        <h4 className="erow__pane-title">{text.fieldByField}</h4>
         <dl className="erow__fields">
           {cellsOf(row).map(([key, value]) => {
             const field = fields.find((candidate) => candidate.name === key);
@@ -101,7 +103,7 @@ export function ExportRowPanes({
                   )}
                   {field?.transformation === "base64" ? (
                     <span className="erow__note">
-                      Base64 ist eine Kodierung, keine Verschlüsselung. {clearTextHint}
+                      {text.base64Note} {clearTextHint}
                     </span>
                   ) : null}
                 </dd>
@@ -111,9 +113,7 @@ export function ExportRowPanes({
         </dl>
         {missing.length === 0 ? null : (
           <p className="erow__missing">
-            Nicht in dieser Zeile, weil die Bedingung nicht zutraf:{" "}
-            {missing.map(foreignText).join(", ")}. Der
-            Schlüssel fehlt vollständig, er steht nicht leer da.
+            {text.missingKeys(missing.map(foreignText).join(", "))}
           </p>
         )}
       </section>

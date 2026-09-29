@@ -13,6 +13,7 @@ import { Icon } from "../../shared/ui/Icon";
 import { Menu, type MenuEntry } from "../../shared/ui/Menu";
 import { IconButton } from "../../shared/ui/Primitives";
 import { TodoTagsCell, type TodoTagLabel } from "./TodoTagsCell";
+import { todoTexts } from "./texts";
 
 /**
  * Takt — die Todo-Liste als Tabelle (A-25.9, S-02).
@@ -69,8 +70,6 @@ import { TodoTagsCell, type TodoTagLabel } from "./TodoTagsCell";
 /** Die Spaltenzahl, einmal getippt — der Fuß spannt über alle. */
 const COLUMN_COUNT = 8;
 
-export const TODO_TABLE_CAPTION =
-  "Alle Todos mit Erledigt-Kennzeichen, Call-Nummer, Status, Frist, Tags und Exportstand ihrer Buchungen";
 
 export interface TodoTableRow {
   readonly todo: Todo;
@@ -123,9 +122,10 @@ function openOnRowDoubleClick(event: MouseEvent<HTMLTableRowElement>, todoId: st
 }
 
 export function TodoTable({ rows, today, openTagsTodoId, onOpenTags, footer }: TodoTableProps) {
+  const text = todoTexts();
   return (
     <table className="table todo-table">
-      <caption className="visually-hidden">{TODO_TABLE_CAPTION}</caption>
+      <caption className="visually-hidden">{text.tableCaption}</caption>
       <colgroup>
         <col className="todo-col--done" />
         <col className="todo-col--call" />
@@ -139,15 +139,15 @@ export function TodoTable({ rows, today, openTagsTodoId, onOpenTags, footer }: T
       </colgroup>
       <thead>
         <tr>
-          <th scope="col">Erledigt</th>
-          <th scope="col">Call</th>
-          <th scope="col">Titel</th>
-          <th scope="col">Status</th>
-          <th scope="col">Frist</th>
-          <th scope="col">Tags</th>
-          <th scope="col">Buchungen</th>
+          <th scope="col">{text.columnDone}</th>
+          <th scope="col">{text.columnCall}</th>
+          <th scope="col">{text.columnTitle}</th>
+          <th scope="col">{text.status}</th>
+          <th scope="col">{text.deadline}</th>
+          <th scope="col">{text.tags}</th>
+          <th scope="col">{text.columnBookings}</th>
           <th scope="col" className="table__cell--end">
-            <span className="visually-hidden">Aktionen</span>
+            <span className="visually-hidden">{text.columnActions}</span>
           </th>
         </tr>
       </thead>
@@ -208,9 +208,7 @@ function TodoTableRowView({
           <label className="todo-row__check">
             <input type="checkbox" checked={done} onChange={row.onToggleDone} />
             <span className="visually-hidden">
-              {done
-                ? `${quotedName(todo.title)} als offen markieren`
-                : `${quotedName(todo.title)} als erledigt markieren`}
+              {done ? todoTexts().markOpen(quotedName(todo.title)) : todoTexts().markDoneFor(quotedName(todo.title))}
             </span>
           </label>
           {/*
@@ -289,8 +287,8 @@ function TodoTableRowView({
             size="sm"
             label={
               running
-                ? `Timer für ${quotedName(todo.title)} stoppen`
-                : `Timer für ${quotedName(todo.title)} starten`
+                ? todoTexts().stopTimerFor(quotedName(todo.title))
+                : todoTexts().startTimerFor(quotedName(todo.title))
             }
             icon={running ? "pause" : "play"}
             variant={running ? "primary" : "ghost"}
@@ -298,7 +296,7 @@ function TodoTableRowView({
           />
           <Menu
             trigger={<Icon name="more-horizontal" size={16} />}
-            triggerLabel={`Menü für ${quotedName(todo.title)}`}
+            triggerLabel={todoTexts().menuFor(quotedName(todo.title))}
             triggerClassName="table__row-menu"
             entries={menu}
             align="end"

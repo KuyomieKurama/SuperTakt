@@ -2,6 +2,7 @@ import { InlineMessage, Spinner } from "../../shared/ui/Primitives";
 import type { ExportRow } from "../../api/types";
 import { ExportRowPanes } from "./ExportRowPanes";
 import type { ExportFieldDefinition, SourceCatalog } from "./exportTemplateModel";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — die Zeile, wie sie in die Datei geht (A-8.4, A-8.9, Befund C-02).
@@ -42,6 +43,7 @@ interface GroupRowDetailProps {
  * nichts da ist, oder weil etwas nicht stimmt.
  */
 export function GroupRowDetail({ row, deselected, blocked, template, catalog }: GroupRowDetailProps) {
+  const text = exportTexts();
   if (blocked) {
     // Der Grund steht bereits am Gruppenkopf (E-034). Ihn hier zu wiederholen
     // hieße, dieselbe Meldung zweimal zu lesen.
@@ -51,8 +53,7 @@ export function GroupRowDetail({ row, deselected, blocked, template, catalog }: 
   if (deselected) {
     return (
       <p className="egroup__rowhint">
-        Diese Tagesgruppe ist abgewählt und erzeugt keine Zeile. Haken Sie sie an, dann steht hier,
-        was geschrieben würde.
+        {text.rowDeselected}
       </p>
     );
   }
@@ -60,17 +61,15 @@ export function GroupRowDetail({ row, deselected, blocked, template, catalog }: 
   if (template.kind === "unknown") {
     return (
       <p className="egroup__rowhint">
-        Es ist keine Exportvorlage gewählt. Ohne sie gibt es keine Zeile, die sich zeigen ließe —
-        und keinen Lauf.
+        {text.noTemplate}
       </p>
     );
   }
 
   if (template.kind === "failed") {
     return (
-      <InlineMessage tone="danger" title="Diese Vorlage lässt sich nicht lesen">
-        {template.message} Geprüft hat das dieselbe Stelle, die auch beim Speichern prüft. Solange
-        das so ist, wird hier keine Zeile gezeigt — eine geratene wäre schlimmer als keine.
+      <InlineMessage tone="danger" title={text.templateUnreadable}>
+        {template.message} {text.templateUnreadableTail}
       </InlineMessage>
     );
   }
@@ -78,8 +77,8 @@ export function GroupRowDetail({ row, deselected, blocked, template, catalog }: 
   if (template.kind === "pending" || catalog === null) {
     return (
       <p className="egroup__rowhint" role="status" aria-live="polite">
-        <Spinner size={13} label="Die Vorlage wird gelesen" />
-        <span>Die Vorlage wird gelesen …</span>
+        <Spinner size={13} label={text.templateReading} />
+        <span>{text.templateReadingDots}</span>
       </p>
     );
   }
@@ -87,8 +86,8 @@ export function GroupRowDetail({ row, deselected, blocked, template, catalog }: 
   if (row === null) {
     return (
       <p className="egroup__rowhint" role="status" aria-live="polite">
-        <Spinner size={13} label="Die Zeile wird gerechnet" />
-        <span>Die Zeile wird gerechnet — vom Dienst, mit demselben Renderer wie die Datei.</span>
+        <Spinner size={13} label={text.rowComputing} />
+        <span>{text.rowComputingLong}</span>
       </p>
     );
   }
@@ -98,7 +97,7 @@ export function GroupRowDetail({ row, deselected, blocked, template, catalog }: 
       row={row}
       fields={template.fields}
       catalog={catalog}
-      clearTextHint="Der Klartext steht unten bei den Buchungen dieser Tagesgruppe."
+      clearTextHint={text.clearTextInGroup}
     />
   );
 }

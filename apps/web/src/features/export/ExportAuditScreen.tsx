@@ -5,7 +5,7 @@ import { Select } from "../../shared/ui/Select";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, EmptyState } from "../../shared/ui/Primitives";
 import {
-  AUDIT_EVENT_DESCRIPTION,
+  auditEventDescription,
   auditEventLabel,
   loadExportAuditPage,
   AUDIT_PAGE_SIZE,
@@ -22,6 +22,8 @@ import { RefreshHint, ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { StatTile } from "../../shared/ui/StatTile";
 import { ExportTabs } from "./ExportTabs";
 import { foreignText } from "../../lib/foreign";
+import { useLanguage } from "../../lib/language";
+import { exportTexts } from "./texts";
 
 /**
  * Takt — S-07, Bereich „Protokoll" (R-10, E-012, E-047, Befund C-01).
@@ -65,6 +67,8 @@ export interface ExportAuditScreenProps {
 
 export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
   const { version } = useRefresh();
+  const language = useLanguage();
+  const text = exportTexts();
   const [event, setEvent] = useState<ExportAuditEvent | "">(ALL);
   const [runId, setRunId] = useState<string>(query["lauf"] ?? ALL);
   const [limit, setLimit] = useState(AUDIT_PAGE_SIZE);
@@ -100,7 +104,7 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
     if (event !== ALL) {
       entries.push({
         id: "vorgang",
-        field: "Vorgang",
+        field: text.event,
         value: auditEventLabel(event),
         onRemove: () => setEvent(ALL),
       });
@@ -108,16 +112,17 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
     if (runId !== ALL) {
       entries.push({
         id: "lauf",
-        field: "Lauf",
+        field: text.run,
         // Der Lauf kann aus der Adresse kommen und noch außerhalb der
         // geladenen Zeilen liegen. Dann steht das da, statt „unbekannt" —
         // der Unterschied ist, ob man weiterladen soll oder nicht.
-        value: runs.find((run) => run.value === runId)?.label ?? "noch nicht geladen",
+        value: runs.find((run) => run.value === runId)?.label ?? text.runNotLoadedYet,
         onRemove: () => setRunId(ALL),
       });
     }
     return entries;
-  }, [event, runId, runs]);
+    // `language`: the chips carry words of the UI language.
+  }, [event, runId, runs, language]);
 
   const resetAll = useCallback(() => {
     setEvent(ALL);
@@ -127,34 +132,34 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
   return (
     <section className="screen">
       <ScreenHeader
-        title="Exportprotokoll"
-        lead="Jeder Wechsel eines Exportstatus, mit Zeitpunkt, Buchung, Vorgang und Lauf. Anhängend und unveränderlich."
+        title={text.auditTitle}
+        lead={text.auditLead}
         actions={
           <Button variant="secondary" iconStart="download" onClick={() => navigate("export")}>
-            Zur Export-Ansicht
+            {text.toExport}
           </Button>
         }
       >
         <ExportTabs active="exportAudit" />
         <FilterBar
-          label="Protokoll filtern"
+          label={text.auditFilter}
           resultLabel={
             data.state.status === "ready"
               ? activeFilters.length === 0
-                ? `${plural(rows.length, "Vorgang geladen", "Vorgänge geladen")} von ${formatCount(data.state.value.total)}`
-                : `${plural(visible.length, "Vorgang", "Vorgänge")} von ${formatCount(rows.length)} geladenen`
-              : "wird geladen …"
+                ? text.eventsOfTotal(plural(rows.length, text.eventLoaded, text.eventsLoaded), formatCount(data.state.value.total))
+                : text.eventsOfLoaded(plural(visible.length, text.eventSingular, text.eventPlural), formatCount(rows.length))
+              : text.loadingShort
           }
           activeFilters={activeFilters}
           onResetAll={resetAll}
           controls={
             <>
               <Select
-                label="Vorgang"
+                label={text.event}
                 value={event}
                 onChange={(next) => setEvent(next as ExportAuditEvent | "")}
                 options={[
-                  { value: ALL, label: "Alle Vorgänge" },
+                  { value: ALL, label: text.allEvents },
                   ...(["exported", "reset", "not_billed"] as const).map((value) => ({
                     value,
                     label: auditEventLabel(value),
@@ -162,11 +167,11 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
                 ]}
               />
               <Select
-                label="Exportlauf"
+                label={text.exportRun}
                 value={runId}
                 onChange={setRunId}
                 disabled={runs.length === 0}
-                options={[{ value: ALL, label: "Alle Läufe" }, ...runs]}
+                options={[{ value: ALL, label: text.allRuns }, ...runs]}
               />
             </>
           }
@@ -180,7 +185,7 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
         sagt genau das. Beim Protokoll ist der Irrtum „kurze Liste =
         vollständige Antwort" der teuerste.
       */}
-      <ScreenBody label="Exportprotokoll">
+      <ScreenBody label={text.auditTitle}>
         {/*
           Ohne Überschrift und ohne Beschreibung (T-181, ST-03). Die Überschrift
           erklärte eine Liste, die sichtbar darunter steht, und die Beschreibung
@@ -192,20 +197,18 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
             {(["exported", "reset", "not_billed"] as const).map((value) => (
               <div className="auditlegend__item" key={value}>
                 <dt className="auditlegend__term">{auditEventLabel(value)}</dt>
-                <dd className="auditlegend__text">{AUDIT_EVENT_DESCRIPTION[value]}</dd>
+                <dd className="auditlegend__text">{auditEventDescription(value)}</dd>
               </div>
             ))}
           </dl>
           <p className="auditlegend__note">
-            Eine Zeile lässt sich weder ändern noch löschen — es gibt dafür keine Route, und die
-            Speicherung verbietet beides zusätzlich. Wer eine Buchung zurücksetzt und erneut
-            exportiert, findet beides hier nebeneinander.
+            {text.auditLegendNote}
           </p>
         </Card>
 
         <AsyncBoundary
           state={data.state}
-          label="Das Exportprotokoll wird geladen"
+          label={text.auditLoading}
           rows={6}
           onRetry={data.reload}
         >
@@ -214,11 +217,11 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
               return (
                 <EmptyState
                   icon="clock"
-                  title="Noch kein Vorgang protokolliert"
-                  description="Sobald der erste Export läuft, eine Buchung zurückgesetzt oder eine Zeit als „nicht abgerechnet“ abgehakt wird, steht es hier — mit Zeitpunkt, Buchung und Lauf."
+                  title={text.auditEmptyTitle}
+                  description={text.auditEmptyBody}
                   action={
                     <Button variant="secondary" iconStart="download" onClick={() => navigate("export")}>
-                      Zur Export-Ansicht
+                      {text.toExport}
                     </Button>
                   }
                 />
@@ -229,17 +232,17 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
               return (
                 <EmptyState
                   icon="search"
-                  title="Kein Vorgang passt zu diesen Filtern"
-                  description="Der Filter wirkt über die geladenen Zeilen. Laden Sie weitere, wenn Sie einen älteren Vorgang suchen — oder setzen Sie den Filter zurück."
+                  title={text.auditNoMatchTitle}
+                  description={text.auditNoMatchBody}
                   action={
                     <>
                       {value.nextCursor === null ? null : (
                         <Button variant="primary" iconStart="arrow-down" onClick={loadMore}>
-                          Weitere laden
+                          {text.loadMore}
                         </Button>
                       )}
                       <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                        Filter zurücksetzen
+                        {text.resetFilters}
                       </Button>
                     </>
                   }
@@ -259,9 +262,9 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
             const complete = value.rows.length >= value.total;
             const scope = complete
               ? value.total === 1
-                ? "Gezählt über den einen Vorgang."
-                : `Gezählt über alle ${formatCount(value.total)} Vorgänge.`
-              : `Gezählt über ${formatCount(value.rows.length)} von ${formatCount(value.total)} Vorgängen — ohne die noch nicht geladenen.`;
+                ? text.countedOne
+                : text.countedAll(formatCount(value.total))
+              : text.countedPartial(formatCount(value.rows.length), formatCount(value.total));
 
             return (
               <>
@@ -269,18 +272,18 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
                   <StatTile
                     label={auditEventLabel("exported")}
                     value={formatCount(counts.exported)}
-                    detail={`In eine Datei geschrieben. ${scope}`}
+                    detail={text.tileExported(scope)}
                   />
                   <StatTile
                     label={auditEventLabel("reset")}
                     value={formatCount(counts.reset)}
                     tone="warning"
-                    detail={`Danach geht dieselbe Zeit erneut in die Abrechnung. ${scope}`}
+                    detail={text.tileReset(scope)}
                   />
                   <StatTile
                     label={auditEventLabel("not_billed")}
                     value={formatCount(counts.not_billed)}
-                    detail={`Nie exportiert, bewusst nicht abgerechnet. ${scope}`}
+                    detail={text.tileNotBilled(scope)}
                   />
                 </div>
 
@@ -296,10 +299,10 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
                     <Icon name="info" size={14} />
                     <span>
                       {complete
-                        ? "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter."
+                        ? text.scopeFilter
                         : activeFilters.length === 0
-                          ? "Ältere Vorgänge sind noch nicht geladen. „Weitere laden“ am Ende der Liste erhöht beide Zahlen."
-                          : "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter. Ältere sind zudem noch nicht geladen."}
+                          ? text.scopeOlder
+                          : text.scopeFilterAndOlder}
                     </span>
                   </p>
                 )}
@@ -310,12 +313,12 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
 
                 {value.nextCursor === null ? (
                   <p className="auditlist__end muted">
-                    Das ist der Anfang des Protokolls — ältere Vorgänge gibt es nicht.
+                    {text.auditEnd}
                   </p>
                 ) : (
                   <div className="list-more">
                     <Button variant="secondary" loading={refreshing} onClick={loadMore}>
-                      Weitere laden ({formatCount(Math.max(0, value.total - value.rows.length))} übrig)
+                      {text.loadMoreLeft(formatCount(Math.max(0, value.total - value.rows.length)))}
                     </Button>
                   </div>
                 )}

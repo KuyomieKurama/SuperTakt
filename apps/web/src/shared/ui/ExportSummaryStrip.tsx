@@ -1,10 +1,10 @@
 import { cx } from "../../lib/cx";
 import {
   ExportStatusMarker,
-  EXPORT_STATE,
   type ExportDisplayState,
   type ExportSummary,
 } from "./ExportStatus";
+import { labels } from "../../lib/labels";
 
 /**
  * Takt — der Exportstand der Buchungen eines Todos auf engem Raum (A-13.5).
@@ -41,7 +41,7 @@ export function ExportSummaryStrip({ summary, className }: ExportSummaryStripPro
   const present = order.filter((state) => summary[state] > 0);
 
   if (present.length === 0) {
-    return <span className={cx("summary-strip summary-strip--empty", className)}>keine Buchung</span>;
+    return <span className={cx("summary-strip summary-strip--empty", className)}>{labels().summaryStrip.empty}</span>;
   }
 
   return (
@@ -51,7 +51,7 @@ export function ExportSummaryStrip({ summary, className }: ExportSummaryStripPro
           <ExportStatusMarker state={state} labelled={false} />
           <span aria-hidden>{summary[state]}</span>
           <span className="visually-hidden">
-            {summary[state]} Buchungen: {EXPORT_STATE[state].label}
+            {labels().summaryStrip.count(summary[state], labels().exportState[state].label)}
           </span>
         </span>
       ))}

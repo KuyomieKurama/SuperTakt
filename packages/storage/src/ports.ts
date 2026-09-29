@@ -45,6 +45,7 @@ import type {
   Todo,
   TodoCreate,
   TodoFilter,
+  TodoMatchOrigin,
   TodoId,
   TodoNote,
   TodoStatus,
@@ -163,6 +164,12 @@ export interface TodoPort {
   load(id: TodoId): Promise<Todo | null>;
   loadMany(ids: readonly TodoId[]): Promise<readonly Todo[]>;
   search(filter: TodoFilter, pagination?: Pagination): Promise<Page<Todo>>;
+  /**
+   * C-22 (K-1, K-5): where each of these todos matches `term` — title, call number, note — in
+   * that fixed order, with the same `LIKE` masking as `search`. Only flags leave the database,
+   * never note text (K-3). A todo that matches nowhere gets an empty list.
+   */
+  matchOrigins(todoIds: readonly TodoId[], term: string): Promise<ReadonlyMap<TodoId, readonly TodoMatchOrigin[]>>;
   /** A-10.9: Duplikaterkennung im Add-in. Trifft den Teilindex auf call_number. */
   findByCallNumber(callNumber: string): Promise<readonly Todo[]>;
   /**
@@ -1194,6 +1201,12 @@ export interface PoolPort {
    */
   update(id: PoolId, pool: Partial<Omit<Pool, 'id'>>, now: Timestamp): Promise<Result<Pool, TaktError>>;
   remove(id: PoolId): Promise<Result<void, TaktError<'not_found'>>>;
+  /**
+   * Sets the order of **all** rules at once (A-28.3), like `StatusPort.reorder`. A swap of two
+   * positions through two single updates breaks `ux_pool_position` halfway; the full order does
+   * not. Returns every rule in the new order (`list('all')`).
+   */
+  reorder(order: readonly PoolId[], now: Timestamp): Promise<Result<readonly Pool[], TaktError>>;
 
   /**
    * Löst die **erforderlichen** Tags einer Regel zur vollständigen Tagmenge
@@ -1335,6 +1348,14 @@ export interface TimeEntryFilter {
   /** Kalendertag in Ortszeit, einschließlich. */
   readonly toDay?: CalendarDay;
   readonly onlyPreviouslyExported?: boolean;
+  /** C22-04 — service text (`note`) contains this text; case is ignored beyond ASCII (E-132 point 2). */
+  readonly noteContains?: string;
+  /** C-14 — the booking has a service text (`true`) or none (`false`). Never the todo note. */
+  readonly hasNote?: boolean;
+  /** C-14 — the todo carries **all** these tags, same meaning as `TodoFilter.tagIds`. */
+  readonly tagIds?: readonly TagId[];
+  /** C-14 — the todo is a member of **one** of these rules, same meaning as `TodoFilter.poolIds`. */
+  readonly poolIds?: readonly PoolId[];
 }
 
 export interface TimeEntryPort {
@@ -1352,7 +1373,7 @@ export interface TimeEntryPort {
     id: TimeEntryId,
     fields: Partial<Pick<TimeEntry, 'startedAt' | 'endedAt' | 'note' | 'todoId'>>,
     now: Timestamp,
-  ): Promise<Result<TimeEntry, TaktError<'time_entry_locked' | 'validation_error' | 'not_found'>>>;
+  ): Promise<Result<TimeEntry, TaktError<'time_entry_locked' | 'time_entry_too_long' | 'validation_error' | 'not_found'>>>;
 
   remove(id: TimeEntryId): Promise<Result<void, TaktError<'time_entry_locked' | 'not_found'>>>;
 
@@ -1412,7 +1433,7 @@ export interface TimerPort {
         readonly stopped: TimeEntry | null;
         readonly doneCleared: boolean;
       },
-      TaktError<'timer_already_running' | 'not_found'>
+      TaktError<'timer_already_running' | 'timer_stop_end_required' | 'not_found'>
     >
   >;
 
@@ -1429,7 +1450,7 @@ export interface TimerPort {
   ): Promise<
     Result<
       { readonly kind: 'recorded'; readonly entry: TimeEntry } | { readonly kind: 'discarded' },
-      TaktError<'timer_not_running'>
+      TaktError<'timer_not_running' | 'timer_stop_end_required'>
     >
   >;
 }
@@ -1808,6 +1829,13 @@ export interface VersionCheckStatePort {
    * gar kein Boden.
    */
   recordCheck(at: Timestamp): Promise<void>;
+  /**
+   * The user's switch for the version check (A-28.1), read on every tick.
+   *
+   * Synchronous on purpose: the checker must not wait on anything besides the request itself
+   * (`proof:release-safety` 6g, A-A-106). A throw is handled by the caller.
+   */
+  isEnabled(): boolean;
 }
 
 // Ports, die nicht auf die Datenbank zeigen

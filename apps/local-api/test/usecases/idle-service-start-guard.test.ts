@@ -131,12 +131,11 @@ describe('T-375 Fall 2 — eine eingespielte offene Inaktivitätsphase wird gede
     expect(result.ok).toBe(true);
 
     const entries = (await ziel.database.transactions.inTransaction((unit) => unit.timeEntries.search({}))).items;
-    expect(entries.map((e) => e.durationSeconds)).toEqual([1200]);
-    expect(entries.map((e) => e.durationSeconds)).not.toEqual([14400]); // der behauptete, ungeprüfte Beginn
+    expect(entries).toHaveLength(0); // Rückkehr allein ist keine Buchung.
 
-    // Der Timer läuft danach fort, sekundengenau ab der Rückkehr — keine Lücke, keine Überlappung.
+    // Der Originaltimer bleibt bis zur bewussten Zuordnung reserviert.
     const running = await loadRunningTimer(context);
-    expect(running?.entry.startedAt).toBe(TARGET_CLOCK);
+    expect(running?.entry.startedAt).toBe(T0);
 
     ziel.database.close();
   });
@@ -171,7 +170,7 @@ describe('T-375 Fall 2 — eine eingespielte offene Inaktivitätsphase wird gede
     expect(entries).toHaveLength(0); // keine Buchung über 0 Sekunden
 
     const running = await loadRunningTimer(context);
-    expect(running?.entry.startedAt).toBe(TARGET_CLOCK);
+    expect(running?.entry.startedAt).toBe(T0);
 
     ziel.database.close();
   });
@@ -216,12 +215,11 @@ describe('T-375 Fall 3 — Gegenprobe: der eigene Timer dieser Sitzung bleibt un
     expect(returned.ok).toBe(true);
 
     const entries = (await m.database.transactions.inTransaction((unit) => unit.timeEntries.search({}))).items;
-    expect(entries.map((e) => e.durationSeconds)).toEqual([39000]);
+    expect(entries).toHaveLength(0);
 
-    // Der Timer läuft fort, ohne Lücke und ohne Überlappung mit der Buchung.
+    // Auch auf dem eigenen Timer wartet jede Buchung auf die Entscheidung.
     const running = await loadRunningTimer(context);
-    expect(running?.entry.startedAt).toBe(TARGET_CLOCK);
-    expect(entries[0]?.endedAt).toBe(INACTIVE_SINCE);
+    expect(running?.entry.startedAt).toBe(T0);
 
     m.database.close();
   });

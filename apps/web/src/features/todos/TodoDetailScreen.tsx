@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { deleteTimeEntry, listTimeEntries } from "../bookings/api";
 import { getTodo, getTodoNote } from "./api";
-import { errorMessage } from "../../api/client";
+import { errorMessage, isServiceError } from "../../api/client";
 import type { Id, TimeEntry } from "../../api/types";
 import { Attachments } from "./Attachments";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
@@ -20,7 +20,10 @@ import { useTimer } from "../timer/TimerContext";
 import { useToasts } from "../../app/ToastContext";
 import { useAsync } from "../../app/useAsync";
 import { useToday } from "../../app/useToday";
-import { TIME_ENTRY_SOURCE_LABEL } from "../../lib/labels";
+import { labels } from "../../lib/labels";
+import { currentLocale } from "../../lib/language";
+import { bookingTexts } from "../bookings/texts";
+import { todoTexts } from "./texts";
 import {
   calendarDayOf,
   formatDayLabel,
@@ -71,6 +74,7 @@ export interface TodoDetailScreenProps {
 export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
   const structure = useStructure();
   const timer = useTimer();
+  const text = todoTexts();
   const toasts = useToasts();
   const { version, bump } = useRefresh();
   /*
@@ -122,7 +126,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
       entries: entries.items,
       totalQuarters: preview?.totalQuarters ?? null,
       blockedDays,
-      previewProblem: outcome.kind === "failed" ? outcome.message : null,
+      previewProblem: outcome.kind === "failed" ? { message: outcome.message, fromService: outcome.fromService } : null,
     };
   }, [todoId], [version]);
 
@@ -134,10 +138,10 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
       .then(() => {
         setPendingDelete(null);
         bump();
-        toasts.success("Buchung gelöscht.", "Die Tagesgruppe dieses Todos ändert sich mit.");
+        toasts.success(todoTexts().bookingDeleted, todoTexts().groupChangesToo);
       })
       .catch((cause: unknown) =>
-        toasts.failure("Die Buchung ließ sich nicht löschen", errorMessage(cause)),
+        toasts.failure(todoTexts().bookingDeleteFailed, errorMessage(cause), isServiceError(cause)),
       );
   }, [bump, pendingDelete, toasts]);
 
@@ -152,13 +156,13 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
        * beseitigen sollte.
        */
       const notBilled = exportDisplayState(entry.exportStatus, entry.exportCount) === "not_billed";
-      const lockReason = notBilled
-        ? "Diese Zeit wurde ausgebucht und ist gesperrt. Setzen Sie den Exportstatus zurück, um sie wieder zu bearbeiten."
-        : "Diese Buchung wurde bereits exportiert und ist gesperrt. Setzen Sie den Exportstatus zurück, um sie zu bearbeiten.";
+      const booking = bookingTexts();
+      const words = todoTexts();
+      const lockReason = notBilled ? booking.lockedNotBilled : booking.lockedExported;
       return [
         {
           id: "edit",
-          label: "Bearbeiten",
+          label: booking.edit,
           icon: "pencil",
           disabled: locked,
           ...(locked ? { disabledReason: lockReason } : {}),
@@ -171,49 +175,51 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
         // Zeit schon geschehen ist, ist die Frage, die davor steht.
         {
           id: "history",
-          label: "Verlauf dieser Buchung",
+          label: booking.historyTitle,
           icon: "clock",
           onSelect: () => setHistoryEntry(entry),
         },
         {
           id: "reset",
-          label: "Exportstatus zurücksetzen",
+          label: booking.resetExportStatus,
           icon: "rotate-ccw",
           disabled: !locked,
-          ...(locked ? {} : { disabledReason: "Diese Buchung ist bereits offen." }),
+          ...(locked ? {} : { disabledReason: booking.alreadyOpen }),
           onSelect: () => setResetEntry(entry),
         },
         // E-047 — der Gegenweg zum Export, ohne dass eine Datei entsteht.
-        {
-          id: "not-billed",
-          label: "Nicht abrechnen",
-          // Nicht der Haken (E-050): Der traegt seit jeher „Exportiert", und
-          // exportiert wird diese Zeit gerade nicht. Der durchgestrichene
-          // Kreis ist dasselbe Zeichen, das die Buchung danach in der Liste
-          // traegt — Vorgang und Ergebnis sehen gleich aus.
-          icon: "slash-circle",
-          disabled: locked,
-          ...(locked
-            ? {
-                disabledReason: notBilled
-                  ? "Diese Zeit ist bereits ausgebucht."
-                  : "Diese Buchung ist bereits exportiert und damit abgeschlossen.",
-              }
-            : {}),
-          onSelect: () => setNotBilledEntry(entry),
-        },
+        // A-26.3 (E-133 point 5): a NoExport booking never offers "not billed" — hidden, not
+        // only disabled, because the service refuses it anyway (`time_entry_no_export`).
+        ...(entry.todoNoExport
+          ? []
+          : ([
+            {
+              id: "not-billed",
+              label: booking.notBilled,
+              // Nicht der Haken (E-050): Der traegt seit jeher „Exportiert", und
+              // exportiert wird diese Zeit gerade nicht. Der durchgestrichene
+              // Kreis ist dasselbe Zeichen, das die Buchung danach in der Liste
+              // traegt — Vorgang und Ergebnis sehen gleich aus.
+              icon: "slash-circle",
+              disabled: locked,
+              ...(locked
+                ? {
+                    disabledReason: notBilled ? booking.alreadyNotBilled : booking.alreadyExported,
+                  }
+                : {}),
+              onSelect: () => setNotBilledEntry(entry),
+            },
+          ] satisfies MenuEntry[])),
         { kind: "separator", id: "sep" },
         {
           id: "delete",
-          label: "Löschen",
+          label: words.delete,
           icon: "trash",
           tone: "danger",
           disabled: locked,
           ...(locked
             ? {
-                disabledReason: notBilled
-                  ? "Ausgebuchte Zeit wird nicht gelöscht. Sie bleibt als Beleg stehen."
-                  : "Abgerechnete Zeit wird nicht gelöscht.",
+                disabledReason: notBilled ? words.writtenOffNotDeleted : words.billedNotDeleted,
               }
             : {}),
           onSelect: () => setPendingDelete(entry),
@@ -239,7 +245,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
       */}
       <AsyncBoundary
         state={detail.state}
-        label="Todo wird geladen"
+        label={text.todoLoading}
         rows={5}
         onRetry={detail.reload}
         fallbackFrame={(content) => <ScreenBody>{content}</ScreenBody>}
@@ -255,7 +261,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 title={<Foreign value={todo.title} />}
                 lead={
                   todo.callNumber === null
-                    ? `Status: ${foreignText(structure.statusName(todo.statusId))}`
+                    ? text.statusEntry(foreignText(structure.statusName(todo.statusId)))
                     : /*
                         Die Call-Nummer geht seit T-129 durch dieselbe
                         Behandlung wie jeder andere fremde Text — obwohl
@@ -270,7 +276,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                         muesste im Nachweis stehen, gepflegt werden und koennte
                         veralten. Eine Identitaet kostet nichts.
                       */
-                      `Call ${foreignText(todo.callNumber)} · Status: ${foreignText(structure.statusName(todo.statusId))}`
+                      text.callAndStatus(foreignText(todo.callNumber), foreignText(structure.statusName(todo.statusId)))
                 }
                 refreshing={refreshing}
                 actions={
@@ -280,10 +286,10 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       iconStart={running ? "pause" : "play"}
                       onClick={() => timer.toggle(todo.id, todo.title)}
                     >
-                      {running ? "Timer stoppen" : "Timer starten"}
+                      {running ? text.stopTimer : text.startTimer}
                     </Button>
                     <Button variant="secondary" iconStart="pencil" onClick={() => setEditOpen(true)}>
-                      Bearbeiten
+                      {text.edit}
                     </Button>
 
                   </>
@@ -295,18 +301,18 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                   <div className="detail__main">
                     <TodoDoneSwitch todo={todo} />
 
-                    {(value.todo.mails?.length ?? 0) > 0 ? <Card title="E-Mail-Verlauf">
+                    {(value.todo.mails?.length ?? 0) > 0 ? <Card title={text.emailHistory}>
                       {value.todo.mails?.map(mail => <article key={mail.identity} className="todo-mail-entry">
                         <h3><Foreign value={mail.subject} /></h3>
-                        <p>{mail.kind} · <Foreign value={mail.sender} /> · {mail.receivedAt ? new Date(mail.receivedAt).toLocaleString('de-DE') : 'Zeitpunkt nicht verfügbar'}</p>
+                        <p>{text.mailKind[mail.kind]} · <Foreign value={mail.sender} /> · {mail.receivedAt ? new Date(mail.receivedAt).toLocaleString(currentLocale()) : text.timeUnavailable}</p>
                         {mail.outlookLink ? <Button variant="ghost" onClick={() => {
                           if (!mail.outlookLink) return;
                           void openAttachmentLink(mail.outlookLink).then(result => {
-                            if (result.outcome !== "opened") toasts.failure("Outlook ließ sich nicht öffnen", "Der Rückverweis konnte auf diesem Rechner nicht geöffnet werden.");
-                          }).catch(() => toasts.failure("Outlook ließ sich nicht öffnen", "Der Rückverweis konnte auf diesem Rechner nicht geöffnet werden."));
-                        }}>In Outlook öffnen</Button> : null}
+                            if (result.outcome !== "opened") toasts.failure(text.outlookFailed, text.outlookFailedBody);
+                          }).catch(() => toasts.failure(text.outlookFailed, text.outlookFailedBody));
+                        }}>{text.openInOutlook}</Button> : null}
                         {mail.excerpt ? <p style={{ whiteSpace: 'pre-wrap' }}><Foreign value={mail.excerpt} /></p> : null}
-                        {mail.personalNote ? <p style={{ whiteSpace: 'pre-wrap' }}>Eigene Notiz: <Foreign value={mail.personalNote} /></p> : null}
+                        {mail.personalNote ? <p style={{ whiteSpace: 'pre-wrap' }}>{text.ownNote}<Foreign value={mail.personalNote} /></p> : null}
                       </article>)}
                     </Card> : null}
 
@@ -324,14 +330,14 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       veralteten Liste vorbeiläuft (T-097).
                     */}
                     <Card
-                      title="Anhänge"
-                      description="Ein Verweis öffnet den Browser, eine Datei die Standardanwendung des Systems, ein Bild wird hier gezeigt. Geöffnet wird nur auf Ihren Klick."
+                      title={text.attachments}
+                      description={text.attachmentsLead}
                     >
                       <Attachments todoId={todo.id} todoTitle={todo.title} mails={value.todo.mails ?? []} version={version} />
                     </Card>
 
                     <Card
-                      title={todo.noExport ? "Erfasste Zeit" : "Buchungen"}
+                      title={todo.noExport ? text.recordedTime : text.bookingsCard}
                       actions={
                         <Button
                           variant="ghost"
@@ -341,25 +347,25 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                             setBookingOpen(true);
                           }}
                         >
-                          Zeit von Hand
+                          {text.manualTime}
                         </Button>
                       }
-                      description={todo.noExport ? "Nach Kalendertag gruppiert. Von der Abrechnung ausgeschlossen." : "Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."}
+                      description={todo.noExport ? text.groupedNoExport : text.groupedByDay}
                       flush
                     >
                       {groups.length === 0 ? (
                         <EmptyState
                           icon="clock"
                           compact
-                          title="Noch keine Zeit erfasst"
-                          description="Starten Sie den Timer oder tragen Sie eine Zeit von Hand ein."
+                          title={text.noTimeYet}
+                          description={text.noTimeYetBody}
                           action={
                             <Button
                               variant="primary"
                               iconStart="play"
                               onClick={() => timer.toggle(todo.id, todo.title)}
                             >
-                              Timer starten
+                              {text.startTimer}
                             </Button>
                           }
                         />
@@ -370,10 +376,10 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                               <div className="daygroup__head">
                                 <h4 className="daygroup__day">{formatDayLabel(group.day)}</h4>
                                 <span className="daygroup__meta">
-                                  {plural(group.entries.length, "Buchung", "Buchungen")}
-                                  {todo.noExport ? " · NoExport" : group.openSeconds > 0
-                                    ? ` · ${formatDuration(group.openSeconds)} offen`
-                                    : " · vollständig exportiert"}
+                                  {plural(group.entries.length, text.booking, text.bookings)}
+                                  {todo.noExport ? text.groupNoExport : group.openSeconds > 0
+                                    ? text.groupOpen(formatDuration(group.openSeconds))
+                                    : text.groupFullyExported}
                                 </span>
                               </div>
 
@@ -381,9 +387,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                                 <p className="daygroup__blocked">
                                   <Icon name="alert-triangle" size={14} />
                                   <span>
-                                    Diese Tagesgruppe hat keinen Leistungstext und geht so nicht in
-                                    den Export. Der übrige Export läuft trotzdem — sie bleibt offen
-                                    und erscheint beim nächsten Mal wieder.
+                                    {text.groupBlocked}
                                   </span>
                                 </p>
                               ) : null}
@@ -391,11 +395,11 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                               <ul className="entry-list">
                                 {group.entries.map((entry) => (
                                   <li key={entry.id} className="entry-row">
-                                    {todo.noExport && entry.exportStatus === "open" ? <span className="muted">NoExport</span> : <ExportStatusBadge
+                                    {todo.noExport && entry.exportStatus === "open" ? <span className="muted">{text.noExport}</span> : <ExportStatusBadge
                                       state={exportDisplayState(entry.exportStatus, entry.exportCount)}
                                       size="sm"
                                       {...(entry.exportStatus === "open" && entry.exportCount > 0
-                                        ? { detail: `${String(entry.exportCount)}× exportiert` }
+                                        ? { detail: text.exportedTimes(entry.exportCount) }
                                         : {})}
                                     />}
                                     <span className="entry-row__period">
@@ -406,17 +410,17 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                                     </span>
                                     <span className="entry-row__note grow truncate">
                                       {entry.note.length === 0 ? (
-                                        <span className="muted">Ohne Leistung</span>
+                                        <span className="muted">{text.withoutNote}</span>
                                       ) : (
                                         <Foreign value={entry.note} />
                                       )}
                                     </span>
                                     <span className="entry-row__source">
-                                      {TIME_ENTRY_SOURCE_LABEL[entry.source]}
+                                      {labels().timeEntrySource[entry.source]}
                                     </span>
                                     <Menu
                                       trigger={<Icon name="more-horizontal" size={16} />}
-                                      triggerLabel="Menü für diese Buchung"
+                                      triggerLabel={text.bookingMenu}
                                       entries={entryMenu(entry)}
                                       align="end"
                                     />
@@ -476,14 +480,17 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
               <ConfirmDialog
                 open={pendingDelete !== null}
                 tone="danger"
-                title="Buchung löschen?"
+                title={text.deleteBookingTitle}
                 description={
                   pendingDelete === null
                     ? ""
-                    : `${formatDuration(pendingDelete.durationSeconds)} vom ${formatDayLabel(calendarDayOf(pendingDelete.startedAt))} werden entfernt.`
+                    : text.deleteBookingLead(
+                        formatDuration(pendingDelete.durationSeconds),
+                        formatDayLabel(calendarDayOf(pendingDelete.startedAt)),
+                      )
                 }
-                consequence="Die Tagesgruppe dieses Todos wird dadurch kleiner, und der gerundete Exportwert ändert sich mit."
-                confirmLabel="Löschen"
+                consequence={text.deleteBookingConsequence}
+                confirmLabel={text.delete}
                 onConfirm={removeEntry}
                 onCancel={() => setPendingDelete(null)}
               />

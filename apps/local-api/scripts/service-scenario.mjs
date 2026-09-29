@@ -426,6 +426,12 @@ export async function runScenario() {
     await record('reorderTodoStatuses', 'PUT', '/todo-statuses/order', '/todo-statuses/order', {
       order: allStatuses.body.data.map((entry) => entry.id).reverse(),
     });
+    // A-28.3: the full order of all rules. Sent unchanged, so that the board
+    // measured further down keeps the positions this scenario was built on.
+    const allRules = await quiet('GET', '/pools?placement=all');
+    await record('reorderPools', 'PUT', '/pools/order', '/pools/order', {
+      order: allRules.body.data.map((entry) => entry.id),
+    });
     await record(
       'deleteTodoStatus',
       'DELETE',
@@ -898,19 +904,7 @@ export async function runScenario() {
         mail: { identity: 'openapi-mail-proof', subject: 'AW: Prüfmail', sender: 'proof@example.test', receivedAt: null, internetMessageId: null, outlookLink: null, excerpt: null },
         note: 'Getrennte Ergänzung', attachments: null,
       });
-      // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
-      // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
-      // (Bis T-104 hießen die drei Listen `poolNames`, `enteringPoolNames`
-      // und `leavingPoolNames`; seit E-061 Punkt 3 ist es **ein** Feld in der
-      // Gestalt, die auch die Timer-Routen liefern.)
-      await quiet('PUT', `/todos/${addinTodoId}/done`);
-      await record(
-        'createAddinTimeEntry',
-        'POST',
-        '/addin/todos/{todoId}/time-entries',
-        `/addin/todos/${addinTodoId}/time-entries`,
-        { startedAt: '2026-03-02T10:00:00Z', endedAt: '2026-03-02T10:30:00Z', note: 'Telefonat' },
-      );
+      // The add-in booking route fell with E-120 (T-389); nothing replaces it.
     }
 
     // Die Buchung von Hand, die **erste** eines Todos (E-061 Nachtrag, O-V)

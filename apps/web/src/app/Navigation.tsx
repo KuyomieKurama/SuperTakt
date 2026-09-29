@@ -1,6 +1,8 @@
 import { Icon, type IconName } from "../shared/ui/Icon";
 import { cx } from "../lib/cx";
 import { handleRouteLinkClick, href, type RouteName } from "./router";
+import { formatCount } from "../lib/format";
+import { appTexts } from "./texts";
 
 /**
  * Takt — die globale Navigation (Abschnitt 14).
@@ -23,8 +25,7 @@ import { handleRouteLinkClick, href, type RouteName } from "./router";
  */
 
 interface NavItem {
-  readonly route: RouteName;
-  readonly label: string;
+  readonly route: "dashboard" | "todos" | "board" | "time" | "export" | "settings";
   readonly icon: IconName;
 }
 
@@ -35,12 +36,12 @@ interface NavItem {
   Beschriftung nicht, ist sie falsch — nicht zu kurz (Regel S-01).
 */
 const ITEMS: readonly NavItem[] = [
-  { route: "dashboard", label: "Dashboard", icon: "monitor" },
-  { route: "todos", label: "Todos", icon: "inbox" },
-  { route: "board", label: "Kanban", icon: "square" },
-  { route: "time", label: "Zeiterfassung", icon: "clock" },
-  { route: "export", label: "Export", icon: "download" },
-  { route: "settings", label: "Einstellungen", icon: "shield" },
+  { route: "dashboard", icon: "monitor" },
+  { route: "todos", icon: "inbox" },
+  { route: "board", icon: "square" },
+  { route: "time", icon: "clock" },
+  { route: "export", icon: "download" },
+  { route: "settings", icon: "shield" },
 ];
 
 export interface NavigationProps {
@@ -55,8 +56,9 @@ export interface NavigationProps {
 }
 
 export function Navigation({ active, openTodoCount, openEntryCount, installedVersion, availableVersion, onOpenUpdate }: NavigationProps) {
+  const texts = appTexts().nav;
   return (
-    <nav className="nav" aria-label="Hauptnavigation">
+    <nav className="nav" aria-label={texts.label}>
       <ul className="nav__list">
         {ITEMS.map((item) => {
           // Die Detailansicht eines Todos gehört zum Punkt „Todos“,
@@ -96,14 +98,14 @@ export function Navigation({ active, openTodoCount, openEntryCount, installedVer
                 <span className="nav__icon">
                   <Icon name={item.icon} size={16} />
                 </span>
-                <span className="nav__label">{item.label}</span>
+                <span className="nav__label">{texts[item.route]}</span>
                 {badge === null || badge === 0 ? null : (
                   <span className="nav__badge">
                     <span aria-hidden>{badge}</span>
                     <span className="visually-hidden">
                       {item.route === "todos"
-                        ? `${String(badge)} offene Todos`
-                        : `${String(badge)} noch nicht exportierte Buchungen`}
+                        ? texts.openTodos(formatCount(badge))
+                        : texts.unexportedEntries(formatCount(badge))}
                     </span>
                   </span>
                 )}
@@ -114,8 +116,8 @@ export function Navigation({ active, openTodoCount, openEntryCount, installedVer
       </ul>
       <div className="nav__version">
         {availableVersion ? <button type="button" className="nav__update" onClick={onOpenUpdate}>
-          <span>v{installedVersion ?? "—"}</span><span><Icon name="arrow-up-right" size={12} /> v{availableVersion} verfügbar</span>
-        </button> : <span>{installedVersion ? `Version ${installedVersion}` : "Version unbekannt"}</span>}
+          <span>v{installedVersion ?? "—"}</span><span><Icon name="arrow-up-right" size={12} /> {texts.versionAvailable(availableVersion)}</span>
+        </button> : <span>{installedVersion ? texts.version(installedVersion) : texts.versionUnknown}</span>}
       </div>
     </nav>
   );

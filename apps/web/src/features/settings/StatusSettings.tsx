@@ -19,6 +19,9 @@ import { errorMessageWithRules, ruleReferences } from "../../lib/errorText";
 import { quotedName } from "../../lib/foreign";
 import { StatusFormDialog } from "./StatusFormDialog";
 import { StatusRow } from "./StatusRow";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "../../shared/ui/ServiceText";
+import { settingsTexts } from "./texts";
 
 /**
  * Takt — die Statusstruktur verwalten (A-5.4), Bereich „Status“ in S-09.
@@ -87,6 +90,7 @@ export function StatusSettings() {
   const toasts = useToasts();
   const { version } = useRefresh();
   const mutation = useMutation();
+  const text = settingsTexts();
 
   const statuses = useMemo<readonly TodoStatus[]>(
     () => (structure.state.status === "ready" ? structure.state.value.statuses : []),
@@ -204,9 +208,7 @@ export function StatusSettings() {
         // die Position sonst mitten in der Umsortierung bräche.
         await reorderTodoStatuses(order);
         structure.reload();
-        setAnnouncement(
-          `${quotedName(status.name)} steht jetzt an ${String(index + direction + 1)}. Stelle von ${String(order.length)}.`,
-        );
+        setAnnouncement(settingsTexts().statusMoved(quotedName(status.name), index + direction + 1, order.length));
       });
     },
     [mutation, statuses, structure],
@@ -221,10 +223,7 @@ export function StatusSettings() {
         // seinen Zustand selbst, und der Toast sagt die Folge. Beides zugleich
         // in dieselbe `aria-live`-Warteschlange zu geben hieße, denselben Satz
         // zweimal vorlesen zu lassen.
-        toasts.success(
-          "Standard geändert.",
-          `Neue Todos bekommen ab sofort ${quotedName(status.name)}. Vorhandene Todos ändern sich dadurch nicht.`,
-        );
+        toasts.success(settingsTexts().defaultChanged, settingsTexts().defaultChangedBody(quotedName(status.name)));
       });
     },
     [mutation, structure, toasts],
@@ -239,7 +238,7 @@ export function StatusSettings() {
         .then(() => {
           setRemoving(null);
           structure.reload();
-          toasts.success("Status gelöscht.", `${quotedName(status.name)} steht nicht mehr zur Auswahl.`);
+          toasts.success(settingsTexts().statusDeleted, settingsTexts().statusDeletedBody(quotedName(status.name)));
         })
         .catch((cause: unknown) => {
           /*
@@ -287,11 +286,11 @@ export function StatusSettings() {
         auch kein kleinerer (UM-03, Auflage Z-07 Punkt 2).
       */}
       <Card
-        title="Status"
-        description="Nicht die Spalten des Boards."
+        title={text.statusTitle}
+        description={text.statusLead}
         actions={
           <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
-            Status anlegen
+            {text.createStatus}
           </Button>
         }
       >
@@ -302,15 +301,15 @@ export function StatusSettings() {
         {counts.state.status === "error" ? (
           <InlineMessage
             tone="warning"
-            title="Wie viele Todos in einem Status stehen, ist gerade nicht bekannt"
+            title={text.countsUnknown}
             action={
               <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={counts.reload}>
-                Erneut zählen
+                {text.countAgain}
               </Button>
             }
           >
-            {counts.state.message} Anlegen, Umbenennen und Verschieben geht trotzdem. Beim Löschen
-            entscheidet dann der Dienst — er weist einen belegten Status ab, ohne etwas umzuhängen.
+            <ServiceText text={counts.state.message} fromService={counts.state.fromService} />{" "}
+            {text.countsUnknownTail}
           </InlineMessage>
         ) : null}
 
@@ -318,18 +317,18 @@ export function StatusSettings() {
           <EmptyState
             compact
             icon="inbox"
-            title="Es gibt keinen einzigen Status"
-            description="Ohne Status lässt sich kein Todo anlegen — jedes neue Todo bekommt einen. Legen Sie mindestens einen an."
+            title={text.noStatusTitle}
+            description={text.noStatusBody}
             action={
               <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
-                Status anlegen
+                {text.createStatus}
               </Button>
             }
           />
         ) : (
           <ul
             className="status-admin"
-            aria-label="Statuswerte in ihrer Reihenfolge"
+            aria-label={text.statusOrder}
             aria-busy={mutation.busy || undefined}
           >
             {statuses.map((status, index) => (
@@ -355,22 +354,20 @@ export function StatusSettings() {
         )}
 
         {mutation.error === null ? null : (
-          <InlineMessage tone="danger" title="Die Änderung wurde nicht übernommen">
-            {mutation.error}
+          <InlineMessage tone="danger" title={text.changeNotApplied}>
+            <ServiceText text={mutation.error} fromService={mutation.errorFromService} />
           </InlineMessage>
         )}
 
-        <InlineMessage tone="info" title="Zwei Dinge, bevor Sie etwas ändern">
+        <InlineMessage tone="info" title={text.twoThings}>
           <ul className="status-admin__rules">
             <li>
-              <strong>Genau ein Status ist der Standard.</strong> Jedes neue Todo bekommt ihn — aus
-              der Liste, aus dem Board und aus dem Outlook-Add-in. Ein anderer wird Standard, indem
-              Sie ihn dazu bestimmen; abwählen lässt sich der Standard nicht, nur weitergeben.
+              <strong>{text.oneDefaultStrong}</strong>
+              {text.oneDefaultBody}
             </li>
             <li>
-              <strong>Ein Status mit Todos wird nicht gelöscht.</strong> SuperTakt hängt dabei nichts
-              automatisch um — es gäbe keinen ehrlichen Zielwert. Stellen Sie die Todos zuerst auf
-              einen anderen Status um; danach lässt sich der leere Status löschen.
+              <strong>{text.inUseStrong}</strong>
+              {text.inUseBody}
             </li>
           </ul>
         </InlineMessage>
@@ -395,13 +392,13 @@ export function StatusSettings() {
       <ConfirmDialog
         open={removing !== null}
         tone="danger"
-        title={removeError === null ? "Status löschen?" : "Der Status wurde nicht gelöscht"}
+        title={removeError === null ? text.deleteStatusTitle : text.statusNotDeleted}
         description={
           removing === null
             ? ""
             : removeError === null
-              ? `${quotedName(removing.name)} steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
-              : `${quotedName(removing.name)} steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+              ? text.deleteStatusLead(quotedName(removing.name))
+              : text.statusStillThere(quotedName(removing.name))
         }
         /*
           Drei Fassungen statt zweier (T-097). Der Zusatz „Zwischen dem Zählen
@@ -413,7 +410,7 @@ export function StatusSettings() {
           Dort steht deshalb nur die Meldung des Dienstes — sie nennt seit
           T-097 die Regeln beim Namen und sagt selbst, was zu tun ist.
         */
-        consequence="Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
+        consequence={text.statusEmpty}
         {...(removeError === null
           ? {}
           : {
@@ -429,14 +426,13 @@ export function StatusSettings() {
                   removeError
                 ) : (
                   <>
-                    {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo
-                    dazugekommen. Schließen Sie diesen Dialog: Die Zeile nennt jetzt, wie viele es
-                    sind, und führt zu ihnen.
+                    {removeError}
+                    {text.todoAddedMeanwhile}
                   </>
                 ),
             })}
-        confirmLabel={removeError === null ? "Status löschen" : "Erneut versuchen"}
-        cancelLabel={removeError === null ? "Abbrechen" : "Schließen"}
+        confirmLabel={removeError === null ? text.deleteStatus : labels().retry}
+        cancelLabel={removeError === null ? labels().cancel : labels().close}
         busy={removeBusy}
         onConfirm={() => {
           if (removing !== null) remove(removing);

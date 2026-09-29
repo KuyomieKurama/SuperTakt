@@ -14,17 +14,19 @@ import type {
   Timestamp,
   TodoId,
 } from '@takt/domain';
-import { calendarDayBounds, decideTimerStop, err, ok, taktError } from '@takt/domain';
+import { calendarDayBounds, decideTimerStop, err, exceedsMaximumDuration, ok, taktError } from '@takt/domain';
 
-import { chunk, integer, placeholders, text, type SqlConnection, type SqlValue } from './database.ts';
+import { SEARCH_FOLD_FUNCTION, chunk, foldForSearch, integer, placeholders, text, type SqlConnection, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
 import { toRunningTimeEntry, toTimeEntry } from './mappers.ts';
+import { escapeLike, todoFilterConditions, type PoolResolver } from './repo-todos.ts';
 import { decodeCursor, encodeCursor, pageSize } from './paging.ts';
 import type { IdSource } from './ids.ts';
 
+// `todo_no_export` is read along (F-8); the filter below still decides what a list shows.
 const COLUMNS =
-  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at';
+  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at, (SELECT no_export FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_export';
 
 /**
  * Der Filter in SQL — und die Tagesgrenze kommt aus der Domäne.
@@ -43,6 +45,7 @@ const COLUMNS =
 function filterConditions(
   filter: TimeEntryFilter,
   timeZone: string | undefined,
+  resolvePools: PoolResolver | undefined,
 ): {
   readonly sql: string;
   readonly params: readonly SqlValue[];
@@ -81,19 +84,54 @@ function filterConditions(
     // Status (E-032), sondern offen mit `export_count > 0`.
     parts.push("export_status = 'open' AND export_count > 0");
   }
+  if (filter.noteContains !== undefined && filter.noteContains.trim() !== '') {
+    // C22-04: filtered in SQL before paging, not over the 200 newest in memory. Both sides are
+    // folded the same way, so case is ignored beyond ASCII (E-132 point 2).
+    parts.push(`${SEARCH_FOLD_FUNCTION}(note) LIKE ? ESCAPE '\\'`);
+    params.push(`%${escapeLike(foldForSearch(filter.noteContains.trim()))}%`);
+  }
+  if (filter.hasNote !== undefined) {
+    // C-14 (E-124 point 5): "has a note" means the booking's service text (A-7.3), never the todo note.
+    parts.push(filter.hasNote ? "trim(note) <> ''" : "trim(note) = ''");
+  }
+  const tagIds = filter.tagIds ?? [];
+  const poolIds = filter.poolIds ?? [];
+  if (tagIds.length > 0 || poolIds.length > 0) {
+    // C-14: tag and pool are properties of the todo. The same SQL translation as the todo list
+    // (`todoFilterConditions`), so a pool means the same set here and there.
+    if (poolIds.length > 0 && resolvePools === undefined) {
+      throw new Error('The pool filter of time entries needs a pool resolver.');
+    }
+    const pools = poolIds.length === 0 || resolvePools === undefined ? [] : resolvePools(poolIds);
+    const todo = todoFilterConditions({ tagIds, poolIds }, pools);
+    parts.push(`todo_id IN (SELECT t.id FROM todo t WHERE ${todo.sql})`);
+    params.push(...todo.params);
+  }
 
   return { sql: `WHERE ${parts.join(' AND ')}`, params };
 }
 
+/** A-28.6 for bookings by hand, edits and idle allocations. */
+const TIME_ENTRY_TOO_LONG = taktError(
+  'time_entry_too_long',
+  'Eine Zeitbuchung dauert höchstens 24 Stunden.',
+);
+
+/** A-28.6 for every stop that would close an open entry after more than 24 hours. */
+const TIMER_STOP_END_REQUIRED = taktError(
+  'timer_stop_end_required',
+  'Der Timer läuft seit mehr als 24 Stunden. Geben Sie das tatsächliche Ende an.',
+);
+
 /**
- * @param timeZone Zone für die Tagesgrenze der Filter `fromDay`/`toDay`
- *   (E-025). Ohne Angabe die des Rechners — dieselbe Vorgabe wie im
- *   Exportleser, damit beide denselben Tagesbegriff benutzen.
+ * @param timeZone Zone for the day boundary of the `fromDay`/`toDay` filters (E-025). Defaults
+ *   to the machine's zone, the same default as the export reader, so both share one day notion.
  */
 export function createTimeEntryPort(
   conn: SqlConnection,
   ids: IdSource,
   timeZone?: string,
+  resolvePools?: PoolResolver,
 ): TimeEntryPort {
   const loadOne = (id: TimeEntryId): TimeEntry | null => {
     const row = conn.prepare(`SELECT ${COLUMNS} FROM time_entry WHERE id = ?`).get(id);
@@ -108,7 +146,7 @@ export function createTimeEntryPort(
     },
 
     async search(filter, pagination?: Pagination): Promise<Page<TimeEntry>> {
-      const { sql, params } = filterConditions(filter, timeZone);
+      const { sql, params } = filterConditions(filter, timeZone, resolvePools);
       const total = integer(
         conn.prepare(`SELECT COUNT(*) AS n FROM time_entry ${sql}`).get(...params) ?? { n: 0 },
         'n',
@@ -153,6 +191,7 @@ export function createTimeEntryPort(
      * unterscheidet sie in der Anzeige und hat auf den Export keinen Einfluss.
      */
     async create(input, now) {
+      if (exceedsMaximumDuration(input.startedAt, input.endedAt)) return err(TIME_ENTRY_TOO_LONG);
       const id = ids.next() as TimeEntryId;
       const outcome = attempt(() =>
         conn
@@ -186,6 +225,12 @@ export function createTimeEntryPort(
             'Diese Buchung ist exportiert und damit gesperrt. Setzen Sie zuerst ihren Exportstatus zurück.',
           ),
         );
+      }
+
+      // A-28.6 only for edits of start or end: an older, longer entry keeps its note editable.
+      const changesTimes = fields.startedAt !== undefined || fields.endedAt !== undefined;
+      if (changesTimes && exceedsMaximumDuration(fields.startedAt ?? existing.startedAt, fields.endedAt ?? existing.endedAt)) {
+        return err(TIME_ENTRY_TOO_LONG);
       }
 
       const outcome = attempt(() => {
@@ -237,7 +282,7 @@ export function createTimeEntryPort(
     },
 
     async sumSeconds(filter) {
-      const { sql, params } = filterConditions(filter, timeZone);
+      const { sql, params } = filterConditions(filter, timeZone, resolvePools);
       const row = conn
         .prepare(`SELECT COALESCE(SUM(duration_seconds), 0) AS seconds FROM time_entry ${sql}`)
         .get(...params);
@@ -344,7 +389,7 @@ export function createTimerPort(conn: SqlConnection, ids: IdSource): TimerPort {
     },
 
     async start(todoId: TodoId, stopRunning: boolean, now: Timestamp) {
-      if (conn.prepare('SELECT id FROM timer_idle WHERE id = 1 AND returned_at IS NULL').get() !== undefined) {
+      if (conn.prepare('SELECT id FROM timer_idle WHERE id = 1').get() !== undefined) {
         return err(taktError('timer_already_running', 'Ordnen Sie zuerst die noch offene inaktive Zeit zu.'));
       }
       const todo = conn.prepare('SELECT id, completed_at FROM todo WHERE id = ?').get(todoId);
@@ -361,6 +406,7 @@ export function createTimerPort(conn: SqlConnection, ids: IdSource): TimerPort {
           ),
         );
       }
+      if (current !== null && exceedsMaximumDuration(current.startedAt, now)) return err(TIMER_STOP_END_REQUIRED);
 
       const id = ids.next() as TimeEntryId;
       const outcome = attemptAtomically(conn, 'takt_timer_start', () => {
@@ -424,6 +470,7 @@ export function createTimerPort(conn: SqlConnection, ids: IdSource): TimerPort {
         return err(taktError('timer_not_running', 'Es läuft kein Timer.'));
       }
 
+      if (exceedsMaximumDuration(current.startedAt, now)) return err(TIMER_STOP_END_REQUIRED);
       const decision = decideTimerStop({ running: current, note, now });
 
       if (decision.kind === 'discarded') {

@@ -56,6 +56,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { exportTexts } from "../../../src/features/export/texts";
 
 const FILE = path.resolve(__dirname, "../../../src/features/export/TemplatesScreen.tsx");
 const SOURCE = readFileSync(FILE, "utf8");
@@ -96,6 +97,23 @@ function callsNamed(root: ts.Node, name: string): ts.CallExpression[] {
   return calls;
 }
 
+/** Alle Aufrufe `receiver.name(...)` unterhalb von `root` — für `exportTexts().copyOf(...)`. */
+function callsToProperty(root: ts.Node, propertyName: string): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === propertyName
+    ) {
+      calls.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return calls;
+}
+
 function firstParameterName(fn: Fn): string {
   const parameter = fn.parameters[0];
   if (parameter === undefined || !ts.isIdentifier(parameter.name)) {
@@ -127,10 +145,11 @@ describe("TemplatesScreen.beginCopy — die Zusammenlegung der zwei Kopier-Einst
     // "shown" nennt.
     const nameArgument = nameCalls[0]!.arguments[0];
     expect(nameArgument).toBeDefined();
-    expect(ts.isTemplateExpression(nameArgument!) || ts.isNoSubstitutionTemplateLiteral(nameArgument!)).toBe(
-      true,
-    );
-    const dropCalls = callsNamed(nameArgument!, "dropHiddenCharacters");
+    const copyCalls = callsToProperty(nameArgument!, "copyOf");
+    expect(copyCalls).toHaveLength(1);
+    const copyArgument = copyCalls[0]!.arguments[0];
+    expect(copyArgument).toBeDefined();
+    const dropCalls = callsNamed(copyArgument!, "dropHiddenCharacters");
     expect(dropCalls).toHaveLength(1);
     const nameSource = dropCalls[0]!.arguments[0]!.getText(sourceFile);
     expect(nameSource).toBe(`${argument}.name`);
@@ -173,8 +192,8 @@ describe("TemplatesScreen.beginCopy — die Zusammenlegung der zwei Kopier-Einst
     expect(calls[0]!.arguments[0]?.getText(sourceFile)).toBe("shown");
   });
 
-  it("der Vorschlagstext „Kopie von …“ steht nur an einer Stelle in der Datei", () => {
-    const hits = SOURCE.split("Kopie von ${dropHiddenCharacters").length - 1;
-    expect(hits).toBe(1);
+  it("der Vorschlagstext kommt aus dem gemeinsamen Textbündel", () => {
+    expect(callsToProperty(sourceFile, "copyOf")).toHaveLength(1);
+    expect(exportTexts().copyOf("Muster")).toBe("Kopie von Muster");
   });
 });

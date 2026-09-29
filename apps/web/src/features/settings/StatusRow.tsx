@@ -6,6 +6,7 @@ import { plural } from "../../lib/format";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
 import type { MoveHandleKey } from "./StatusSettings";
+import { settingsTexts } from "./texts";
 /* Eine Zeile der Verwaltung                                            */
 
 export interface StatusRowProps {
@@ -49,6 +50,7 @@ export function StatusRow({
   onMakeDefault,
   onRemove,
 }: StatusRowProps) {
+  const text = settingsTexts();
   const reasonId = `status-block-${status.id}`;
 
   /*
@@ -62,15 +64,15 @@ export function StatusRow({
    */
   const blockers: readonly string[] = [
     isOnlyStatus
-      ? "Das ist der letzte Status. Es muss mindestens einen geben, sonst bekäme ein neues Todo keinen."
+      ? text.lastStatus
       : null,
     status.isDefault
-      ? "Das ist der Standard für neue Todos. Bestimmen Sie zuerst einen anderen zum Standard — sonst wäre nicht mehr festgelegt, was ein neues Todo bekommt."
+      ? text.isDefaultBlocker
       : null,
     count === 1
-      ? "Hier steht noch ein Todo. SuperTakt hängt es nicht von sich aus um; stellen Sie es zuerst auf einen anderen Status."
+      ? text.oneTodoLeft
       : typeof count === "number" && count > 1
-        ? `Hier stehen noch ${plural(count, "Todo", "Todos")}. SuperTakt hängt sie nicht von sich aus um; stellen Sie sie zuerst auf einen anderen Status.`
+        ? text.todosLeft(plural(count, text.todo, text.todos))
         : null,
   ].filter((reason): reason is string => reason !== null);
 
@@ -88,11 +90,11 @@ export function StatusRow({
         </p>
         <p className="status-admin__meta">
           {count === "loading"
-            ? "Todos werden gezählt …"
+            ? text.counting
             : count === "unknown"
-              ? "Anzahl unbekannt"
-              : plural(count, "Todo", "Todos")}
-          {status.isDefault ? " · Standard für neue Todos" : ""}
+              ? text.countUnknown
+              : plural(count, text.todo, text.todos)}
+          {status.isDefault ? text.defaultForNew : ""}
         </p>
         {/*
           Ruhig und nicht laut, obwohl es eine Sperre erklaert.
@@ -132,7 +134,7 @@ export function StatusRow({
                   className="status-admin__blocked-action"
                   onClick={() => navigate("todos", undefined, { spalte: status.id })}
                 >
-                  {count === 1 ? "Dieses Todo anzeigen" : `Diese ${plural(count, "Todo", "Todos")} anzeigen`}
+                  {count === 1 ? text.showThisTodo : text.showTheseTodos(plural(count, text.todo, text.todos))}
                 </Button>
               ) : null}
             </div>
@@ -167,8 +169,8 @@ export function StatusRow({
           }}
         />
         <span className="status-admin__default-text">
-          Standard
-          <span className="visually-hidden"> für neue Todos — {quotedName(status.name)}</span>
+          {text.defaultWord}
+          <span className="visually-hidden">{text.defaultForNewOf(quotedName(status.name))}</span>
         </span>
       </label>
 
@@ -179,7 +181,7 @@ export function StatusRow({
           }}
           icon="arrow-up"
           size="sm"
-          label={`${quotedName(status.name)} nach oben`}
+          label={text.moveUp(quotedName(status.name))}
           disabled={busy || index === 0}
           onClick={() => onMove(-1)}
         />
@@ -189,14 +191,14 @@ export function StatusRow({
           }}
           icon="arrow-down"
           size="sm"
-          label={`${quotedName(status.name)} nach unten`}
+          label={text.moveDown(quotedName(status.name))}
           disabled={busy || last}
           onClick={() => onMove(1)}
         />
       </div>
 
       <Button size="sm" variant="ghost" iconStart="pencil" disabled={busy} onClick={onRename}>
-        Umbenennen
+        {text.rename}
       </Button>
 
       {/*
@@ -214,7 +216,7 @@ export function StatusRow({
       <IconButton
         icon="trash"
         size="sm"
-        label={blocked ? `${quotedName(status.name)} löschen — derzeit nicht möglich` : `${quotedName(status.name)} löschen`}
+        label={blocked ? text.deleteBlocked(quotedName(status.name)) : text.deleteNamed(quotedName(status.name))}
         disabled={busy || blocked}
         {...(blocked ? { "aria-describedby": reasonId } : {})}
         onClick={onRemove}

@@ -9,19 +9,18 @@ import type {
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../shared/ui/FilterBar";
 import { Select } from "../../shared/ui/Select";
 import { TagInput } from "../tags/TagInput";
+import { todoTexts } from "./texts";
 
-export const DEADLINE_FILTER_LABEL: Readonly<Record<DueState, string>> = {
-  overdue: "Überfällig",
-  due_today: "Heute fällig",
-  due_later: "Später fällig",
-  no_due_date: "Ohne Frist",
-};
+/** The words of the deadline filter, for the select and the active filter chip. */
+export function deadlineFilterLabel(state: DueState): string {
+  return todoTexts().deadlineFilter[state];
+}
 
-export const TODO_SORT_LABEL: Readonly<Record<DueSortDirection | "", string>> = {
-  "": "Zuletzt bearbeitet",
-  asc: "Frist, früheste zuerst",
-  desc: "Frist, späteste zuerst",
-};
+/** The words of the ordering, for the select and the active filter chip. */
+export function todoSortLabel(sort: DueSortDirection | ""): string {
+  const labels = todoTexts().sortLabel;
+  return sort === "" ? labels.recent : labels[sort];
+}
 
 type NamedOption = { readonly id: Id; readonly name: ForeignText };
 
@@ -50,41 +49,42 @@ interface TodoListFiltersProps {
 
 /** Gemeinsame Filterbausteine; Daten und Filterzustand bleiben in der Ansicht. */
 export function TodoListFilters(props: TodoListFiltersProps) {
+  const text = todoTexts();
   return (
     <FilterBar
       className="todo-list__filters"
-      label="Todos filtern"
+      label={text.filterTodos}
       resultLabel={props.resultLabel}
       activeFilters={props.activeFilters}
       onResetAll={props.onResetAll}
       controls={
         <div className="todo-list__filter-grid">
-          <SearchField label="Todos durchsuchen" value={props.search} onChange={props.onSearchChange}
-            placeholder="Titel oder Call-Nummer …" busy={props.busy} />
-          <Select label="Status" value={props.statusId} onChange={props.onStatusChange}
-            options={[{ value: "", label: "Jeder Status" }, ...props.statuses.map(item => ({ value: item.id, label: item.name }))]} />
-          <Select label="Pool" value={props.poolId} onChange={props.onPoolChange}
-            options={[{ value: "", label: "Alle Pools" }, ...props.pools.map(item => ({ value: item.id, label: item.name }))]} />
-          <TagInput label="Tags" size="lg" value={props.tagIds} onChange={props.onTagsChange} placeholder="Nach Tag filtern …" />
-          <Select<DueState | ""> label="Frist" value={props.deadlineFilter} onChange={props.onDeadlineChange}
+          <SearchField label={text.searchTodos} value={props.search} onChange={props.onSearchChange}
+            placeholder={text.searchPlaceholder} busy={props.busy} />
+          <Select label={text.status} value={props.statusId} onChange={props.onStatusChange}
+            options={[{ value: "", label: text.anyStatus }, ...props.statuses.map(item => ({ value: item.id, label: item.name }))]} />
+          <Select label={text.pool} value={props.poolId} onChange={props.onPoolChange}
+            options={[{ value: "", label: text.allPools }, ...props.pools.map(item => ({ value: item.id, label: item.name }))]} />
+          <TagInput label={text.tags} size="lg" value={props.tagIds} onChange={props.onTagsChange} placeholder={text.filterByTag} />
+          <Select<DueState | ""> label={text.deadline} value={props.deadlineFilter} onChange={props.onDeadlineChange}
             options={[
-              { value: "", label: "Jede Frist" },
-              { value: "overdue", label: DEADLINE_FILTER_LABEL.overdue },
-              { value: "due_today", label: DEADLINE_FILTER_LABEL.due_today },
-              { value: "due_later", label: DEADLINE_FILTER_LABEL.due_later },
-              { value: "no_due_date", label: DEADLINE_FILTER_LABEL.no_due_date },
+              { value: "", label: text.anyDeadline },
+              { value: "overdue", label: deadlineFilterLabel("overdue") },
+              { value: "due_today", label: deadlineFilterLabel("due_today") },
+              { value: "due_later", label: deadlineFilterLabel("due_later") },
+              { value: "no_due_date", label: deadlineFilterLabel("no_due_date") },
             ]} />
         </div>
       }
       secondaryControls={
         <div className="todo-list__ordering">
-          <Select<DueSortDirection | ""> label="Ordnung" value={props.sort} onChange={props.onSortChange}
+          <Select<DueSortDirection | ""> label={text.ordering} value={props.sort} onChange={props.onSortChange}
             options={[
-              { value: "", label: TODO_SORT_LABEL[""] },
-              { value: "asc", label: TODO_SORT_LABEL.asc },
-              { value: "desc", label: TODO_SORT_LABEL.desc },
+              { value: "", label: todoSortLabel("") },
+              { value: "asc", label: todoSortLabel("asc") },
+              { value: "desc", label: todoSortLabel("desc") },
             ]} />
-          <FilterToggle label="Erledigte einblenden" pressed={props.showDone} onChange={props.onShowDoneChange} />
+          <FilterToggle label={text.showDone} pressed={props.showDone} onChange={props.onShowDoneChange} />
           {/*
             **SP-03** (Sperrliste, `docs/design/textbestand.md` Abschnitt 5;
             E-074 Punkt 2, A-19.20). Der Satz steht hier **zeichengleich** und
@@ -94,8 +94,7 @@ export function TodoListFilters(props: TodoListFiltersProps) {
             `tests/e2e/todo-filter-layout.spec.ts` fest.
           */}
           <p className="todo-list__sort-hint">
-            Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen
-            frühesten und keinen spätesten.
+            {text.sortHint}
           </p>
         </div>
       }

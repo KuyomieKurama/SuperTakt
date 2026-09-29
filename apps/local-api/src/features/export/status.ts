@@ -19,7 +19,7 @@ import type {
   TimeEntry,
   TimeEntryId,
 } from '@takt/domain';
-import { checkExportStatusTransition, err, ok, taktError } from '@takt/domain';
+import { checkExportStatusTransition, checkNotBilled, err, ok, taktError } from '@takt/domain';
 import type { ExportAuditFilter, Page, Pagination } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
@@ -86,7 +86,7 @@ export async function markNotBilled(
     const entry = await unit.timeEntries.load(id);
     if (entry === null) return err(taktError('not_found', 'Diese Buchung gibt es nicht.'));
 
-    const allowed = checkExportStatusTransition(entry.exportStatus, 'exported', 'not_billed');
+    const allowed = checkNotBilled(entry);
     if (!allowed.ok) return err(allowed.error);
 
     return unit.export.markNotBilled({ timeEntryId: id, reason, actor, now: timestamp });

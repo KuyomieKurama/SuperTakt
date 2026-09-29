@@ -1,6 +1,8 @@
 import { enumerateGerman } from "@takt/domain";
 import { errorMessage, TaktApiError } from "../api/client";
+import { formatList } from "./format";
 import { quotedName } from "./foreign";
+import { labels } from "./labels";
 
 /**
  * Takt — die Fehlermeldung des Dienstes, um das ergänzt, was in `details`
@@ -167,12 +169,13 @@ export function errorMessageWithRules(cause: unknown): string {
   const base = errorMessage(cause);
   const { items, named } = ruleList(cause);
   if (items.length === 0) return base;
+  const text = labels().affected;
   const subject = named
     ? items.length === 1
-      ? "ist die Regel"
-      : "sind die Regeln"
+      ? text.ruleOne
+      : text.ruleMany
     : items.length === 1
-      ? "ist"
-      : "sind";
-  return `${base} Betroffen ${subject} ${enumerateGerman(items)}.`;
+      ? text.one
+      : text.many;
+  return text.sentence(base, subject, formatList(items));
 }

@@ -11,6 +11,8 @@ import { Button, IconButton } from '../../shared/ui/Primitives';
 import { IdleTaskSelect } from './IdleTaskSelect';
 import { Icon } from '../../shared/ui/Icon';
 import { Foreign } from '../../shared/ui/Foreign';
+import { ServiceText } from '../../shared/ui/ServiceText';
+import { timerTexts } from './texts';
 
 type Mode = 'break' | 'task' | 'split';
 interface Row { key: number; todoId: Id | ''; title: ForeignText; duration: DraftText; note: DraftText }
@@ -63,76 +65,81 @@ export function IdleRecovery({ session, changed, running, resumeAfter = false }:
   const assigned = rows.reduce((sum, row) => sum + (parseIdleDuration(row.duration) ?? 0), 0);
   const remaining = seconds - assigned;
   const changeRow = (key: number, patch: Partial<Row>) => { setRows(items => items.map(row => row.key === key ? { ...row, ...patch } : row)); setValidation(null); };
-  const submit = () => {
+  const submit = (resume: boolean) => {
     if (submitting.current || session.returnedAt === null) return;
     let allocations: IdleAllocation[];
     if (mode === 'break') allocations = [{ todoId: null, seconds, note: '' }];
     else if (mode === 'task') {
       const row = rows[0];
-      if (!row || !row.todoId) { setValidation('Wählen Sie die Aufgabe aus, auf die die Zeit gebucht werden soll.'); return; }
+      if (!row || !row.todoId) { setValidation(timerTexts().pickTaskForTime); return; }
       allocations = [{ todoId: row.todoId, seconds, note: row.note }];
     } else {
       if (rows.some(row => parseIdleDuration(row.duration) === null) || remaining !== 0) {
-        setValidation('Verteilen Sie die gesamte Zeit. Geben Sie Minuten oder eine Dauer als Stunden:Minuten:Sekunden ein.'); return;
+        setValidation(timerTexts().distributeAll); return;
       }
       allocations = rows.map(row => ({ todoId: row.todoId || null, seconds: parseIdleDuration(row.duration)!, note: row.note }));
     }
     submitting.current = true;
     setValidation(null);
     void mutation.run(async () => {
-      const result = await resolveIdleSession(session.id, allocations, resumeAfter);
+      const result = await resolveIdleSession(session.id, allocations, resume);
       setOpen(false);
       changed();
-      toasts.show({ tone: 'success', title: 'Inaktive Zeit zugeordnet.', body: result.alreadyResolved ? 'Diese Zeit wurde bereits bearbeitet.' : `${formatDuration(result.recordedSeconds)} gebucht, ${formatDuration(result.breakSeconds)} als Pause ausgelassen.` });
+      const words = timerTexts();
+      toasts.show({ tone: 'success', title: words.idleAssigned, body: result.alreadyResolved ? words.idleAlreadyHandled : words.idleAssignedBody(formatDuration(result.recordedSeconds), formatDuration(result.breakSeconds)) });
     }).finally(() => { submitting.current = false; });
   };
 
+  const text = timerTexts();
   return <>
-    {open ? null : <aside className="idle-reminder" aria-label="Inaktive Zeit">
-      <span>{session.returnedAt === null ? (running ? 'Inaktivität erkannt · Timer läuft weiter.' : 'Inaktivität erkannt · Timer pausiert.') : 'Inaktive Zeit wartet auf Zuordnung.'}</span>
+    {open ? null : <aside className="idle-reminder" aria-label={text.idleTime}>
+      <span>{session.returnedAt === null ? (running ? text.idleDetectedRunning : text.idleDetectedPaused) : text.idleWaiting}</span>
       <Button variant="secondary" disabled={mutation.busy} onClick={() => {
         if (session.returnedAt !== null) { setOpen(true); return; }
         void mutation.run(async () => { await returnFromIdle(session.id); changed(); });
-      }}>{session.returnedAt === null ? 'Ich bin wieder da' : 'Zeit zuordnen'}</Button>
-      <span role="alert">{!open ? mutation.error : null}</span>
+      }}>{session.returnedAt === null ? text.imBack : text.assignTime}</Button>
+      <span role="alert">{!open && mutation.error !== null ? <ServiceText text={mutation.error} fromService={mutation.errorFromService} /> : null}</span>
     </aside>}
-    <FormDialog open={open} submitDisabled={session.returnedAt === null} title="👋 Willkommen zurück" wide={mode === 'split'}
-      submitLabel={mode === 'break' ? 'Als Pause übernehmen' : 'Zeit buchen'} cancelLabel="Später" busy={mutation.busy}
-      error={validation ?? mutation.error} onSubmit={submit} onCancel={() => { dismissed.current = session.id; setOpen(false); }}>
+    <FormDialog open={open} submitDisabled={session.returnedAt === null} title={text.welcomeBack} description={text.idleDialogDescription} wide={mode === 'split'} footerClassName="idle-dialog__footer"
+      submitLabel={mode === 'break' ? text.takeAsPause : text.bookTime}
+      {...(mode === 'break' ? {} : { secondarySubmitLabel: text.bookTimeAndStop, onSecondarySubmit: () => submit(false) })}
+      cancelLabel={text.later} busy={mutation.busy}
+      error={validation ?? mutation.error} errorFromService={validation === null && mutation.errorFromService}
+      onSubmit={() => submit(true)} onCancel={() => { dismissed.current = session.id; setOpen(false); }}>
       <div className="idle-summary">
-        <span className="muted">Sie waren inaktiv für</span>
+        <span className="muted">{text.inactiveFor}</span>
         <strong className="idle-summary__duration">{formatStopwatch(seconds)}</strong>
-        {periods.length > 1 ? <span className="muted">{periods.length} Inaktivitätsphasen · aktive Zeit dazwischen bleibt erhalten</span> : null}
-        {periods.map(period => <span className="muted" key={period.id}>{period.returnedAt === null ? 'Rückkehr wird erkannt …' : formatTimeRange(period.startedAt, period.returnedAt)}</span>)}
-        <span className="idle-summary__task" title={foreignText(session.todoTitle)}><Foreign value={session.todoTitle} /></span>
+        {periods.length > 1 ? <span className="muted">{text.idlePeriods(periods.length)}</span> : null}
+        {periods.map(period => <span className="muted" key={period.id}>{period.returnedAt === null ? text.returnDetecting : formatTimeRange(period.startedAt, period.returnedAt)}</span>)}
+        <span className="idle-summary__task" title={foreignText(session.todoTitle)}><Icon name="clock" size={14} /><Foreign value={session.todoTitle} /></span>
       </div>
-      <fieldset className="idle-mode"><legend>Was haben Sie in dieser Zeit gemacht?</legend>
-        {([{ value: 'break', label: 'Pause', emoji: '☕' }, { value: 'task', label: 'Gearbeitet', emoji: '🎯' }, { value: 'split', label: 'Aufteilen', emoji: '🔀' }] as const).map(item =>
+      <fieldset className="idle-mode"><legend>{text.whatDidYouDo}</legend>
+        {([{ value: 'break', label: text.modePause, icon: 'pause' }, { value: 'task', label: text.modeWorked, icon: 'check-circle' }, { value: 'split', label: text.modeSplit, icon: 'split' }] as const).map(item =>
           <label className="idle-mode__choice" key={item.value} data-selected={mode === item.value}>
             <input type="radio" name="idle-mode" checked={mode === item.value} disabled={mutation.busy} onChange={() => { setMode(item.value); setValidation(null); }} />
-            <span className="idle-mode__emoji" aria-hidden="true">{item.emoji}</span><span>{item.label}</span>
+            <Icon name={item.icon} size={20} /><span>{item.label}</span>
           </label>)}
       </fieldset>
-      {mode === 'break' ? <p className="idle-summary__hint">Diese Zeit wird nicht gebucht.</p> : <>
+      {mode === 'break' ? <p className="idle-summary__hint">{text.notBooked}</p> : <>
         {(mode === 'task' ? rows.slice(0, 1) : rows).map((row, index) => <fieldset className="idle-allocation" key={row.key} disabled={mutation.busy}>
-          {mode === 'split' ? <legend>Abschnitt {index + 1}</legend> : null}
+          {mode === 'split' ? <legend>{text.section(index + 1)}</legend> : null}
           <div className="idle-allocation__fields">
-            <IdleTaskSelect label={mode === 'split' ? 'Aufgabe oder Pause' : 'Aufgabe'} value={row.todoId} title={row.title} allowPause={mode === 'split'} onChange={(todoId, title) => changeRow(row.key, { todoId, title })} disabled={mutation.busy} />
-            {mode === 'split' ? <div className="idle-duration"><TextField label="Dauer" value={row.duration} onChange={duration => changeRow(row.key, { duration })} placeholder="Minuten oder h:mm:ss" disabled={mutation.busy} />
-              <IconButton icon="clock" label="Rest übernehmen" disabled={mutation.busy || remaining <= 0} onClick={() => changeRow(row.key, { duration: formatStopwatch((parseIdleDuration(row.duration) ?? 0) + remaining) })} />
-              {rows.length > 1 ? <IconButton icon="x" label={`Abschnitt ${index + 1} entfernen`} disabled={mutation.busy} onClick={() => setRows(items => items.filter(item => item.key !== row.key))} /> : null}
+            <IdleTaskSelect label={mode === 'split' ? text.taskOrPause : text.task} value={row.todoId} title={row.title} allowPause={mode === 'split'} onChange={(todoId, title) => changeRow(row.key, { todoId, title })} disabled={mutation.busy} />
+            {mode === 'split' ? <div className="idle-duration"><TextField label={text.duration} value={row.duration} onChange={duration => changeRow(row.key, { duration })} placeholder={text.durationPlaceholder} disabled={mutation.busy} />
+              <IconButton icon="clock" label={text.takeRest} disabled={mutation.busy || remaining <= 0} onClick={() => changeRow(row.key, { duration: formatStopwatch((parseIdleDuration(row.duration) ?? 0) + remaining) })} />
+              {rows.length > 1 ? <IconButton icon="x" label={text.removeSection(index + 1)} disabled={mutation.busy} onClick={() => setRows(items => items.filter(item => item.key !== row.key))} /> : null}
             </div> : null}
           </div>
-          {row.todoId !== '' ? <details className="idle-note"><summary>{row.note ? 'Leistung bearbeiten' : 'Leistung hinzufügen'}</summary>
-            <TextField label="Leistung (optional)" value={row.note} onChange={note => changeRow(row.key, { note })} disabled={mutation.busy} />
+          {row.todoId !== '' ? <details className="idle-note"><summary>{row.note ? text.editNote : text.addNote}</summary>
+            <TextField label={text.noteOptional} value={row.note} onChange={note => changeRow(row.key, { note })} disabled={mutation.busy} />
           </details> : null}
         </fieldset>)}
         {mode === 'split' ? <div className="idle-split-footer">
-          <Button variant="ghost" iconStart="plus" disabled={mutation.busy || rows.length >= 50} onClick={() => setRows(items => [...items, { key: sequence.current++, todoId: '', title: 'Pause — nicht buchen', duration: '', note: '' }])}>Abschnitt hinzufügen</Button>
-          <span role="status">{remaining === 0 ? 'Alles verteilt' : remaining > 0 ? `${formatStopwatch(remaining)} übrig` : `${formatStopwatch(-remaining)} zu viel`}</span>
+          <Button variant="ghost" iconStart="plus" disabled={mutation.busy || rows.length >= 50} onClick={() => setRows(items => [...items, { key: sequence.current++, todoId: '', title: text.pauseNotBooked, duration: '', note: '' }])}>{text.addSection}</Button>
+          <span role="status">{remaining === 0 ? text.allDistributed : remaining > 0 ? text.left(formatStopwatch(remaining)) : text.tooMuch(formatStopwatch(-remaining))}</span>
         </div> : null}
       </>}
-      <p className="idle-continuing"><Icon name={running ? "play" : "pause"} size={14} />{running ? "Der Timer läuft weiter." : resumeAfter ? "Der Timer läuft nach der Zuordnung weiter." : "Der Timer ist gestoppt."}</p>
+      <p className="idle-continuing"><Icon name={running ? "play" : "pause"} size={14} />{running ? text.timerKeepsRunning : resumeAfter ? text.timerResumesAfter : text.timerStopped}</p>
     </FormDialog>
   </>;
 }

@@ -72,6 +72,19 @@ export interface ExportSystemContext {
   readonly roundingMode: RoundingMode;
 }
 
+/**
+ * A-28.4 — the export field `WindowsUser` carries the user name **without** domain:
+ * `DOMAIN\user` and `user@domain.example` both become `user`. A value without a domain part
+ * stays as it is; a value that would become empty stays unchanged so that the plausibility check
+ * at the handshake decides about it, not this function.
+ */
+export function userNameWithoutDomain(name: string): string {
+  const afterBackslash = name.slice(name.lastIndexOf('\\') + 1);
+  const atIndex = afterBackslash.indexOf('@');
+  const bare = (atIndex === -1 ? afterBackslash : afterBackslash.slice(0, atIndex)).trim();
+  return bare === '' ? name : bare;
+}
+
 // Quellenpfade — die abschließende Liste (E-005, E-017, R-06)
 
 /**

@@ -505,13 +505,20 @@ export async function cleanupAnyTimer(): Promise<void> {
 
 /* Outlook-Add-in — die Routen unter /addin direkt (T-099)               */
 
-/** Für die direkte Testanbindung wird das Sitzungstoken verwendet. */
+/**
+ * Für die direkte Testanbindung wird das Sitzungstoken verwendet.
+ *
+ * Kein `poolMovement` mehr (E-125, T-397/T-398): Das Add-in bucht seit E-120
+ * nicht mehr und zeigt keine Vorschau einer Poolbewegung mehr an — das Feld
+ * ist aus `GET /addin/todo-matches` gefallen, weil es keinen Leser mehr hatte.
+ * Die Antwort trägt statt dessen die bereits gebuchte Zeit (`openSeconds`,
+ * `exportedSeconds`); hier nicht mitgeführt, weil kein Testfall sie liest.
+ */
 export interface AddinTodoMatch {
   readonly id: string;
   readonly title: string;
   readonly callNumber: string | null;
   readonly completedAt: string | null;
-  readonly poolMovement: PoolMovementNames | null;
 }
 
 export type AddinTodoMatchesResult =
@@ -530,24 +537,13 @@ export async function addinTodoMatches(callNumber: string): Promise<AddinTodoMat
   );
 }
 
-export interface AddinBookResult {
-  readonly timeEntry: { readonly id: string };
-  readonly todoWasDone: boolean;
-  readonly doneCleared: boolean;
-  readonly poolMovement: PoolMovementNames | null;
-}
-
-/** Zusätzliche Schlüssel erlauben Tests gegen eingeschleuste Anhangsdaten. */
-export async function addinBookOnTodo(
-  todoId: string,
-  input: { startedAt: string; endedAt: string; note?: string } & Record<string, unknown>,
-): Promise<AddinBookResult> {
-  const { startedAt, endedAt, note, ...rest } = input;
-  return call<AddinBookResult>(`/addin/todos/${todoId}/time-entries`, {
-    method: 'POST',
-    body: JSON.stringify({ startedAt, endedAt, note: note ?? '', ...rest }),
-  });
-}
+/*
+ * `addinBookOnTodo`/`AddinBookResult` sind mit E-120 entfallen: Die Route
+ * `POST /addin/todos/:todoId/time-entries` gibt es nicht mehr (A-10.16,
+ * T-389). Wer eine Zeitbuchung für einen Testaufbau braucht, bucht über die
+ * Hauptanwendungs-API (`createTimeEntry` oben); dass die alte Add-in-Route
+ * 404 antwortet, prüft `attachment-export-and-addin-exclusion.spec.ts`.
+ */
 
 export type AddinEmailAttachmentItemInput =
   | { readonly kind: 'message'; readonly displayName: string; readonly contentBase64: string; readonly rebuilt: boolean }

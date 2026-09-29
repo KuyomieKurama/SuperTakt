@@ -42,7 +42,7 @@ const appearance = { version: 1, theme: 'system', designTheme: 'catppuccin-macch
 
 describe('appearance before the application loads', () => {
   it('restores the fixed dark palette even when Windows uses light mode', () => {
-    expect(restore(appearance)).toEqual({ startupTheme: 'system', designTheme: 'catppuccin-macchiato', theme: 'dark', density: 'compact' });
+    expect(restore(appearance)).toEqual({ startupTheme: 'system', designTheme: 'catppuccin-macchiato', theme: 'dark', density: 'compact', motionIntensity: 'subtle' });
   });
   it('leaves an automatic palette following the OS', () => {
     expect(restore({ ...appearance, designTheme: 'classic', mode: 'auto' })).not.toHaveProperty('theme');
@@ -67,7 +67,7 @@ describe('design themes the bootstrap does not know', () => {
 
   it('keeps colour mode and density instead of dropping the whole cache', () => {
     expect(restore({ version: 1, theme: 'dark', designTheme: 'clear', mode: 'auto', density: 'compact' }))
-      .toEqual({ startupTheme: 'dark', designTheme: 'classic', density: 'compact', theme: 'dark' });
+      .toEqual({ startupTheme: 'dark', designTheme: 'classic', density: 'compact', theme: 'dark', motionIntensity: 'subtle' });
   });
 
   it('drops the forced colour mode with the design theme it belonged to', () => {

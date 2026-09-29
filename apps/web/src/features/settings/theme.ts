@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DesignTheme, Density } from "@takt/domain";
+import type { DesignTheme, Density, MotionIntensity } from "@takt/domain";
 import { themePreset } from "./themePresets";
 import type { ThemeSetting } from "../../lib/labels";
 
@@ -18,6 +18,7 @@ export type { Density, DesignTheme };
 
 const THEME_ATTRIBUTE = "data-theme";
 const DENSITY_ATTRIBUTE = "data-density";
+const MOTION_ATTRIBUTE = "data-motion-intensity";
 
 function applyTheme(preference: ThemePreference): void {
   const root = document.documentElement;
@@ -30,6 +31,9 @@ function applyTheme(preference: ThemePreference): void {
 
 function applyDensity(density: Density): void {
   document.documentElement.setAttribute(DENSITY_ATTRIBUTE, density);
+}
+function applyMotionIntensity(intensity: MotionIntensity): void {
+  document.documentElement.setAttribute(MOTION_ATTRIBUTE, intensity);
 }
 
 /**
@@ -71,6 +75,23 @@ export function useDensity(
   return [density, set] as const;
 }
 
+/** Die Bewegungsstärke wirkt über globale CSS-Tokens auf die gesamte Oberfläche. */
+export function useMotionIntensity(
+  initial: MotionIntensity = "subtle",
+): readonly [MotionIntensity, (next: MotionIntensity) => void] {
+  const [intensity, setIntensity] = useState<MotionIntensity>(initial);
+
+  useEffect(() => {
+    applyMotionIntensity(intensity);
+  }, [intensity]);
+
+  const set = useCallback((next: MotionIntensity) => {
+    setIntensity(next);
+  }, []);
+
+  return [intensity, set] as const;
+}
+
 /** Gestaltung und Farbmodus belegen getrennte Attribute und können kombiniert werden. */
 export function useDesignTheme(initial: DesignTheme = "classic") {
   const [designTheme, setDesignTheme] = useState<DesignTheme>(initial);
@@ -79,4 +100,3 @@ export function useDesignTheme(initial: DesignTheme = "classic") {
   }, [designTheme]);
   return [designTheme, setDesignTheme] as const;
 }
-

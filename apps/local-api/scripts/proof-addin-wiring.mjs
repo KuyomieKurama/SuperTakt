@@ -1,4 +1,4 @@
-import { waitForPortFree } from './port-probe.mjs';
+import { proofPort, waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis, dass die Add-in-Fläche am echten Dienst hängt
  * (T-019 offene Fragen 1 und 2, E-009, A-9.5, A-10.4, A-10.9, R-15).
@@ -34,12 +34,11 @@ import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
-import { dienstEinstieg } from './source-resolve.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
-const ENTRY = dienstEinstieg();
-const PORT = 17843;
+/* The proof entry runs the same main() as src/index.ts, on TAKT_PROOF_PORT and without network (E-128). */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
+const PORT = proofPort();
 const BASE = `http://127.0.0.1:${PORT}/api/v1`;
 
 function sleep(ms) {
@@ -48,7 +47,10 @@ function sleep(ms) {
 
 
 
-/** Die Herkunft des Aufgabenbereichs (E-046, T-019 Annahme 1). */
+/**
+ * Task pane origin (E-046, T-019 assumption 1). Stays on 17844 under TAKT_PROOF_PORT:
+ * it is an entry of the fixed origin allowlist in config.ts, not a port this run binds.
+ */
 const ADDIN_ORIGIN = 'https://localhost:17844';
 
 let passed = 0;
@@ -98,7 +100,7 @@ function call(path, { method = 'GET', token, origin = ADDIN_ORIGIN, body, secret
   });
 }
 
-// T-029, Risiko 5: proof-addin-wiring teilt sich Port 17843 mit proof-access.
+// T-029, Risiko 5: proof-addin-wiring teilt sich den Prüfport mit proof-access.
 // Unmittelbar nacheinander gefahren bräuchte der vorige Kindprozess sonst
 // noch einen Moment, den Port nach seinem SIGTERM tatsächlich freizugeben —
 // dieses Skript würde in der Zwischenzeit gegen den ALTEN Dienst laufen und
@@ -263,12 +265,8 @@ try {
       JSON.stringify(found.body?.data ?? {}),
     );
 
-    // Der Rumpf trug bis T-039 ein `reopenIfDone: false`. Das Feld gibt es seit
-    // T-038 nicht mehr (Befund C-03): Buchen hebt „Erledigt" ohne Schalter auf.
-    // Es hier weiterhin mitzuschicken wäre der schlechtere von zwei Zuständen —
-    // die Prüfung liefe grün und **misst nichts**, während sie sich wie eine
-    // Zusage über einen Rumpf läse, den der Dienst nicht kennt. An seiner Stelle
-    // steht jetzt eine Prüfung auf die Antwort, denn dort steht die Wirkung.
+    // The add-in no longer books (E-120, T-389). With a valid add-in token the
+    // former booking path answers 404 — the route is gone, not merely closed.
     const booked = await call(`/addin/todos/${todoId}/time-entries`, {
       method: 'POST',
       token: addinToken,
@@ -278,26 +276,16 @@ try {
         note: 'Aus Outlook gebucht',
       },
     });
-    check('eine Zeit lässt sich aus dem Add-in buchen (A-6.1)', booked.status === 201, `Status ${booked.status}: ${booked.text.slice(0,200)}`);
     check(
-      'die Antwort sagt, was mit „Erledigt" geschah (A-2.5, doneCleared) — hier: nichts, das Todo war offen',
-      booked.body?.data?.doneCleared === false && booked.body?.data?.todoWasDone === false,
-      JSON.stringify(booked.body?.data ?? {}).slice(0, 200),
+      'aus dem Add-in lässt sich keine Zeit mehr buchen (E-120) — 404 mit gültigem Token',
+      booked.status === 404,
+      `Status ${booked.status}: ${booked.text.slice(0, 200)}`,
     );
-    // Seit T-104 steht die Bewegung als **ein** Feld in der Antwort und nicht
-    // mehr als drei Listen (E-061 Punkt 3). Hier ist es die erste Buchung auf
-    // einem offenen Todo — die erste abgeschlossene Buchung entsteht, also wird
-    // gerechnet und `null` wäre falsch. Drei leere Listen wären dagegen eine
-    // gültige Aussage: Auf dieses Todo passt keine Regel.
-    const movement = booked.body?.data?.poolMovement;
     check(
-      'und sie nennt die Bewegung durch die Regeln beim Namen (I-05, poolMovement) — leere Listen sind eine Aussage, nicht ein Fehlen',
-      movement !== null &&
-        typeof movement === 'object' &&
-        Array.isArray(movement.appears) &&
-        Array.isArray(movement.enters) &&
-        Array.isArray(movement.leaves),
-      JSON.stringify(movement ?? null),
+      'und die Duplikatsuche kündigt keine Bewegung mehr an (E-125)',
+      Array.isArray(found.body?.data?.matches) &&
+        found.body.data.matches.every((match) => !('poolMovement' in match)),
+      JSON.stringify(found.body?.data?.matches ?? []).slice(0, 200),
     );
   }
 

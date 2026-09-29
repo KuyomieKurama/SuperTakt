@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { AsyncState } from "../../app/useAsync";
 import { Button, InlineMessage, LoadingBlock } from "./Primitives";
+import { labels } from "../../lib/labels";
+import { ServiceText } from "./ServiceText";
 
 /**
  * Takt — Ladezustand und Fehlerzustand einer Ansicht an einer Stelle.
@@ -55,14 +57,14 @@ export function AsyncBoundary<T>({
       <>{framed(
       <InlineMessage
         tone="danger"
-        title="Das ließ sich nicht laden"
+        title={labels().loadFailed}
         action={
           <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={onRetry}>
-            Erneut versuchen
+            {labels().retry}
           </Button>
         }
       >
-        {state.message}
+        <ServiceText text={state.message} fromService={state.fromService} />
         {state.code === null ? null : <span className="message__code"> ({state.code})</span>}
       </InlineMessage>,
       )}</>
