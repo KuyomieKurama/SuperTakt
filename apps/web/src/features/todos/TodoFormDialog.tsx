@@ -246,7 +246,7 @@ export function TodoFormDialog({
     <FormDialog
       open={open}
       title={todo === undefined ? text.newTodo : text.editTodo}
-      description={todo === undefined ? text.newTodoLead : text.editTodoLead}
+      {...(todo === undefined ? {} : { description: text.editTodoLead })}
       submitLabel={todo === undefined ? text.create : text.save}
       busy={mutation.busy}
       error={mutation.error}
@@ -317,7 +317,6 @@ export function TodoFormDialog({
           onChange={event => setNoEvidence(event.target.checked)} aria-labelledby={`${noEvidenceHintId}-label`} aria-describedby={noEvidenceHintId} />
       </label>
       <Select label={text.priority} value={priorityId} onChange={setPriorityId}
-        hint={text.priorityHint}
         options={[{ value: "", label: text.noPriority }, ...(priorities.state.status === "ready" ? priorities.state.value.map(priority => ({ value: priority.id, label: `${priority.name} · ${priority.weight}` })) : [])]} />
       <p role="alert">{priorities.state.status === "error" ? <ServiceText text={priorities.state.message} fromService={priorities.state.fromService} /> : null}</p>
       <TextField label={text.estimateInMinutes} type="number" value={estimateMinutes} onChange={setEstimateMinutes} />
@@ -343,7 +342,6 @@ export function TodoFormDialog({
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
-        hint={text.statusHint}
       />
 
       <TagInput

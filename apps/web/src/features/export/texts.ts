@@ -276,13 +276,13 @@ const de = {
   groupsStayed: "Tagesgruppen blieben",
   exportWrittenSkippedBody: (groups: string) => `${groups} stehen, weil die Leistung fehlt. Sie sind weiterhin offen und erscheinen beim nächsten Mal wieder.`,
   screenTitle: "Export",
-  screenLead: "Buchungen prüfen, bearbeiten und exportieren. Die Dateivorschau fasst Zeiten je Todo und Tag zusammen.",
+
   runBlockedFailed: "Solange die Gesamtvorschau fehlt, steht nicht fest, was geschrieben würde.",
   runBlockedPending: "Die Gesamtvorschau wird gerade gerechnet.",
   runExport: "Export ausführen",
   checkSettings: "In den Einstellungen prüfen",
   templateAndRounding: "Vorlage und Rundung",
-  templateAndRoundingLead: "Beides bestimmt, was in der Datei steht — und wie viel abgerechnet wird.",
+
   editTemplates: "Vorlagen bearbeiten",
   exportTemplate: "Exportvorlage",
   exportTemplateHint: "Hinweis zur Exportvorlage",
@@ -772,13 +772,13 @@ const en: typeof de = {
   groupsStayed: "day groups stayed",
   exportWrittenSkippedBody: (groups: string) => `${groups} behind because the work done is missing. They are still open and appear again next time.`,
   screenTitle: "Export",
-  screenLead: "Review, edit and export bookings. The file preview sums up times per todo and day.",
+
   runBlockedFailed: "As long as the overall preview is missing, it is not certain what would be written.",
   runBlockedPending: "The overall preview is being computed.",
   runExport: "Run export",
   checkSettings: "Check in settings",
   templateAndRounding: "Template and rounding",
-  templateAndRoundingLead: "Both decide what is in the file — and how much is billed.",
+
   editTemplates: "Edit templates",
   exportTemplate: "Export template",
   exportTemplateHint: "Note on the export template",

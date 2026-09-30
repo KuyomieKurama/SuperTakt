@@ -128,7 +128,6 @@ export function TodoDetailAside({
 
       <Card
         title={text.tags}
-        description={text.tagsCardLead}
       >
         {todo.tagIds.length === 0 ? (
           <p className="muted">

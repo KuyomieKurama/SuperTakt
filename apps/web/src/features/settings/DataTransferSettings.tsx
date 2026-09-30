@@ -15,6 +15,7 @@ import {
   type DataImportSummary,
 } from "./api";
 import { ServiceText } from "../../shared/ui/ServiceText";
+import { InfoHint } from "../../shared/ui/InfoHint";
 import { settingsTexts } from "./texts";
 /* Daten — Sicherung, Wiederherstellung und Fremdimport                 */
 
@@ -115,7 +116,7 @@ export function DataTransferSettings() {
 
   return (
     <>
-      <Card title={text.backupTitle} description={text.backupLead}>
+      <Card title={text.backupTitle} actions={<InfoHint label={`${text.infoHint}: ${text.backupTitle}`}>{text.backupLead}</InfoHint>}>
         <p className="field__hint">{text.backupHint}</p>
         <div className="data-transfer__actions">
           <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>{text.downloadBackup}</Button>
@@ -124,13 +125,13 @@ export function DataTransferSettings() {
         </div>
       </Card>
 
-      <Card title={text.todoistTitle} description={text.addsToData}>
+      <Card title={text.todoistTitle} actions={<InfoHint label={`${text.infoHint}: ${text.todoistTitle}`}>{text.addsToData}</InfoHint>}>
         <p className="field__hint">{text.todoistHint}</p>
         <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => todoistInput.current?.click()}>{text.chooseTodoist}</Button>
         <input ref={todoistInput} className="data-transfer__input" type="file" accept="text/csv,.csv" multiple onChange={(event) => { chooseTodoist(event.currentTarget.files); event.currentTarget.value = ""; }} />
       </Card>
 
-      <Card title={text.superProductivityTitle} description={text.addsToData}>
+      <Card title={text.superProductivityTitle} actions={<InfoHint label={`${text.infoHint}: ${text.superProductivityTitle}`}>{text.addsToData}</InfoHint>}>
         <p className="field__hint">{text.superProductivityHint}</p>
         <p className="field__hint">{text.outlookBridgeHint}</p>
         <TextField

@@ -174,7 +174,7 @@ export function TimeScreen() {
             <ScreenFrame label={text.timeTracking} className="screen__body--split">
               <div className="time-layout">
                 <div className="time-layout__main">
-                  <Card title={text.timer} description={text.atMostOne}>
+                  <Card title={text.timer}>
                     {timer.running === null ? (
                       <div className="timer-panel timer-panel--idle">
                         <TimerDisplay state="idle" display="00:00:00" size="lg" />
@@ -192,9 +192,7 @@ export function TimeScreen() {
                           detail={text.since(formatTime(timer.running.entry.startedAt))}
                           onStop={timer.requestStop}
                         />
-                        <p className="timer-panel__hint">
-                          {text.stopHint}
-                        </p>
+
                       </div>
                     )}
                   </Card>
@@ -211,7 +209,7 @@ export function TimeScreen() {
                     title={text.pickTodo}
                     runArea={text.pickTodo}
                     anchor
-                    description={text.pickTodoLead}
+
                     actions={
                       <>
                         <SearchField
@@ -229,7 +227,7 @@ export function TimeScreen() {
                           label={text.showDone}
                           pressed={showDone}
                           onChange={setShowDone}
-                          hint={text.hiddenByDefault}
+
                         />
                       </>
                     }

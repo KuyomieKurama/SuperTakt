@@ -7,6 +7,7 @@ import { listSecurityNotices } from "./api";
 import { OutlookSetup } from "./OutlookSetup";
 import { BillingUserFact, DatabaseLocationFact } from "./WorkstationFacts";
 import { RadioRow } from "../../shared/ui/RadioRow";
+import { InfoHint } from "../../shared/ui/InfoHint";
 import { Select } from "../../shared/ui/Select";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Button, Card } from "../../shared/ui/Primitives";
@@ -276,22 +277,20 @@ function TimerSettings() {
   }, [activity.reload]);
   const text = settingsTexts();
   return (
-    <Card title={text.timerTitle} description={text.timerLead}>
-      <label className="choice__option">
-        <input
-          type="checkbox"
-          checked={promptOnTimerStop}
-          disabled={saving}
-          onChange={(event) => setPromptOnTimerStop(event.target.checked)}
-          aria-describedby="timer-prompt-hint"
-        />
-        <span>{text.promptOnStop}</span>
-      </label>
-      <p className="field__hint" id="timer-prompt-hint">
-        {text.promptOnStopHint}
-      </p>
-      <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>{text.detectIdle}</span></label>
-      <p className="field__hint" id="idle-detection-hint">{text.detectIdleHint}</p>
+    <Card title={text.timerTitle}>
+      <div className="choice__option">
+        <label>
+          <input
+            type="checkbox"
+            checked={promptOnTimerStop}
+            disabled={saving}
+            onChange={(event) => setPromptOnTimerStop(event.target.checked)}
+          />
+          <span>{text.promptOnStop}</span>
+        </label>
+        <InfoHint label={`${text.infoHint}: ${text.promptOnStop}`}>{text.promptOnStopHint}</InfoHint>
+      </div>
+      <div className="choice__option"><label><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} /><span>{text.detectIdle}</span></label><InfoHint label={`${text.infoHint}: ${text.detectIdle}`}>{text.detectIdleHint}</InfoHint></div>
       <Select label={text.detectIdleAfter} value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
         options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: text.minutes(value) }))} />
       <p role="status">{activity.state.status === 'loading' ? text.idleChecking : activity.state.status === 'ready' && activity.state.value?.supported ? text.idleSupported : text.idleUnsupported}</p>
@@ -351,7 +350,7 @@ function DisplaySettings() {
           label: themeText(item).label,
           hint: `${text.themeMode[item.mode]}${themeText(item).hint}`,
         }))}
-        hint={text.themeHint}
+
       />
 
       <Select
@@ -364,7 +363,7 @@ function DisplaySettings() {
           value,
           label: text.density[value],
         }))}
-        hint={text.rowDensityHint}
+
       />
       <Select
         className="settings-field-section"

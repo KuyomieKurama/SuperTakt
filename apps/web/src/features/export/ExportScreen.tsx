@@ -633,7 +633,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     <section className="screen">
       <ScreenHeader
         title={text.screenTitle}
-        lead={text.screenLead}
+
         refreshing={data.state.status === "ready" && data.state.refreshing}
         /*
           Gesperrt, solange nicht feststeht, was geschrieben würde (A-8.6). Bis
@@ -712,7 +712,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
 
         <Card
           title={text.templateAndRounding}
-          description={text.templateAndRoundingLead}
+
           actions={
             <Button
               size="sm"

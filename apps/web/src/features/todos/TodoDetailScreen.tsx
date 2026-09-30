@@ -41,6 +41,7 @@ import {
   ResetExportDialog,
 } from "../bookings/BookingDialogs";
 import { TodoDetailAside } from "./TodoDetailAside";
+import { InfoHint } from "../../shared/ui/InfoHint";
 import { TodoDoneSwitch } from "./TodoDoneSwitch";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { TodoNoteCard } from "./TodoNoteCard";
@@ -339,18 +340,21 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                     <Card
                       title={todo.noExport ? text.recordedTime : text.bookingsCard}
                       actions={
-                        <Button
-                          variant="ghost"
-                          iconStart="plus"
-                          onClick={() => {
-                            setEditingEntry(undefined);
-                            setBookingOpen(true);
-                          }}
-                        >
-                          {text.manualTime}
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            iconStart="plus"
+                            onClick={() => {
+                              setEditingEntry(undefined);
+                              setBookingOpen(true);
+                            }}
+                          >
+                            {text.manualTime}
+                          </Button>
+                          {todo.noExport ? null : <InfoHint label={text.groupedByDayHint}>{text.groupedByDay}</InfoHint>}
+                        </>
                       }
-                      description={todo.noExport ? text.groupedNoExport : text.groupedByDay}
+                      {...(todo.noExport ? { description: text.groupedNoExport } : {})}
                       flush
                     >
                       {groups.length === 0 ? (
