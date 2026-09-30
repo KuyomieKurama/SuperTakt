@@ -111,6 +111,8 @@ export interface ExportGroupViewModel {
    * "0,75". Kommt aus der Fachlogik (E-008, E-020).
    */
   readonly quarters: string;
+  /** Finished service value behind `quarters`; never rounded in this component. */
+  readonly quarterCount: number | null;
   /**
    * Zusammengefuehrte Leistung der enthaltenen Buchungen (E-026, E-028).
    *
@@ -137,6 +139,8 @@ export interface ExportGroupListProps {
   readonly onToggleEntry: (groupId: string, entryId: string) => void;
   /** Springt zur Nachbearbeitung einer Buchung, zum Beispiel wegen E-034. */
   readonly onEditEntry?: (groupId: string, entryId: string) => void;
+  /** Booking-level actions supplied by the screen that owns their dialogs. */
+  readonly renderEntryAction?: (entryId: string) => ReactNode;
   /**
    * Was in der aufgeklappten Gruppe **ueber** den Buchungen steht: die
    * Exportzeile, wie sie in die Datei geht (A-8.4, A-8.9, Befund C-02).
@@ -190,7 +194,11 @@ export function ExportGroupList(props: ExportGroupListProps) {
   if (props.models.every(model => model.group.todoId === undefined)) return <ExportDayGroupList {...props} />;
   const byTodo = new Map<string, ExportGroupViewModel[]>();
   for (const model of props.models) {
-    const id = model.group.todoId ?? model.group.id;
+    // A call can occur on more than one todo. Missing calls deliberately remain
+    // isolated by todo, so unrelated work is never visually merged.
+    const id = model.group.callNumber === null
+      ? `todo:${model.group.todoId ?? model.group.id}`
+      : `call:${foreignText(model.group.callNumber)}`;
     const days = byTodo.get(id) ?? [];
     days.push(model);
     byTodo.set(id, days);
@@ -229,7 +237,9 @@ function ExportTodoGroup(props: ExportGroupListProps) {
   const available = props.models.filter(model => model.blockedReason === null);
   const selected = available.filter(model => props.selectedGroupIds.has(model.group.id)).length;
   const blocked = props.models.length - available.length;
-  const entryCount = props.models.reduce((sum, model) => sum + model.group.entries.length, 0);
+  const quarterCount = props.models.reduce((sum, model) => sum + (model.quarterCount ?? 0), 0);
+  const hasQuarterCount = props.models.some(model => model.quarterCount !== null);
+  const sameTodo = props.models.every(model => model.group.todoId === first.group.todoId);
   const allSelected = available.length > 0 && selected === available.length;
   const bodyId = `export-todo-${first.group.todoId ?? first.group.id}`;
   const text = exportTexts();
@@ -251,10 +261,10 @@ function ExportTodoGroup(props: ExportGroupListProps) {
       <td className="export-todo__status">{blocked > 0
         ? <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{text.daysBlocked(blocked)}</span>
         : <span className="export-todo__ready"><Icon name="check-circle" size={14} />{text.exportable}</span>}</td>
-      <td className="table__call">{first.group.callNumber === null ? <span className="muted">—</span> : <Foreign value={first.group.callNumber} />}</td>
-      <td><Foreign value={first.group.todoTitle} /></td>
+      <td className="table__call mono">{first.group.callNumber === null ? <span className="muted">{text.noCall}</span> : <Foreign value={first.group.callNumber} />}</td>
+      <td>{sameTodo ? <Foreign value={first.group.todoTitle} /> : <span className="muted">{text.multipleTodos}</span>}</td>
       <td className="table__cell--center tabular">{props.models.length}</td>
-      <td className="table__cell--center tabular">{entryCount}</td>
+      <td className="table__cell--center tabular"><span className="visually-hidden">{text.roundedPrefix}</span>{hasQuarterCount ? `${String(quarterCount / 4).replace(".", ",")} h` : "—"}</td>
       <td className="table__cell--center tabular">{selected}</td>
     </tr>
     <tr id={bodyId} hidden={!open} className="export-todo__details">
@@ -271,6 +281,7 @@ function ExportDayGroupList({
   onToggleExpanded,
   onToggleEntry,
   onEditEntry,
+  renderEntryAction,
   renderRowDetail,
   className,
   nested,
@@ -288,7 +299,7 @@ function ExportDayGroupList({
         <thead><tr>
         <th scope="col" className="export-table__expand"><span className="visually-hidden">{text.expand}</span></th>
           <th scope="col" className="table__select"><span className="visually-hidden">{text.selection}</span></th>
-          <th scope="col">{text.columnStatus}</th><th scope="col">{text.columnDate}</th>
+          <th scope="col">{text.columnStatus}</th><th scope="col">{text.columnDate}</th><th scope="col">{text.columnTodo}</th>
           <th scope="col" className="table__cell--center">{text.columnBookings}</th>
           <th scope="col">{text.columnNote}</th><th scope="col" className="table__cell--center">{text.columnExportTime}</th>
         </tr></thead>
@@ -302,6 +313,7 @@ function ExportDayGroupList({
           onToggleExpanded={onToggleExpanded}
           onToggleEntry={onToggleEntry}
           {...(onEditEntry === undefined ? {} : { onEditEntry })}
+          {...(renderEntryAction === undefined ? {} : { renderEntryAction })}
           {...(renderRowDetail === undefined ? {} : { renderRowDetail })}
         />
       ))}
@@ -317,6 +329,7 @@ interface ExportGroupRowProps {
   readonly onToggleExpanded: (groupId: string) => void;
   readonly onToggleEntry: (groupId: string, entryId: string) => void;
   readonly onEditEntry?: (groupId: string, entryId: string) => void;
+  readonly renderEntryAction?: (entryId: string) => ReactNode;
   readonly renderRowDetail?: (groupId: string) => ReactNode;
 }
 
@@ -328,6 +341,7 @@ function ExportGroupRow({
   onToggleExpanded,
   onToggleEntry,
   onEditEntry,
+  renderEntryAction,
   renderRowDetail,
 }: ExportGroupRowProps) {
   const { group, excludedEntryIds, quarters, mergedNote, blockedReason } = model;
@@ -352,11 +366,12 @@ function ExportGroupRow({
           ? <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{blockedReason}</span>
           : <span className="export-todo__ready"><Icon name="check-circle" size={14} />{text.exportable}</span>}</td>
         <td>{group.day}</td>
+        <td><Foreign value={group.todoTitle} /></td>
         <td className="table__cell--center tabular">{included.length} / {group.entries.length}</td>
         <td className="export-day__note" title={foreignText(mergedNote)}>{mergedNote === "" ? <span className="muted">—</span> : <Foreign value={mergedNote} />}</td>
         <td className="table__cell--center tabular"><span className="visually-hidden">{text.roundedPrefix}</span>{quarters} h</td>
       </tr>
-      <tr hidden={!expanded} className="export-day__details"><td colSpan={7}>
+      <tr hidden={!expanded} className="export-day__details"><td colSpan={8}>
       <div className="egroup__body" id={bodyId} hidden={!expanded}>
         {/*
           Zuerst die Zeile, dann die Buchungen: Erst was geschrieben wird,
@@ -425,6 +440,7 @@ function ExportGroupRow({
                     <span className="visually-hidden">{text.bookingSuffix(entry.period)}</span>
                   </Button>
                 )}
+                {renderEntryAction === undefined ? null : renderEntryAction(entry.id)}
               </li>
             );
           })}

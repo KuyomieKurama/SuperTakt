@@ -1,0 +1,9 @@
+Aufgabe: REQ-011 W2 — Export-Register: Gruppierung nach Call (Variante A)
+Status: teilweise
+Artefakte: apps/web/src/features/export/ExportGroups.tsx, apps/web/src/features/export/ExportScreen.tsx, apps/web/src/features/export/exportGroupLayout.ts, apps/web/src/features/export/texts.ts, apps/web/src/showcase/ExportPreviewSection.tsx, apps/web/src/styles/app.css, apps/web/src/features/bookings/BookingRowActions.tsx, apps/web/src/features/bookings/BookingsScreen.tsx
+Zusammenfassung: Die eingebettete flache Buchungstabelle und die Details-Hülle wurden zugunsten der vorhandenen Hauptgruppenansicht entfernt. Deren Kopf gruppiert offene Tagesgruppen nach Call (fehlende Calls bleiben pro Todo getrennt), zeigt gerundete Dienstviertelstunden und Tage aufsteigend. Das Buchungsmenü samt Dialogen liegt nun einmalig im bookings-Merkmal und wird von Buchungs- und Exportansicht verwendet.
+Prüfung: pnpm typecheck grün. Playwright für unified-export und export-end-to-end gestartet, aber vor dem Test wegen fehlender Laufzeitbibliothek libnspr4.so fehlgeschlagen.
+Annahmen: Die vorhandene Gruppenansicht ist weiterhin die richtige Basis für offene Buchungen; der Dienst und das Exportdateiformat bleiben unangetastet.
+Risiken: Die erforderliche Darstellung für Filter Exportiert/Alle ist noch nicht vollständig umgesetzt; exportierte Einträge werden nicht clientseitig als Gruppen mit Ist-Dauer dargestellt. Neue Unit- und E2E-Fälle für Zeitraumwechsel/Dateivergleich fehlen ebenfalls. Die Browserabhängigkeit verhindert die reale E2E-Prüfung trotz vorhandener Chromium-Datei.
+Offene Fragen: Keine fachliche Frage; zur Abnahme müssen die fehlende Exportiert/Alle-Modellbildung sowie die Tests ergänzt und die Browserbibliothek bereitgestellt werden.
+Nächster Schritt: Den unvollständigen Modellpfad für exportierte Einträge ergänzen und anschließend die betroffenen E2E-Tests nach Installation von libnspr4.so erneut ausführen.

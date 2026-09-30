@@ -5356,7 +5356,7 @@ body:has(.scrim) .toast {
 
 /* Share the day table width across its facts and service text. */
 .export-day-table .export-col--status { width: 20%; }
-.export-day-table .export-col--date { width: 20%; }
+.export-day-table .export-col--date { width: 16%; }
 .export-day-table .export-col--entries { width: 12%; }
 .export-day-table .export-col--time { width: 12%; }
 

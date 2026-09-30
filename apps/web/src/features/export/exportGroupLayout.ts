@@ -99,7 +99,7 @@ export function toLayout(preview: ExportPreview): readonly GroupLayout[] {
       entryIds: skipped.group.timeEntryIds,
     })),
   ];
-  return out.sort((left, right) => right.day.localeCompare(left.day));
+  return out.sort((left, right) => left.day.localeCompare(right.day));
 }
 
 export function allExcluded(): GroupInsight {

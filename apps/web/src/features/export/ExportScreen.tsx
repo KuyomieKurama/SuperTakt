@@ -1,4 +1,4 @@
-import { BookingsScreen } from "../bookings/BookingsScreen";
+
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../shared/ui/FilterBar";
 import { DateField } from "../../shared/ui/DateField";
 import { todayCalendarDay, shiftCalendarDay } from "../../lib/format";
@@ -77,8 +77,10 @@ import {
   type GroupInsight,
   type GroupLayout,
 } from "./exportGroupLayout";
-import { BookingFormDialog } from "../bookings/BookingDialogs";
+import { useBookingRowActions } from "../bookings/BookingRowActions";
+import { bookingTexts } from "../bookings/texts";
 import { foreignText } from "../../lib/foreign";
+import { Menu } from "../../shared/ui/Menu";
 
 /**
  * Takt — S-07, die Export-Ansicht.
@@ -215,7 +217,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
    */
   const [resultRows, setResultRows] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
-  const [editEntry, setEditEntry] = useState<TimeEntry | null>(null);
   const [totalsState, setTotalsState] = useState<TotalsState>({ kind: "idle" });
   /** Zählt Wiederholungsversuche der Gesamtvorschau. Nur dafür da. */
   const [totalsAttempt, setTotalsAttempt] = useState(0);
@@ -270,6 +271,11 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     });
     return { entries: matchingEntries, byId, titles, runs: runs.items, filterKey };
   }, [filterKey], [version]);
+  const rowActions = useBookingRowActions((entry) =>
+    data.state.status === "ready"
+      ? (data.state.value.titles.get(entry.todoId)?.title ?? text.thisTodo)
+      : text.thisTodo,
+  );
   const filterReady = data.state.status === "ready" && data.state.value.filterKey === filterKey;
 
   /*
@@ -867,13 +873,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               options={[{ value: "", label: text.noteAny }, { value: "vorhanden", label: text.notePresent }, { value: "fehlt", label: text.noteAbsent }]} />
           </>} />
 
-        {data.state.status === "ready" && filterReady ? <BookingsScreen query={{}} embedded={{
-          entries: data.state.value.entries, titles: data.state.value.titles,
-          selected: bookingIds, setSelected: setBookingIds, resetFilters,
-        }} /> : null}
-
-        <details className="export-preview-details">
-          <summary>{text.previewByTodo}</summary>
         <AsyncBoundary
           state={data.state}
           label={text.openBookingsLoading}
@@ -952,6 +951,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                     : insight.quarters !== null
                       ? formatQuarters(insight.quarters)
                       : "—",
+                quarterCount: insight?.quarters ?? null,
                 mergedNote: previewNote(included),
                 blockedReason: groupIsBlocked(group) ? insight?.blockedReason ?? null : null,
               };
@@ -1016,8 +1016,20 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                     return next;
                   })}
                   onEditEntry={(_groupId, entryId) => {
-                    const entry = value.entries.find((candidate) => candidate.id === entryId);
-                    if (entry !== undefined) setEditEntry(entry);
+                    const entry = value.byId.get(entryId);
+                    if (entry !== undefined) rowActions.openEditor(entry);
+                  }}
+                  renderEntryAction={(entryId) => {
+                    const entry = value.byId.get(entryId);
+                    if (entry === undefined) return null;
+                    const todoTitle = value.titles.get(entry.todoId)?.title ?? text.thisTodo;
+                    return <Menu
+                      trigger={<Icon name="more-horizontal" size={16} />}
+                      triggerLabel={bookingTexts().rowActions(foreignText(todoTitle))}
+                      triggerClassName="table__row-menu"
+                      align="end"
+                      entries={rowActions.menuEntries(entry)}
+                    />;
                   }}
                   renderRowDetail={(groupId) => (
                     <GroupRowDetail
@@ -1035,7 +1047,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
             );
           }}
         </AsyncBoundary>
-        </details>
 
         {templates.state.status === "loading" ? <Spinner size={14} label={text.templatesLoading} /> : null}
       </ScreenBody>
@@ -1075,19 +1086,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         />
       ) : null}
 
-      {editEntry === null ? null : (
-        <BookingFormDialog
-          open
-          entry={editEntry}
-          todoId={editEntry.todoId}
-          todoTitle={
-            data.state.status === "ready"
-              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? text.thisTodo)
-              : text.thisTodo
-          }
-          onClose={() => setEditEntry(null)}
-        />
-      )}
+      {rowActions.dialogs}
     </section>
   );
 }
