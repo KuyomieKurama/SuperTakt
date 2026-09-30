@@ -867,7 +867,7 @@ export function checkContentSecurityPolicy(configText) {
 /**
  * Drei Aussagen in einem Durchgang, und keine davon ist eine Zahl:
  *
- *  1. **Jeder** Aufrufort für `.open(` steht in {@link OPEN_CALL_SITES} — mit
+ *  1. **Jeder** Shell-Aufrufort für `.open(…, None)` steht in {@link OPEN_CALL_SITES} — mit
  *     Datei **und** Funktion. Ein vierter, gleich in welchem Unterordner, macht
  *     den Lauf rot; ein eingetragener, der verschwindet, ebenso.
  *  2. Für jeden gilt: Im selben Funktionsrumpf steht **vor** dem Öffnen ein
@@ -937,13 +937,9 @@ export function checkOpenCallSites(sources) {
 
     /* -------- 1 und 2: Aufruforte und ihre Prüfung -------- */
     for (const fn of rustFunctions(skeleton)) {
-      let openIndex = fn.body.indexOf('.open(');
-      if (openIndex === -1) {
-        // Auch `.open (` mit Leerzeichen ist ein Aufruf.
-        const spaced = /\.open\s*\(/.exec(fn.body);
-        if (spaced === null) continue;
-        openIndex = spaced.index;
-      }
+      const shellOpen = /\.open\s*\([\s\S]*?,\s*None\)/.exec(fn.body);
+      if (shellOpen === null) continue;
+      const openIndex = shellOpen.index;
 
       const entry = OPEN_CALL_SITES.find((site) => site.file === source.name && site.fn === fn.name);
       if (entry === undefined) {

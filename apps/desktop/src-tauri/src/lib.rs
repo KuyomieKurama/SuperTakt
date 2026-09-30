@@ -140,6 +140,8 @@ pub fn run() {
                 match appdata::resolve(&appdata::current_environment()) {
                     Ok(dir) => match appdata::prepare(&dir) {
                         Ok(report) => {
+                            appdata::rotate_startup_log(&dir);
+                            handle.state::<Service>().set_startup_log_dir(dir.clone());
                             if !report.permissions_applied {
                                 startup.problems.push(report.permissions_detail.clone());
                             }
@@ -167,6 +169,12 @@ pub fn run() {
                 }
 
                 eprintln!("[start] phase=directory_ready elapsed_ms={}", started.elapsed().as_millis());
+                if let Some(dir) = startup.directory.as_ref().map(|report| std::path::Path::new(&report.path)) {
+                    appdata::append_startup_log(
+                        dir,
+                        &format!("[start] phase=directory_ready elapsed_ms={}", started.elapsed().as_millis()),
+                    );
+                }
 
                 // 4 — Der Benutzername, vom Betriebssystem (E-010, B-8.1). Er geht
                 // als zweite Startzeile an den Dienst (E-042) und ist dort Pflicht:
@@ -185,6 +193,12 @@ pub fn run() {
                 }
 
                 eprintln!("[start] phase=sidecar_spawned elapsed_ms={}", started.elapsed().as_millis());
+                if let Some(dir) = startup.directory.as_ref().map(|report| std::path::Path::new(&report.path)) {
+                    appdata::append_startup_log(
+                        dir,
+                        &format!("[start] phase=sidecar_spawned elapsed_ms={}", started.elapsed().as_millis()),
+                    );
+                }
                 startup
             });
             app.manage(StartupState(tauri::async_runtime::Mutex::new(StartupResult::Pending(preparation))));

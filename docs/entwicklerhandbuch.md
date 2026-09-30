@@ -293,6 +293,14 @@ Windows-Benutzernamens. Keine Fachlogik. Das ist die unmittelbare Konsequenz aus
 Sidecar-Entscheidung: Alles, was über Geld entscheidet, bleibt in TypeScript und in
 `packages/domain`, wo es geprüft und mit der übrigen Anwendung geteilt wird.
 
+### Startup diagnostics
+
+After the application-data directory has been prepared, the desktop shell writes `startup.log`
+there. Each line has a timestamp and one of the shell startup phases or a coarse local-service
+lifecycle event; it deliberately never stores the session secret, service output, or customer data.
+At the next application start, the existing file is renamed to `startup.log.1`; only this one
+previous generation is retained. Log write errors are ignored so diagnostics cannot stop startup.
+
 ## Datenbankmigrationen
 
 Jede Migration besteht aus zwei SQL-Dateien mit derselben Nummer, einer für die Vorwärts- und einer
