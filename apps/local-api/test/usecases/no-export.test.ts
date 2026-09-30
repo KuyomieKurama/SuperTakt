@@ -36,3 +36,34 @@ it('NoExport survives API editing, permits timers and filters booking pages befo
     expect(invalid.status).toBe(422);
   } finally { db.close(); }
 });
+
+it('noEvidence round-trips independently from NoExport and rejects invalid values', async () => {
+  const now = '2026-09-15T10:00:00Z' as Timestamp;
+  const db = openDatabase({ location: ':memory:', now: () => now });
+  try {
+    await db.migrations.migrateToLatest();
+    const context = { transactions: db.transactions, clock: { now: () => now } } as AppContext;
+    const todos = createTodoRoutes(context);
+
+    for (const [noExport, noEvidence] of [[false, false], [false, true], [true, false], [true, true]] as const) {
+      const response = await todos.request('/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `Kombination ${noExport}-${noEvidence}`, tagIds: [], tagNames: [], note: '', noExport, noEvidence }),
+      });
+      expect(response.status, await response.clone().text()).toBe(201);
+      const body = await response.json() as { data: { id: TodoId; todo?: { id: TodoId } } };
+      const id = body.data.todo?.id ?? body.data.id;
+      await db.transactions.inTransaction(async unit => {
+        expect(await unit.todos.load(id)).toMatchObject({ noExport, noEvidence });
+      });
+    }
+
+    const invalid = await todos.request('/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Ungültig', tagIds: [], tagNames: [], note: '', noEvidence: 'yes' }),
+    });
+    expect(invalid.status).toBe(422);
+  } finally { db.close(); }
+});

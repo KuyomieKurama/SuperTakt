@@ -157,8 +157,13 @@ test('Der gesperrte Export: Vorschau antwortet nicht → Schaltfläche gesperrt,
   // Ab jetzt scheitert jede weitere Gesamtvorschau — die bereits geladene
   // Gliederung bleibt davon unberührt.
   let failPreview = true;
+  let successfulInsightPreview = true;
   await page.route('**/api/v1/export/preview', async (route) => {
-    if (!failPreview) {
+    // Changing a day selection first refreshes the per-day insight and then
+    // the aggregate preview. Keep the insight available so this test reaches
+    // the aggregate failure it names.
+    if (!failPreview || successfulInsightPreview) {
+      successfulInsightPreview = false;
       await route.continue();
       return;
     }
@@ -245,8 +250,11 @@ test('Fehlschlag der Vorschau, während der Bestätigungsdialog bereits offen is
   await expect(confirmDialog).toBeVisible();
 
   // Ab jetzt scheitert jede weitere Gesamtvorschau.
+  let successfulInsightPreview = true;
   await page.route('**/api/v1/export/preview', (route) =>
-    route.fulfill({
+    successfulInsightPreview
+      ? (() => { successfulInsightPreview = false; return route.continue(); })()
+      : route.fulfill({
       status: 500,
       contentType: 'application/json',
       body: JSON.stringify({ error: { code: 'server_error', message: 'E2E: Datenänderung während der Bestätigung' } }),

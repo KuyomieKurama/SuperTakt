@@ -1,6 +1,7 @@
 //! Geheimnis und Betriebssystem-Benutzername gemeinsam als zwei Zeilen über stdin übertragen, niemals als Argumente.
 //! Die Hülle beendet den Dienst ausdrücklich; bei einem Absturz muss zusätzlich das Ende der stdin-Verbindung den Dienst stoppen.
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -41,6 +42,7 @@ pub struct Service {
     /// ausweist (T-011). Es berührt die Platte nie und gilt für einen Start.
     secret: String,
     child: Mutex<Option<CommandChild>>,
+    startup_log_dir: Mutex<Option<PathBuf>>,
     stopping: std::sync::atomic::AtomicBool,
     /// Wurde der Dienst beendet, weil er von sich aus ausgestiegen ist?
     exit: Mutex<Option<ExitReason>>,
@@ -79,6 +81,7 @@ impl Service {
         Ok(Self {
             secret: new_secret()?,
             child: Mutex::new(None),
+            startup_log_dir: Mutex::new(None),
             stopping: std::sync::atomic::AtomicBool::new(false),
             exit: Mutex::new(None),
         })
@@ -97,6 +100,20 @@ impl Service {
 
     pub fn exit_reason(&self) -> Option<ExitReason> {
         self.exit.lock().ok().and_then(|guard| guard.clone())
+    }
+
+    pub fn set_startup_log_dir(&self, dir: PathBuf) {
+        if let Ok(mut log_dir) = self.startup_log_dir.lock() {
+            *log_dir = Some(dir);
+        }
+    }
+
+    fn write_startup_log(&self, message: &str) {
+        if let Ok(log_dir) = self.startup_log_dir.lock() {
+            if let Some(dir) = log_dir.as_deref() {
+                crate::appdata::append_startup_log(dir, message);
+            }
+        }
     }
 
     fn note_exit(&self, reason: ExitReason) {
@@ -196,12 +213,15 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
 
     let command = app
         .shell()
+        // tauri-plugin-shell 2.3.6 sets CREATE_NO_WINDOW; recheck this on plugin upgrades.
         .sidecar(SIDECAR)
         .map_err(|error| format!("Der lokale Dienst wurde nicht gefunden: {error}"))?;
 
     let (mut events, mut child) = command
         .spawn()
         .map_err(|error| format!("Der lokale Dienst ließ sich nicht starten: {error}"))?;
+
+    service.write_startup_log("[dienst] started");
 
     // Beide Zeilen, ein Schreibvorgang, sofort nach dem Start. Der Dienst
     // wartet fünf Sekunden darauf und beendet sich sonst
@@ -215,6 +235,7 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
 
     let handle = app.clone();
     let secret = service.secret.clone();
+    let startup_log_dir = service.startup_log_dir.lock().ok().and_then(|dir| dir.clone());
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             match event {
@@ -225,6 +246,10 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
                     // fängt, was eine Meldung der Laufzeitumgebung mitschleppt.
                     let safe = text.replace(secret.as_str(), "<geschwärzt>");
                     eprintln!("[dienst] {}", safe.trim_end());
+                    // Sidecar output can contain customer data, so the persistent log records only that it arrived.
+                    if let Some(dir) = startup_log_dir.as_deref() {
+                        crate::appdata::append_startup_log(dir, "[dienst] output received");
+                    }
                 }
                 CommandEvent::Terminated(payload) => {
                     let (message, detail) = explain_exit(payload.code);
@@ -234,6 +259,9 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
                         detail,
                     };
                     eprintln!("[dienst] beendet: {}", reason.message);
+                    if let Some(dir) = startup_log_dir.as_deref() {
+                        crate::appdata::append_startup_log(dir, "[dienst] terminated");
+                    }
 
                     // Reihenfolge ist Inhalt: **erst** in den Zustand, **dann**
                     // melden. Ein Empfänger, der auf das Ereignis hin sofort

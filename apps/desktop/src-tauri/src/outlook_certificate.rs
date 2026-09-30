@@ -35,7 +35,7 @@ fn run(path: std::path::PathBuf, fingerprint: Option<String>) -> Result<serde_js
     if !trusting { command.arg("-NonInteractive"); }
     let mut child = command
         .args(["-Command", include_str!("outlook_certificate.ps1")])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW; ohne Shell oder Rechteerhöhung.
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW; without a shell or elevation.
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn().map_err(|_| "Die Zertifikatsprüfung konnte nicht gestartet werden.")?;
     let written = child.stdin.take().ok_or("Eingabe nicht verfügbar.")

@@ -4888,7 +4888,7 @@ components:
         format: { type: string, const: de.supertakt.data-archive }
         schemaVersion:
           type: integer
-          const: 12
+          const: 13
           description: |
             Always written as version 12; versions 1 to 12 are read. Version 6 is
             the first with `data.files`; version 11 adds `version_check_enabled`
@@ -5158,6 +5158,9 @@ components:
         noExport:
           type: boolean
           description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        noEvidence:
+          type: boolean
+          description: Keine Nachweise erforderlich. Unabhängig von NoExport; Standard false.
         dueTime:
           oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
           description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
@@ -5231,6 +5234,9 @@ components:
         noExport:
           type: boolean
           description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        noEvidence:
+          type: boolean
+          description: Keine Nachweise erforderlich. Unabhängig von NoExport; Standard false.
         dueTime:
           oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
           description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
@@ -5298,6 +5304,9 @@ components:
         noExport:
           type: boolean
           description: Zeit erfassen, aber aus Buchungsübersicht und Export ausschließen. Standard false.
+        noEvidence:
+          type: boolean
+          description: Keine Nachweise erforderlich. Unabhängig von NoExport; Standard false.
         dueTime:
           oneOf: [{ type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }, { type: 'null' }]
           description: Optionale Ortszeit zur Datumsfrist, ohne Zeitzonenumrechnung.
@@ -6331,7 +6340,7 @@ components:
 
     TimeEntry:
       type: object
-      required: [id, todoId, startedAt, endedAt, durationSeconds, note, exportStatus, exportCount, source, todoNoExport, createdAt, updatedAt]
+      required: [id, todoId, startedAt, endedAt, durationSeconds, note, exportStatus, exportCount, source, todoNoExport, todoNoEvidence, createdAt, updatedAt]
       properties:
         todoNoExport:
           type: boolean
@@ -6340,6 +6349,10 @@ components:
             Read-only copy of the todo's NoExport flag (F-8, E-124 point 6,
             A-26). Such a booking is recorded but never "open for billing".
             No request sets it; it follows the todo.
+        todoNoEvidence:
+          type: boolean
+          readOnly: true
+          description: Read-only copy of the todo's noEvidence flag. No request sets it; it follows the todo.
         id: { $ref: '#/components/schemas/Id' }
         todoId: { $ref: '#/components/schemas/Id' }
         startedAt: { $ref: '#/components/schemas/Timestamp' }

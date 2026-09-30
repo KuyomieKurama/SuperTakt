@@ -86,7 +86,7 @@ test.describe('TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in sc
 
       // --- Spalte auf ihre Mindestbreite bringen: ein schmales Fenster, ----
       // --- keine erzwungene Breite im Testcode (siehe Dateikopf). ----------
-      await page.setViewportSize({ width: 288, height: 900 });
+      await page.setViewportSize({ width: 314, height: 900 });
 
       const columnBox = await column.boundingBox();
       expect(columnBox).not.toBeNull();

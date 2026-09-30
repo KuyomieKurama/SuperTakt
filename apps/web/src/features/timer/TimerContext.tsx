@@ -20,6 +20,7 @@ import {
   type RunningTimerView,
 } from "./api";
 import type { ForeignText, Id } from "../../api/types";
+import { getTodo } from "../todos/api";
 import { FormDialog, TextField } from "../../shared/ui/FormDialog";
 import { NoteField } from "../../shared/ui/NoteField";
 import {
@@ -111,6 +112,10 @@ export interface TimerApi {
 }
 
 const TimerContext = createContext<TimerApi | null>(null);
+
+export function shouldAskForStopNote(promptOnTimerStop: boolean, noEvidence: boolean): boolean {
+  return promptOnTimerStop && !noEvidence;
+}
 
 /** A failure shown in one of the timer dialogs, with its origin for `lang` (A-28.2). */
 interface DialogFailure {
@@ -372,10 +377,10 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     [bump, refresh, reportStopped, toasts],
   );
 
-  const openStopDialog = useCallback((current: RunningTimerView, askEnd: boolean) => {
+  const openStopDialog = useCallback((current: RunningTimerView, askEnd: boolean, askForNote = promptOnTimerStop) => {
     setStopNote(current.entry.note);
     setStopEnd(askEnd ? endQuestionFor(current.entry.startedAt) : null);
-    setStopAsksNote(promptOnTimerStop);
+    setStopAsksNote(askForNote);
     setDialogError(null);
     setStopOpen(true);
   }, [promptOnTimerStop]);
@@ -383,27 +388,35 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const requestStop = useCallback(() => {
     const current = runningRef.current;
     if (current === null || directStopPending.current || busy || stopOpen || conflict !== null) return;
-    // After more than 24 hours the end question opens even with the prompt off (A-28.6).
     const askEnd = exceedsBookingLimit(elapsedRef.current);
-    if (!promptOnTimerStop && !askEnd) {
-      directStopPending.current = true;
-      setBusy(true);
-      void performStop(current.entry.note)
-        .catch((cause: unknown) => {
-          if (needsNamedEnd(cause)) {
-            openStopDialog(current, true);
-            return;
-          }
-          toasts.failure(timerTexts().stopFailed, errorMessage(cause), isServiceError(cause));
-          refresh();
-        })
-        .finally(() => {
-          directStopPending.current = false;
+    setBusy(true);
+    void getTodo(current.entry.todoId)
+      .then(({ todo }) => {
+        const askForNote = shouldAskForStopNote(promptOnTimerStop, todo.noEvidence ?? false);
+        if (askForNote || askEnd) {
           setBusy(false);
-        });
-      return;
-    }
-    openStopDialog(current, askEnd);
+          openStopDialog(current, askEnd, askForNote);
+          return;
+        }
+        directStopPending.current = true;
+        return performStop(current.entry.note)
+          .catch((cause: unknown) => {
+            if (needsNamedEnd(cause)) {
+              openStopDialog(current, true, false);
+              return;
+            }
+            toasts.failure(timerTexts().stopFailed, errorMessage(cause), isServiceError(cause));
+            refresh();
+          })
+          .finally(() => {
+            directStopPending.current = false;
+            setBusy(false);
+          });
+      })
+      .catch((cause: unknown) => {
+        setBusy(false);
+        toasts.failure(timerTexts().stopFailed, errorMessage(cause), isServiceError(cause));
+      });
   }, [busy, conflict, openStopDialog, performStop, promptOnTimerStop, refresh, stopOpen, toasts]);
 
   const confirmStop = useCallback(() => {

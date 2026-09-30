@@ -47,7 +47,7 @@ const CANDIDATE_COLUMNS =
   'time_entry_id, todo_id, started_at, ended_at, duration_seconds, booking_note, export_count, todo_title, todo_call_number';
 
 const TIME_ENTRY_COLUMNS =
-  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at, (SELECT no_export FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_export';
+  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at, (SELECT no_export FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_export, (SELECT no_evidence FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_evidence';
 
 export function createExportReadPort(conn: SqlConnection, timeZone?: string): ExportReadPort {
   /** Tagnamen je Todo, in **einer** Abfrage je Block. Kein N+1. */

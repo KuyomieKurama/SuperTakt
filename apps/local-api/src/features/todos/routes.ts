@@ -79,6 +79,7 @@ const createSchema = z.object({
    */
   dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
   noExport: z.boolean().optional(),
+  noEvidence: z.boolean().optional(),
   priorityId: idSchema.nullish(),
   estimateMinutes: z.number().int().min(1).max(525600).nullable().optional(),
   dueDate: dueDateSchema.optional(),
@@ -99,6 +100,7 @@ const updateSchema = z.object({
    */
   dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
   noExport: z.boolean().optional(),
+  noEvidence: z.boolean().optional(),
   priorityId: idSchema.nullish(),
   estimateMinutes: z.number().int().min(1).max(525600).nullable().optional(),
   dueDate: dueDateSchema.optional(),
@@ -336,6 +338,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
       dueTime: parsed.data.dueTime ?? null,
       estimateMinutes: parsed.data.estimateMinutes ?? null,
       noExport: parsed.data.noExport ?? false,
+      noEvidence: parsed.data.noEvidence ?? false,
       priorityId: parsed.data.priorityId ?? null,
       // `?? null` faßt „fehlt" und `null` zusammen: Beim **Anlegen** gibt es
       // keine Frist zu entfernen, beide heißen „ohne Frist" (A-19.1).
@@ -367,6 +370,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.dueTime === undefined ? {} : { dueTime: parsed.data.dueTime }),
       ...(parsed.data.priorityId === undefined ? {} : { priorityId: parsed.data.priorityId }),
       ...(parsed.data.noExport === undefined ? {} : { noExport: parsed.data.noExport }),
+      ...(parsed.data.noEvidence === undefined ? {} : { noEvidence: parsed.data.noEvidence }),
       ...(parsed.data.estimateMinutes === undefined ? {} : { estimateMinutes: parsed.data.estimateMinutes }),
       ...(parsed.data.dueDate === undefined
         ? {}

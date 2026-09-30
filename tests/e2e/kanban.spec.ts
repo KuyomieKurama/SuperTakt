@@ -206,11 +206,11 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       await expect(cardInA).toBeVisible();
       await expect(cardInB).toBeVisible();
 
-      // Jedes Vorkommen nennt das jeweils andere beim Namen (Kanban.tsx,
-      // "Steht auch in …") — nicht nur "in mehreren Spalten" ohne zu sagen,
-      // in welchen.
-      await expect(cardInA.getByRole('button', { name: /Steht auch in/ })).toContainText(columnBName);
-      await expect(cardInB.getByRole('button', { name: /Steht auch in/ })).toContainText(columnAName);
+      // Bei genau einer weiteren Spalte steht deren Name sichtbar auf der Karte.
+      const alsoInA = cardInA.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnBName}`) });
+      const alsoInB = cardInB.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnAName}`) });
+      await expect(alsoInA).toHaveText(`Steht auch in „${columnBName}“`);
+      await expect(alsoInB).toHaveText(`Steht auch in „${columnAName}“`);
 
       // Live-Region der Ansicht (BoardScreen.tsx, `announcement`) — nicht per
       // Rolle "status" gesucht, weil jede Hinweismeldung (`InlineMessage`)
@@ -218,7 +218,7 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       // unsichtbare Ansage selbst.
       const announcement = page.locator('[role="status"].visually-hidden');
 
-      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await alsoInA.click();
       await expect(cardInA).toHaveClass(/kcard--linked/);
       await expect(cardInB).toHaveClass(/kcard--linked/);
       await expect(announcement).toContainText(todo.title);
@@ -227,7 +227,7 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       await expect(announcement).toContainText(columnBName);
 
       // Ein zweiter Klick hebt die Hervorhebung an **beiden** Vorkommen auf.
-      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await alsoInA.click();
       await expect(cardInA).not.toHaveClass(/kcard--linked/);
       await expect(cardInB).not.toHaveClass(/kcard--linked/);
       await expect(announcement).toHaveText('Hervorhebung aufgehoben.');
@@ -335,6 +335,8 @@ test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ a
       // noch ohne Tag- oder Regeländerung die Spalte wechselt (A-2.5).
       await expect(doneColumn.locator('.kcard', { hasText: todo.title })).toHaveCount(0);
       await expect(cardInOpen).toBeVisible();
+      const startToast = page.locator('.toast').filter({ hasText: `Er läuft auf „${todo.title}“` });
+      await expect(startToast).toBeHidden();
       await expect(cardInOpen.locator('.kcard__flag')).toHaveText(/Erledigt aufgehoben/);
       await expect(cardInOpen).toHaveClass(/kcard--running/);
       await expect(cardInOpen.getByRole('button', { name: /Timer für „.*“ stoppen/ })).toBeVisible();

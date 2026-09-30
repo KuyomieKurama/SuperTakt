@@ -144,6 +144,7 @@ function fakeTimeEntries(
         source: 'manual',
         // F-8 (E-124 Punkt 6): read-only, mirrors the booked todo's no-export flag.
         todoNoExport: false,
+        todoNoEvidence: false,
         createdAt: now,
         updatedAt: now,
       });

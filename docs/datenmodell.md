@@ -2831,6 +2831,9 @@ installation had before the two switches existed. Pool order (A-28.3) needs no n
 
 - `time_entry` reads carry `todo_no_export` through a correlated subquery on `todo`
   (`TimeEntry.todoNoExport`, read only).
+- `todo.no_evidence` is an independent boolean with default 0 and CHECK (0, 1). Time-entry
+  reads carry it as `todo_no_evidence` (`TimeEntry.todoNoEvidence`, read only); it does not
+  change export filtering.
 - `TimeEntryFilter` gains `noteContains`, `hasNote`, `tagIds` and `poolIds`. Tags and pools are
   translated by the same function as the todo list (`todoFilterConditions` in `repo-todos.ts`)
   and applied as `todo_id IN (SELECT t.id FROM todo t WHERE …)`, before counting and paging.

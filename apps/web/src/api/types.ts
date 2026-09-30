@@ -310,6 +310,7 @@ export interface Todo {
   readonly dueTime?: LocalTime | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
+  readonly noEvidence?: boolean;
   readonly priorityId?: Id | null;
   readonly dueDate: CalendarDay | null;
   readonly createdAt: Timestamp;
@@ -611,6 +612,8 @@ export interface TimeEntry {
    * "open for billing" (A-26.2, A-6.6).
    */
   readonly todoNoExport: boolean;
+  /** Read-only copy of the todo's noEvidence flag. */
+  readonly todoNoEvidence: boolean;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }

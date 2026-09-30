@@ -5,7 +5,7 @@ test('Kanban keeps filters together and gives a single column readable space; ma
   const errors: string[] = [];
   page.on('pageerror', error => { errors.push(error.message); console.log(error.stack); });
   const todo = { id: 'task', title: 'Call 31825 – Datenübertragung und Rechnungsprüfung', callNumber: '31825', statusId: 'status', tagIds: [], priorityId: 'high', dueDate: '2026-09-03', dueTime: '12:30', completedAt: null, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-16T08:00:00Z' };
-  const column = { id: 'pool', name: 'Offen (extern)', rule: [], matchMode: 'all', excludedTags: [], statusIds: ['status'], completion: 'open', exportState: 'any', placement: 'board', position: 0, resolved: { tagCount: 0, excludedTagCount: 0, isEmpty: false, unresolvedRequired: false, unresolvedExcluded: false, matchesNothing: false, emptyRuleFolderIds: [], emptyExcludedFolderIds: [] } };
+  const column = { id: 'pool', name: 'Offen (extern)', rule: [], requiredTags: [], matchMode: 'all', includeSubfolders: true, excludedTags: [], statusIds: ['status'], completion: 'open', exportState: 'any', placement: 'board', position: 0, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z', resolved: { tagCount: 0, excludedTagCount: 0, isEmpty: false, unresolvedRequired: false, unresolvedExcluded: false, matchesNothing: false, matchesNothingReason: 'none', emptyRuleFolderIds: [], emptyExcludedFolderIds: [] } };
   await page.route('**/priority-fixture/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace('/priority-fixture', '');

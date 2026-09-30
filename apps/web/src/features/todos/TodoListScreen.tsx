@@ -419,7 +419,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       <ScreenHeader
         title={text.todosTitle}
         refreshing={list.state.status === "ready" && list.state.refreshing}
-        lead={text.todosLead}
+
         actions={
           <Button
             variant="primary"

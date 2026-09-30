@@ -9,7 +9,7 @@ import {
   listTodos,
 } from "../todos/api";
 import type { ExportStatus, ForeignText, Id, TimeEntry } from "../../api/types";
-import { exportDisplayState } from "../../shared/ui/ExportStatus";
+
 import {
   BookingTable,
   type BookingRowData,
@@ -36,12 +36,7 @@ import {
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
 import { ScreenBody, runAreaSurface } from "../../shared/ui/ScreenBody";
 import { RefreshHint, ScreenHeader } from "../../shared/ui/ScreenHeader";
-import {
-  BookingFormDialog,
-  BookingHistoryDialog,
-  NotBilledDialog,
-  ResetExportDialog,
-} from "./BookingDialogs";
+import { useBookingRowActions } from "./BookingRowActions";
 import { toRows } from "./bookingRows";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
@@ -97,10 +92,7 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
     direction: "descending",
   });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [editing, setEditing] = useState<TimeEntry | null>(null);
-  const [resetEntry, setResetEntry] = useState<TimeEntry | null>(null);
-  const [notBilledEntry, setNotBilledEntry] = useState<TimeEntry | null>(null);
-  const [historyEntry, setHistoryEntry] = useState<TimeEntry | null>(null);
+
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -137,6 +129,11 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
   const data = embedded ? { state: { status: "ready" as const, refreshing: false,
     value: { page: { items: embedded.entries, total: embedded.entries.length, nextCursor: null }, titles: embedded.titles, todos: [] } }, reload: () => bump() } : standaloneData;
   const Body = embedded ? "div" : ScreenBody;
+  const rowActions = useBookingRowActions((entry) =>
+    data.state.status === "ready"
+      ? (data.state.value.titles.get(entry.todoId)?.title ?? text.thisTodo)
+      : text.thisTodo,
+  );
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];
@@ -245,78 +242,9 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
       const entries = data.state.status === "ready" ? data.state.value.page.items : [];
       const entry = entries.find((candidate) => candidate.id === row.id);
       if (entry === undefined) return [];
-      const locked = entry.exportStatus === "exported";
-      /*
-       * Warum die Buchung gesperrt ist, entscheidet der **Anzeigezustand**
-       * (E-050): Eine ausgebuchte Buchung ist ebenso gesperrt wie eine
-       * exportierte, aber sie wurde nie exportiert. Stuende in der Begruendung
-       * trotzdem „bereits exportiert", waere das die Luege, die E-047
-       * beseitigen sollte.
-       */
-      const notBilled = exportDisplayState(entry.exportStatus, entry.exportCount) === "not_billed";
-      const words = bookingTexts();
-      const lockReason = notBilled ? words.lockedNotBilled : words.lockedExported;
-      return [
-        {
-          id: "todo",
-          label: words.openTodo,
-          icon: "arrow-up-right",
-          onSelect: () => navigate("todo", entry.todoId),
-        },
-        {
-          id: "edit",
-          label: words.edit,
-          icon: "pencil",
-          disabled: locked,
-          ...(locked ? { disabledReason: lockReason } : {}),
-          onSelect: () => setEditing(entry),
-        },
-        // R-10, Befund C-01. Steht **vor** dem Zurücksetzen, weil es die Frage
-        // beantwortet, die davor steht: Was ist mit dieser Zeit schon
-        // geschehen? Ein Eintrag ohne Bedingung — auch eine nie exportierte
-        // Buchung darf zeigen, dass zu ihr nichts protokolliert ist.
-        {
-          id: "history",
-          label: words.historyTitle,
-          icon: "clock",
-          onSelect: () => setHistoryEntry(entry),
-        },
-        {
-          id: "reset",
-          label: words.resetExportStatus,
-          icon: "rotate-ccw",
-          disabled: !locked,
-          ...(locked ? {} : { disabledReason: words.alreadyOpen }),
-          onSelect: () => setResetEntry(entry),
-        },
-        // E-047. Der Eintrag steht nur bei offenen Buchungen zur Wahl und
-        // heißt nirgends „als exportiert markieren": Exportiert wird diese
-        // Zeit nicht, sie wird schlicht nicht abgerechnet.
-        // A-26.3 (E-133 point 5): a NoExport booking never offers "not billed" — hidden, not
-        // only disabled, because the service refuses it anyway (`time_entry_no_export`).
-        ...(entry.todoNoExport
-          ? []
-          : ([
-            {
-              id: "not-billed",
-              label: words.notBilled,
-              // Nicht der Haken (E-050): Der traegt seit jeher „Exportiert", und
-              // exportiert wird diese Zeit gerade nicht. Der durchgestrichene
-              // Kreis ist dasselbe Zeichen, das die Buchung danach in der Liste
-              // traegt — Vorgang und Ergebnis sehen gleich aus.
-              icon: "slash-circle",
-              disabled: locked,
-              ...(locked
-                ? {
-                    disabledReason: notBilled ? words.alreadyNotBilled : words.alreadyExported,
-                  }
-                : {}),
-              onSelect: () => setNotBilledEntry(entry),
-            },
-          ] satisfies MenuEntry[])),
-      ];
+      return rowActions.menuEntries(entry);
     },
-    [data.state],
+    [data.state, rowActions],
   );
 
   return (
@@ -542,52 +470,7 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
         }}
       </AsyncBoundary>
 
-      {editing === null ? null : (
-        <BookingFormDialog
-          open
-          entry={editing}
-          todoId={editing.todoId}
-          todoTitle={
-            data.state.status === "ready"
-              ? (data.state.value.titles.get(editing.todoId)?.title ?? text.thisTodo)
-              : text.thisTodo
-          }
-          onClose={() => setEditing(null)}
-        />
-      )}
-
-      <ResetExportDialog
-        open={resetEntry !== null}
-        entry={resetEntry}
-        todoTitle={
-          resetEntry === null || data.state.status !== "ready"
-            ? text.thisTodo
-            : (data.state.value.titles.get(resetEntry.todoId)?.title ?? text.thisTodo)
-        }
-        onClose={() => setResetEntry(null)}
-      />
-
-      <BookingHistoryDialog
-        open={historyEntry !== null}
-        entry={historyEntry}
-        todoTitle={
-          historyEntry === null || data.state.status !== "ready"
-            ? text.thisTodo
-            : (data.state.value.titles.get(historyEntry.todoId)?.title ?? text.thisTodo)
-        }
-        onClose={() => setHistoryEntry(null)}
-      />
-
-      <NotBilledDialog
-        open={notBilledEntry !== null}
-        entry={notBilledEntry}
-        todoTitle={
-          notBilledEntry === null || data.state.status !== "ready"
-            ? text.thisTodo
-            : (data.state.value.titles.get(notBilledEntry.todoId)?.title ?? text.thisTodo)
-        }
-        onClose={() => setNotBilledEntry(null)}
-      />
+      {rowActions.dialogs}
 
       <ConfirmDialog
         open={bulkOpen}

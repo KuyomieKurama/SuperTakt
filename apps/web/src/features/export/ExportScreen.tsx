@@ -1,4 +1,4 @@
-import { BookingsScreen } from "../bookings/BookingsScreen";
+
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../shared/ui/FilterBar";
 import { DateField } from "../../shared/ui/DateField";
 import { todayCalendarDay, shiftCalendarDay } from "../../lib/format";
@@ -34,7 +34,7 @@ import {
   type ExportGroupViewModel,
 } from "./ExportGroups";
 import { Select } from "../../shared/ui/Select";
-import { InfoHint } from "./InfoHint";
+import { InfoHint } from "../../shared/ui/InfoHint";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../../shared/ui/Primitives";
 import { useRefresh } from "../../app/RefreshContext";
@@ -74,11 +74,14 @@ import {
   previewNote,
   reasonText,
   toLayout,
+  toExportedLayout,
   type GroupInsight,
   type GroupLayout,
 } from "./exportGroupLayout";
-import { BookingFormDialog } from "../bookings/BookingDialogs";
+import { useBookingRowActions } from "../bookings/BookingRowActions";
+import { bookingTexts } from "../bookings/texts";
 import { foreignText } from "../../lib/foreign";
+import { Menu } from "../../shared/ui/Menu";
 
 /**
  * Takt — S-07, die Export-Ansicht.
@@ -169,6 +172,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   const text = exportTexts();
 
   const [status, setStatus] = useState(query["status"] ?? "open");
+  const [expandedTodoGroups, setExpandedTodoGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [todoId, setTodoId] = useState(query["todo"] ?? "");
   const [fromDay, setFromDay] = useState(() => query["von"] ?? shiftCalendarDay(todayCalendarDay(), -6));
   const [toDay, setToDay] = useState(() => query["bis"] ?? todayCalendarDay());
@@ -215,7 +219,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
    */
   const [resultRows, setResultRows] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
-  const [editEntry, setEditEntry] = useState<TimeEntry | null>(null);
   const [totalsState, setTotalsState] = useState<TotalsState>({ kind: "idle" });
   /** Zählt Wiederholungsversuche der Gesamtvorschau. Nur dafür da. */
   const [totalsAttempt, setTotalsAttempt] = useState(0);
@@ -270,7 +273,22 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     });
     return { entries: matchingEntries, byId, titles, runs: runs.items, filterKey };
   }, [filterKey], [version]);
+  const rowActions = useBookingRowActions((entry) =>
+    data.state.status === "ready"
+      ? (data.state.value.titles.get(entry.todoId)?.title ?? text.thisTodo)
+      : text.thisTodo,
+  );
   const filterReady = data.state.status === "ready" && data.state.value.filterKey === filterKey;
+  const exportedLayout = useMemo(
+    () => data.state.status === "ready" && filterReady && status !== "open"
+      ? toExportedLayout(data.state.value.entries.filter((entry) => entry.exportStatus === "exported"))
+      : [],
+    [data.state, filterReady, status],
+  );
+  const displayLayout = useMemo(
+    () => status === "exported" ? exportedLayout : [...layout, ...exportedLayout],
+    [layout, exportedLayout, status],
+  );
 
   /*
    * Kennungen als Zeichenkette in den Abhängigkeiten und nicht als Feld: Ein
@@ -552,7 +570,23 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   }, [data.state, settings?.exportDirectory]);
 
   const rowCount = totals?.rows.length ?? 0;
-  const blockedCount = layout.filter(group => insights.get(group.key)?.blockedReason != null).length;
+  const groupNeedsEvidence = (group: GroupLayout): boolean => {
+    const readyData = data.state.status === "ready" ? data.state.value : null;
+    if (readyData === null) return true;
+    const entries = group.entryIds
+      .map((id) => readyData.byId.get(id))
+      .filter((entry): entry is TimeEntry => entry !== undefined);
+    return entries.length === 0 || entries.some((entry) => !entry.todoNoEvidence);
+  };
+  const groupIsBlocked = (group: GroupLayout): boolean => {
+    const reason = insights.get(group.key)?.blockedReason;
+    return reason !== null && reason !== undefined && (reason !== text.noteMissing || groupNeedsEvidence(group));
+  };
+  const groupIdIsBlocked = (groupId: string): boolean => {
+    const group = layout.find((candidate) => candidate.key === groupId);
+    return group === undefined || groupIsBlocked(group);
+  };
+  const blockedCount = layout.filter(groupIsBlocked).length;
 
   const previewCurrent = filterReady && totalsState.kind === "ready" && totalsState.selection === selectedKey && totalsState.templateId === activeTemplateId;
 
@@ -599,7 +633,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     <section className="screen">
       <ScreenHeader
         title={text.screenTitle}
-        lead={text.screenLead}
+
         refreshing={data.state.status === "ready" && data.state.refreshing}
         /*
           Gesperrt, solange nicht feststeht, was geschrieben würde (A-8.6). Bis
@@ -678,7 +712,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
 
         <Card
           title={text.templateAndRounding}
-          description={text.templateAndRoundingLead}
+
           actions={
             <Button
               size="sm"
@@ -851,13 +885,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               options={[{ value: "", label: text.noteAny }, { value: "vorhanden", label: text.notePresent }, { value: "fehlt", label: text.noteAbsent }]} />
           </>} />
 
-        {data.state.status === "ready" && filterReady ? <BookingsScreen query={{}} embedded={{
-          entries: data.state.value.entries, titles: data.state.value.titles,
-          selected: bookingIds, setSelected: setBookingIds, resetFilters,
-        }} /> : null}
-
-        <details className="export-preview-details">
-          <summary>{text.previewByTodo}</summary>
         <AsyncBoundary
           state={data.state}
           label={text.openBookingsLoading}
@@ -882,7 +909,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               );
             }
 
-            if (layout.length === 0) {
+            if (displayLayout.length === 0) {
               return (
                 <EmptyState
                   icon="check-circle"
@@ -897,7 +924,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               );
             }
 
-            const models = layout.map<ExportGroupViewModel>((group) => {
+            const models = displayLayout.map<ExportGroupViewModel>((group) => {
               const todo = value.titles.get(group.todoId);
               const insight = insights.get(group.key);
               const entries = group.entryIds
@@ -912,6 +939,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                 todoTitle: todo?.title ?? text.unknownTodo,
                 callNumber: todo?.callNumber ?? null,
                 day: formatDayLabel(group.day),
+                exportStatus: group.exportStatus,
+                durationSeconds: entries.reduce((sum, entry) => sum + entry.durationSeconds, 0),
                 entries: entries.map((entry) => ({
                   id: entry.id,
                   period: formatTimeRange(entry.startedAt, entry.endedAt),
@@ -936,8 +965,9 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                     : insight.quarters !== null
                       ? formatQuarters(insight.quarters)
                       : "—",
+                quarterCount: insight?.quarters ?? null,
                 mergedNote: previewNote(included),
-                blockedReason: insight?.blockedReason ?? null,
+                blockedReason: groupIsBlocked(group) ? insight?.blockedReason ?? null : null,
               };
             });
 
@@ -979,6 +1009,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                   models={models}
                   selectedGroupIds={selectedGroupIds}
                   expandedGroupIds={expanded}
+                  expandedTodoGroupIds={expandedTodoGroups}
                   onToggleGroup={groupId => setBookingIds(previous => {
                     const ids = layout.find(group => group.key === groupId)?.entryIds ?? [];
                     const next = new Set(previous);
@@ -994,20 +1025,40 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                       return next;
                     })
                   }
+                  onToggleTodoExpanded={(groupId) =>
+                    setExpandedTodoGroups((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(groupId)) next.delete(groupId);
+                      else next.add(groupId);
+                      return next;
+                    })
+                  }
                   onToggleEntry={(_groupId, entryId) => setBookingIds(previous => {
                     const next = new Set(previous);
                     if (next.has(entryId)) next.delete(entryId); else next.add(entryId);
                     return next;
                   })}
                   onEditEntry={(_groupId, entryId) => {
-                    const entry = value.entries.find((candidate) => candidate.id === entryId);
-                    if (entry !== undefined) setEditEntry(entry);
+                    const entry = value.byId.get(entryId);
+                    if (entry !== undefined) rowActions.openEditor(entry);
+                  }}
+                  renderEntryAction={(entryId) => {
+                    const entry = value.byId.get(entryId);
+                    if (entry === undefined) return null;
+                    const todoTitle = value.titles.get(entry.todoId)?.title ?? text.thisTodo;
+                    return <Menu
+                      trigger={<Icon name="more-horizontal" size={16} />}
+                      triggerLabel={bookingTexts().rowActions(foreignText(todoTitle))}
+                      triggerClassName="table__row-menu"
+                      align="end"
+                      entries={rowActions.menuEntries(entry)}
+                    />;
                   }}
                   renderRowDetail={(groupId) => (
                     <GroupRowDetail
                       row={rowByGroup.get(groupId) ?? null}
                       deselected={deselected.has(groupId)}
-                      blocked={(insights.get(groupId)?.blockedReason ?? null) !== null}
+                      blocked={groupIdIsBlocked(groupId)}
                       template={templateFields}
                       catalog={catalog}
                     />
@@ -1019,7 +1070,6 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
             );
           }}
         </AsyncBoundary>
-        </details>
 
         {templates.state.status === "loading" ? <Spinner size={14} label={text.templatesLoading} /> : null}
       </ScreenBody>
@@ -1059,19 +1109,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
         />
       ) : null}
 
-      {editEntry === null ? null : (
-        <BookingFormDialog
-          open
-          entry={editEntry}
-          todoId={editEntry.todoId}
-          todoTitle={
-            data.state.status === "ready"
-              ? (data.state.value.titles.get(editEntry.todoId)?.title ?? text.thisTodo)
-              : text.thisTodo
-          }
-          onClose={() => setEditEntry(null)}
-        />
-      )}
+      {rowActions.dialogs}
     </section>
   );
 }

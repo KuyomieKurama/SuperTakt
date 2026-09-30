@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -149,6 +151,33 @@ pub fn prepare(dir: &Path) -> Result<DirectoryReport, std::io::Error> {
     })
 }
 
+const STARTUP_LOG: &str = "startup.log";
+const PREVIOUS_STARTUP_LOG: &str = "startup.log.1";
+
+/// Starts a fresh startup log without making logging failures affect startup.
+pub fn rotate_startup_log(dir: &Path) {
+    let current = dir.join(STARTUP_LOG);
+    let previous = dir.join(PREVIOUS_STARTUP_LOG);
+
+    if current.exists() {
+        let _ = fs::remove_file(&previous);
+        let _ = fs::rename(current, previous);
+    }
+}
+
+/// Appends a timestamped diagnostic line without making logging failures affect startup.
+pub fn append_startup_log(dir: &Path, message: &str) {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let path = dir.join(STARTUP_LOG);
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "[{timestamp}] {message}");
+    }
+}
+
 #[cfg(unix)]
 fn apply_permissions(dir: &Path) -> (bool, String) {
     use std::os::unix::fs::PermissionsExt;
@@ -168,6 +197,7 @@ fn apply_permissions(dir: &Path) -> (bool, String) {
 
 #[cfg(windows)]
 fn apply_permissions(dir: &Path) -> (bool, String) {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
 
     // Unter Windows trägt die ACL die Grenze; `chmod` und `fs::stat` liefern
@@ -221,6 +251,8 @@ fn apply_permissions(dir: &Path) -> (bool, String) {
         .arg("/grant:r")
         .arg(format!("{account}:(OI)(CI)F"))
         .arg("/Q")
+        // CREATE_NO_WINDOW; a GUI parent would otherwise allocate a console.
+        .creation_flags(0x08000000)
         .output();
 
     match output {

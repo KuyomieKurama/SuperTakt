@@ -3487,3 +3487,21 @@ SP-12: Der Benutzerauftrag zur kompakten Update-Anzeige ersetzt den früheren
 Button „Installieren“ durch „Release-Seite öffnen“. Die Sperrliste schützt den
 neuen, gleichbedeutenden Hinweis auf den manuellen Download und die Installation
 sowie das versionsbezogene Überspringen. Der Prüfungsumfang bleibt bestehen.
+
+## ST-11 — Textabbau in Todo, Timer, Export und Einstellungen
+
+**Nachtrag, freigegeben:** REQ-20260930-011. Die Kürzungen entfernen nur
+wiederholte oder zustandsferne Erklärungen. Sperrlistentexte, Folgeaussagen und
+Hinweise zu Sicherheit, Wiederherstellung und Abrechnung bleiben unverändert.
+
+| Bereich | Gestrichen oder gekürzt |
+|---|---|
+| Todo-Liste und -Dialog | `todosLead`, `newTodoLead`, `priorityHint`, `statusHint`; `editTodoLead`, `callNumberHint`, `tagsHintNew`, `tagsHintEdit` |
+| Todo-Detail | `tagsCardLead`; `attachmentsLead` auf den Klickschutz gekürzt; `groupedByDay` als `InfoHint` am Buchungskarten-Kopf |
+| Timer | `atMostOne`, `stopHint`, `pickTodoLead`, `hiddenByDefault`; `idleHint` gekürzt |
+| Export | `screenLead`, `templateAndRoundingLead` |
+| Einstellungen | `timerLead`, `themeHint`, `rowDensityHint`; `languageHint` und `motionIntensityHint` gekürzt; Timer- und Datenkarten-Hinweise als `InfoHint` |
+
+Die deutsche und englische Schlüsselform wird weiter durch `const en: typeof de`
+erzwungen; `apps/web/test/features/textBundlesParity.test.ts` prüft diese
+Bauform für jedes Merkmals-`texts.ts`.

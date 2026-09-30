@@ -1,5 +1,6 @@
 import { listTimeEntries } from "../bookings/api";
 import type { ExportPreview, ForeignText, Id, SkippedExportGroup, TimeEntry, TimeEntryFilter } from "../../api/types";
+import { calendarDayOf } from "../../lib/format";
 import { exportTexts } from "./texts";
 
 /**
@@ -35,6 +36,7 @@ export interface GroupLayout {
   readonly todoId: Id;
   readonly day: string;
   readonly entryIds: readonly Id[];
+  readonly exportStatus: "open" | "exported";
 }
 
 export interface GroupInsight {
@@ -91,15 +93,33 @@ export function toLayout(preview: ExportPreview): readonly GroupLayout[] {
       todoId: group.todoId,
       day: group.day,
       entryIds: group.timeEntryIds,
+      exportStatus: "open" as const,
     })),
     ...preview.skipped.map((skipped) => ({
       key: groupKeyOf(skipped.group.todoId, skipped.group.day),
       todoId: skipped.group.todoId,
       day: skipped.group.day,
       entryIds: skipped.group.timeEntryIds,
+      exportStatus: "open" as const,
     })),
   ];
-  return out.sort((left, right) => right.day.localeCompare(left.day));
+  return out.sort((left, right) => left.day.localeCompare(right.day));
+}
+
+/** Groups already-exported bookings locally because export preview only accepts open entries. */
+export function toExportedLayout(entries: readonly TimeEntry[]): readonly GroupLayout[] {
+  const groups = new Map<string, GroupLayout>();
+  for (const entry of entries) {
+    const day = calendarDayOf(entry.startedAt);
+    const key = groupKeyOf(entry.todoId, day);
+    const existing = groups.get(key);
+    if (existing === undefined) {
+      groups.set(key, { key: `exported:${key}`, todoId: entry.todoId, day, entryIds: [entry.id], exportStatus: "exported" });
+    } else {
+      groups.set(key, { ...existing, entryIds: [...existing.entryIds, entry.id] });
+    }
+  }
+  return [...groups.values()].sort((left, right) => left.day.localeCompare(right.day));
 }
 
 export function allExcluded(): GroupInsight {

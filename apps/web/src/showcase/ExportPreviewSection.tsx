@@ -53,6 +53,9 @@ export function ExportPreviewSection() {
           group,
           excludedEntryIds,
           quarters: outcome.quarters,
+          quarterCount: Number(outcome.quarters.replace(",", ".")) * 4,
+          exported: false,
+          durationSeconds: 0,
           mergedNote: outcome.mergedNote,
           blockedReason: outcome.blockedReason,
         };

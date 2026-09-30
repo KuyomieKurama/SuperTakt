@@ -25,7 +25,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   todo_status: { columns: ['id', 'name', 'position', 'is_default', 'color', 'created_at', 'updated_at'], orderBy: 'position, id' },
   tag_folder: { columns: ['id', 'parent_id', 'name', 'created_at', 'updated_at'], orderBy: 'created_at, id' },
   tag: { columns: ['id', 'folder_id', 'name', 'color', 'created_at', 'updated_at', 'name_key'], orderBy: 'created_at, id' },
-  todo: { columns: ['id', 'title', 'call_number', 'status_id', 'completed_at', 'created_at', 'updated_at', 'due_date', 'due_time', 'estimate_minutes', 'no_export', 'priority_id'], orderBy: 'created_at, id' },
+  todo: { columns: ['id', 'title', 'call_number', 'status_id', 'completed_at', 'created_at', 'updated_at', 'due_date', 'due_time', 'estimate_minutes', 'no_export', 'no_evidence', 'priority_id'], orderBy: 'created_at, id' },
   todo_mail: { columns: ['todo_id', 'identity', 'metadata', 'received_at', 'created_at'], orderBy: 'todo_id, identity' },
   addin_mail_receipt: { columns: ['request_key', 'fingerprint', 'todo_id', 'response'], orderBy: 'request_key' },
   todo_note: { columns: ['todo_id', 'body', 'updated_at'], orderBy: 'todo_id' },

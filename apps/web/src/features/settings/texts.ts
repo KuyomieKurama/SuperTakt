@@ -31,7 +31,7 @@ const de = {
     compact: "Kompakt — mehr Zeilen auf dem Bildschirm",
   },
   timerTitle: "Timer",
-  timerLead: "Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.",
+
   promptOnStop: "Leistung beim Stoppen abfragen",
   promptOnStopHint: "Ausgeschaltet wird die Zeit sofort gebucht, auch beim Wechsel zu einem anderen Timer. Vorhandene Leistung bleibt erhalten; fehlenden Text können Sie später in der Buchungsübersicht ergänzen.",
   detectIdle: "Inaktive Zeit erkennen",
@@ -48,7 +48,7 @@ const de = {
   displayTitle: "Darstellung",
   displayLead: "Alles hier wirkt sofort und bleibt beim nächsten Start erhalten.",
   language: "Sprache",
-  languageHint: "Das Outlook-Add-in und die Meldungen des lokalen Dienstes bleiben vorerst deutsch.",
+  languageHint: "Add-in und Dienstmeldungen bleiben deutsch.",
   // Version check (A-28.1, welle-18-fluss.md 1.2)
   versionCheckTitle: "Versionsprüfung",
   versionCheckLabel: "Nach neuen Versionen suchen",
@@ -65,11 +65,11 @@ const de = {
   fixedColors: (dark: boolean) => `Dieses Theme verwendet feste ${dark ? "dunkle" : "helle"} Farben. Die freie Farbwahl steht bei Klassisch und den anpassbaren Themes zur Verfügung.`,
   chooseTheme: "Theme auswählen",
   themeMode: { dark: "Dunkel · ", light: "Hell · ", auto: "Hell & Dunkel · " },
-  themeHint: "Alle Themes verwenden das klassische Layout. Klassisch ist der Standard.",
+
   rowDensity: "Zeilendichte",
-  rowDensityHint: "Bestimmt die Abstände in Tabellen und Listen, unabhängig vom gewählten Theme.",
+
   motionIntensity: "Bewegung in der Oberfläche",
-  motionIntensityHint: "Steuert Übergänge, Dialoge und Rückmeldungen. Die Systemeinstellung „Bewegung reduzieren“ hat immer Vorrang.",
+  motionIntensityHint: "Die Systemeinstellung hat Vorrang.",
   motion: {
     reduced: "Reduziert — nahezu ohne Bewegung",
     subtle: "Dezent — kurze, ruhige Übergänge",
@@ -219,6 +219,7 @@ const de = {
   invalidJson: "Die gewählte Datei enthält kein gültiges JSON.",
   backupTitle: "SuperTakt-Datensicherung",
   backupLead: "Vollständiges, versioniertes JSON-Archiv.",
+  infoHint: "Hinweis",
   backupHint: "Enthält Todos, Vermerke, Tags, Strukturen, Zeitbuchungen, Exporteinstellungen, Protokolle und Bildanhänge. Eine Wiederherstellung ersetzt den aktuellen Bestand.",
   downloadBackup: "Sicherung herunterladen",
   restoreBackup: "Sicherung wiederherstellen",
@@ -433,7 +434,7 @@ const en: typeof de = {
     compact: "Compact — more rows on the screen",
   },
   timerTitle: "Timer",
-  timerLead: "Decide when you want to enter your work done.",
+
   promptOnStop: "Ask for work done when stopping",
   promptOnStopHint: "When off, the time is booked at once, also when switching to another timer. Existing work done is kept; missing text can be added later in the bookings overview.",
   detectIdle: "Detect inactive time",
@@ -450,7 +451,7 @@ const en: typeof de = {
   displayTitle: "Appearance",
   displayLead: "Everything here applies immediately and is kept on the next start.",
   language: "Language",
-  languageHint: "The Outlook add-in and messages from the local service stay in German for now.",
+  languageHint: "Add-in and service messages stay in German.",
   versionCheckTitle: "Version check",
   versionCheckLabel: "Check for new versions",
   versionCheckHint: "Queries SuperTakt's releases on GitHub. When off, SuperTakt makes no outside connection.",
@@ -465,11 +466,11 @@ const en: typeof de = {
   fixedColors: (dark: boolean) => `This theme uses fixed ${dark ? "dark" : "light"} colours. Free colour choice is available with Classic and the adaptable themes.`,
   chooseTheme: "Choose theme",
   themeMode: { dark: "Dark · ", light: "Light · ", auto: "Light & dark · " },
-  themeHint: "All themes use the classic layout. Classic is the default.",
+
   rowDensity: "Row density",
-  rowDensityHint: "Sets the spacing in tables and lists, independent of the chosen theme.",
+
   motionIntensity: "Interface motion",
-  motionIntensityHint: "Controls transitions, dialogs, and feedback. Your system’s “reduce motion” setting always takes priority.",
+  motionIntensityHint: "The system setting takes priority.",
   motion: {
     reduced: "Reduced — almost no movement",
     subtle: "Subtle — brief, calm transitions",
@@ -610,6 +611,7 @@ const en: typeof de = {
   invalidJson: "The chosen file contains no valid JSON.",
   backupTitle: "SuperTakt backup",
   backupLead: "Complete, versioned JSON archive.",
+  infoHint: "Hint",
   backupHint: "Contains todos, internal notes, tags, structures, time bookings, export settings, logs and image attachments. A restore replaces the current data.",
   downloadBackup: "Download backup",
   restoreBackup: "Restore backup",
