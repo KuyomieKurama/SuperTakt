@@ -7,9 +7,19 @@ import {
   getSettings,
   listTimeEntriesByTodo,
   setTimerPrompt,
+  type TimeEntry,
   updateTodoEvidenceFlags,
 } from './support/api';
 import { gotoTodo } from './support/nav';
+
+type TimeEntryWithTodoFlags = TimeEntry & {
+  readonly todoNoEvidence: boolean;
+  readonly todoNoExport: boolean;
+};
+
+function bookingFields({ todoNoEvidence: _todoNoEvidence, todoNoExport: _todoNoExport, ...entry }: TimeEntryWithTodoFlags) {
+  return entry;
+}
 
 test('REQ-011: ohne Nachweis stoppt ohne Leistungsdialog und ohne Abrechnung bleibt unabhängig', async ({ page }) => {
   const originalPrompt = (await getSettings()).promptOnTimerStop;
@@ -36,7 +46,11 @@ test('REQ-011: ohne Nachweis stoppt ohne Leistungsdialog und ohne Abrechnung ble
     const entriesBeforeFlagChange = await listTimeEntriesByTodo(noEvidenceTodo.id);
     expect(entriesBeforeFlagChange).toHaveLength(1);
     await updateTodoEvidenceFlags(noEvidenceTodo.id, { noEvidence: false });
-    expect(await listTimeEntriesByTodo(noEvidenceTodo.id)).toEqual(entriesBeforeFlagChange);
+    const entriesAfterFlagChange = await listTimeEntriesByTodo(noEvidenceTodo.id);
+    expect((entriesAfterFlagChange[0] as TimeEntryWithTodoFlags).todoNoEvidence).toBe(false);
+    expect(entriesAfterFlagChange.map((entry) => bookingFields(entry as TimeEntryWithTodoFlags))).toEqual(
+      entriesBeforeFlagChange.map((entry) => bookingFields(entry as TimeEntryWithTodoFlags)),
+    );
 
     await gotoTodo(page, noExportTodo.id);
     await main.getByRole('button', { name: 'Timer starten', exact: true }).first().click();
