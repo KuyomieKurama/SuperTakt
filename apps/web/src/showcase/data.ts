@@ -565,6 +565,8 @@ export const EXPORT_GROUPS: readonly ExportGroupData[] = [
     todoTitle: "Musterkunde Nord — Rechnungslauf prüfen",
     callNumber: "CALL-2026-0417",
     day: "Montag, 31.08.2026",
+    exportStatus: "open",
+    durationSeconds: 2100,
     entries: [
       {
         id: "g1-e1",
@@ -597,6 +599,8 @@ export const EXPORT_GROUPS: readonly ExportGroupData[] = [
     todoTitle: "Beispiel GmbH — Schnittstelle neu aufsetzen",
     callNumber: "CALL-2026-0392",
     day: "Sonntag, 30.08.2026",
+    exportStatus: "open",
+    durationSeconds: 9360,
     entries: [
       {
         id: "g2-e1",
@@ -621,6 +625,8 @@ export const EXPORT_GROUPS: readonly ExportGroupData[] = [
     todoTitle: "Interne Abstimmung Betriebshandbuch",
     callNumber: null,
     day: "Samstag, 29.08.2026",
+    exportStatus: "open",
+    durationSeconds: 420,
     entries: [
       {
         id: "g3-e1",

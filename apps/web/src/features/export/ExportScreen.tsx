@@ -74,6 +74,7 @@ import {
   previewNote,
   reasonText,
   toLayout,
+  toExportedLayout,
   type GroupInsight,
   type GroupLayout,
 } from "./exportGroupLayout";
@@ -171,6 +172,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   const text = exportTexts();
 
   const [status, setStatus] = useState(query["status"] ?? "open");
+  const [expandedTodoGroups, setExpandedTodoGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [todoId, setTodoId] = useState(query["todo"] ?? "");
   const [fromDay, setFromDay] = useState(() => query["von"] ?? shiftCalendarDay(todayCalendarDay(), -6));
   const [toDay, setToDay] = useState(() => query["bis"] ?? todayCalendarDay());
@@ -277,6 +279,16 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
       : text.thisTodo,
   );
   const filterReady = data.state.status === "ready" && data.state.value.filterKey === filterKey;
+  const exportedLayout = useMemo(
+    () => data.state.status === "ready" && filterReady && status !== "open"
+      ? toExportedLayout(data.state.value.entries.filter((entry) => entry.exportStatus === "exported"))
+      : [],
+    [data.state, filterReady, status],
+  );
+  const displayLayout = useMemo(
+    () => status === "exported" ? exportedLayout : [...layout, ...exportedLayout],
+    [layout, exportedLayout, status],
+  );
 
   /*
    * Kennungen als Zeichenkette in den Abhängigkeiten und nicht als Feld: Ein
@@ -897,7 +909,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               );
             }
 
-            if (layout.length === 0) {
+            if (displayLayout.length === 0) {
               return (
                 <EmptyState
                   icon="check-circle"
@@ -912,7 +924,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
               );
             }
 
-            const models = layout.map<ExportGroupViewModel>((group) => {
+            const models = displayLayout.map<ExportGroupViewModel>((group) => {
               const todo = value.titles.get(group.todoId);
               const insight = insights.get(group.key);
               const entries = group.entryIds
@@ -927,6 +939,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                 todoTitle: todo?.title ?? text.unknownTodo,
                 callNumber: todo?.callNumber ?? null,
                 day: formatDayLabel(group.day),
+                exportStatus: group.exportStatus,
+                durationSeconds: entries.reduce((sum, entry) => sum + entry.durationSeconds, 0),
                 entries: entries.map((entry) => ({
                   id: entry.id,
                   period: formatTimeRange(entry.startedAt, entry.endedAt),
@@ -995,6 +1009,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                   models={models}
                   selectedGroupIds={selectedGroupIds}
                   expandedGroupIds={expanded}
+                  expandedTodoGroupIds={expandedTodoGroups}
                   onToggleGroup={groupId => setBookingIds(previous => {
                     const ids = layout.find(group => group.key === groupId)?.entryIds ?? [];
                     const next = new Set(previous);
@@ -1004,6 +1019,14 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                   })}
                   onToggleExpanded={(groupId) =>
                     setExpanded((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(groupId)) next.delete(groupId);
+                      else next.add(groupId);
+                      return next;
+                    })
+                  }
+                  onToggleTodoExpanded={(groupId) =>
+                    setExpandedTodoGroups((previous) => {
                       const next = new Set(previous);
                       if (next.has(groupId)) next.delete(groupId);
                       else next.add(groupId);
