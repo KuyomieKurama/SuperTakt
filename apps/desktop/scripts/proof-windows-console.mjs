@@ -3,7 +3,7 @@
  *
  * The check deliberately reads every Rust source file below src-tauri/src. A file
  * that contains a Windows cfg is a Windows path; each Command::new expression in
- * that file must set CREATE_NO_WINDOW before its terminating semicolon.
+ * that file must set CREATE_NO_WINDOW before spawn, output, or status runs it.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -31,7 +31,12 @@ function readRustSources(dir = rustDir, prefix = '') {
 
 function commandExpressions(text) {
   const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  return [...code.matchAll(/Command::new\([\s\S]*?;/g)].map((match) => match[0]);
+  const terminalCall = /\.(?:spawn|output|status)\s*\(/;
+  return [...code.matchAll(/Command::new\(/g)].map((match) => {
+    const command = code.slice(match.index);
+    const end = command.search(terminalCall);
+    return end === -1 ? command : command.slice(0, end);
+  });
 }
 
 const failures = [];
