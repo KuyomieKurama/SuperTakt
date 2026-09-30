@@ -389,7 +389,9 @@ function toCard(
       .filter((info): info is NonNullable<typeof info> => info !== undefined)
       .map((info) => ({ label: info.tag.name, path: info.path })),
     trackedDisplay: formatDuration(summaries.secondsByTodo.get(todo.id) ?? 0),
+    trackedSeconds: summaries.secondsByTodo.get(todo.id) ?? 0,
     exportSummary: summaries.byTodo.get(todo.id) ?? EMPTY_SUMMARY,
+    noEvidence: todo.noEvidence === true,
     timerRunning,
     statusName,
     done: todo.completedAt !== null,

@@ -81,7 +81,11 @@ export interface KanbanCardData {
   readonly priority?: { readonly name: ForeignText; readonly weight: number };
   /** Bereits formatierte Gesamtdauer, zum Beispiel "4:15 h". */
   readonly trackedDisplay: string;
+  /** Unformatted duration; only a positive duration is shown on the card. */
+  readonly trackedSeconds?: number;
   readonly exportSummary: ExportSummary;
+  /** No-evidence todos do not show time or export state on the board. */
+  readonly noEvidence?: boolean;
   readonly timerRunning: boolean;
   /**
    * Der Status des Todos (A-5.4) — eine Eigenschaft, **keine** Spalte mehr
@@ -150,6 +154,8 @@ export function KanbanCard({
   const text = boardTexts();
   const cardFlagState = doneFlagState(card.done, card.reactivated === true);
   const others = card.appearance?.otherColumns ?? [];
+  const hasExportSummary = Object.values(card.exportSummary).some((count) => count > 0);
+  const showFoot = card.noEvidence !== true && (hasExportSummary || (card.trackedSeconds ?? 0) > 0);
 
   return (
     <article
@@ -182,7 +188,11 @@ export function KanbanCard({
             />
             {/* Die Woerter stehen in `lib/labels.ts`, damit die Karte nicht
                 etwas anderes sagt als die Zeile daneben (Befund C-23). */}
-            {labels().doneFlag[cardFlagState]}
+            {cardFlagState === "open" ? (
+              <span className="visually-hidden">{labels().doneFlag[cardFlagState]}</span>
+            ) : (
+              labels().doneFlag[cardFlagState]
+            )}
           </span>
           {/*
             Die dritte Marke, und sie ist die einzige, die **fehlen** darf: Ein
@@ -207,31 +217,34 @@ export function KanbanCard({
             aria-pressed={highlighted}
             onClick={onHighlight}
             title={text.alsoInTitle(others.map(foreignText).join(", "))}
+            aria-label={text.alsoInTitle(others.map(foreignText).join(", "))}
           >
             <Icon name="copy" size={12} />
-            <span>
-              {text.alsoIn(others.length, others.map((name) => quotedName(name)).join(", "))}
-            </span>
+            <span>{text.alsoIn(others.length)}</span>
           </button>
         ) : null}
 
         <div className="kcard__tags">
-          {card.priority ? (
+          {card.priority !== undefined && card.priority.weight > 0 ? (
             <span className="kcard__priority">
-              {card.priority.weight > 0 ? <Icon name="arrow-up" size={12} /> : null}
+              <Icon name="arrow-up" size={12} />
               <Foreign value={card.priority.name} />
             </span>
           ) : null}
           <TodoTagsCell count={card.tagCount ?? card.tags.length} tags={card.tags.map(tag => ({ name: tag.label, path: tag.path ?? [] }))} open={tagsOpen} onOpenChange={setTagsOpen} />
         </div>
 
-        <div className="kcard__foot">
-          <ExportSummaryStrip summary={card.exportSummary} />
-          <span className="kcard__tracked tabular">
-            <Icon name="clock" size={13} />
-            {card.trackedDisplay}
-          </span>
-        </div>
+        {showFoot ? (
+          <div className="kcard__foot">
+            {hasExportSummary ? <ExportSummaryStrip summary={card.exportSummary} /> : null}
+            {(card.trackedSeconds ?? 0) > 0 ? (
+              <span className="kcard__tracked tabular">
+                <Icon name="clock" size={13} />
+                {card.trackedDisplay}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Der Status, sichtbar und nicht anklickbar: Auf dem Board gibt es
             ihn zu sehen, geaendert wird er in S-02 und S-03. Das Kartenmenue

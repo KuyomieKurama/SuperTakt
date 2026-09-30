@@ -15,7 +15,7 @@ import { FilterToggle } from "../../shared/ui/FilterBar";
 import type { MenuEntry } from "../../shared/ui/Menu";
 import { Button } from "../../shared/ui/Primitives";
 import { quotedName } from "../../lib/foreign";
-import { formatTime, plural } from "../../lib/format";
+import { formatTime } from "../../lib/format";
 import { labels, poolPlacementMessage } from "../../lib/labels";
 import { boardTexts } from "./texts";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
@@ -456,11 +456,10 @@ export function BoardScreen() {
               <div className="screen__bar">
                 <div className="board__bar">
                   <p className="board__stamp">
-                    {text.stamp} {formatTime(value.board.generatedAt)} ·{" "}
-                    {plural(value.board.columns.length, text.column, text.columns)}
+                    {text.stamp} {formatTime(value.board.generatedAt)}
                     {value.board.appearances.length === 0
                       ? ""
-                      : ` · ${plural(value.board.appearances.length, text.cardStands, text.cardsStand)}${text.inSeveralColumns}`}
+                      : ` · ${text.multipleCards(value.board.appearances.length)}`}
                   </p>
                   {partial ? <Button size="sm" variant="secondary"
                     onClick={() => setPerColumn(current => current + PAGE_SIZE)}>

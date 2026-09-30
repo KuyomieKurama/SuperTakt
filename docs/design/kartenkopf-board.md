@@ -426,3 +426,15 @@ selbst an Regeln hängt und nicht an einem Eindruck.
    entschieden wird es nicht von mir.
 3. **B-2, der `clear`-Block:** aufräumen, härten (Liste statt Formprüfung im Startskript) oder
    stehen lassen? Keine dieser drei Antworten ist Gestaltung.
+
+---
+
+## Nachtrag REQ-20260930-011 — ruhigerer Karten- und Spaltenkontext
+
+Die Umsetzung reduziert nur Wiederholung, nicht Information oder Handlung: Die offene
+Erledigt-Marke bleibt als Symbol mit unsichtbarem Wort im Baum, abgeschlossene und aufgehobene
+Zustände bleiben ausgeschrieben. Mehrfachvorkommen nennen sichtbar nur ihre Anzahl; die
+Spaltennamen stehen weiter im zugänglichen Namen und im `title`. Exportstand und erfasste Zeit
+erscheinen nur bei vorhandenen Werten und nie bei Todos ohne Nachweis. Der Status bleibt als
+Inline-Chip mit unsichtbarer Beschriftung sichtbar. K-1 bis K-4, insbesondere DOM-Reihenfolge,
+unverkürzte Marken, freie Höhe und fehlende Höhenanimation, gelten unverändert.

@@ -984,7 +984,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-2) var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background-color: var(--bg-surface);
 }
 
 .kcolumn__heading {
@@ -994,10 +996,9 @@
 
 .kcolumn__title {
   font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* Wie viele Todos dieser Spalte erledigt sind. Die Spalte selbst sagt das
@@ -1022,12 +1023,6 @@
   text-align: center;
   color: var(--text-muted);
 }
-.kcolumn__count--over {
-  background-color: var(--warning-bg);
-  color: var(--warning-fg);
-  font-weight: var(--weight-semibold);
-}
-
 /* Die Regel der Spalte, direkt unter ihrem Kopf. Sie beantwortet die Frage,
    die eine Spalte aus Regeln als Erstes aufwirft: Warum steht diese Karte
    hier? (E-054) — gezeichnet wird sie von `.rule-summary` weiter unten, seit

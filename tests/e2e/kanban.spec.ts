@@ -206,11 +206,12 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       await expect(cardInA).toBeVisible();
       await expect(cardInB).toBeVisible();
 
-      // Jedes Vorkommen nennt das jeweils andere beim Namen (Kanban.tsx,
-      // "Steht auch in …") — nicht nur "in mehreren Spalten" ohne zu sagen,
-      // in welchen.
-      await expect(cardInA.getByRole('button', { name: /Steht auch in/ })).toContainText(columnBName);
-      await expect(cardInB.getByRole('button', { name: /Steht auch in/ })).toContainText(columnAName);
+      // Sichtbar bleibt die Anzahl der anderen Spalten; die Namen stehen im
+      // zugänglichen Namen, damit die Karte den Kontext nicht doppelt trägt.
+      const alsoInA = cardInA.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnBName}`) });
+      const alsoInB = cardInB.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnAName}`) });
+      await expect(alsoInA).toHaveText('Steht auch in 1 Spalte');
+      await expect(alsoInB).toHaveText('Steht auch in 1 Spalte');
 
       // Live-Region der Ansicht (BoardScreen.tsx, `announcement`) — nicht per
       // Rolle "status" gesucht, weil jede Hinweismeldung (`InlineMessage`)
@@ -218,7 +219,7 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       // unsichtbare Ansage selbst.
       const announcement = page.locator('[role="status"].visually-hidden');
 
-      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await alsoInA.click();
       await expect(cardInA).toHaveClass(/kcard--linked/);
       await expect(cardInB).toHaveClass(/kcard--linked/);
       await expect(announcement).toContainText(todo.title);
@@ -227,7 +228,7 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       await expect(announcement).toContainText(columnBName);
 
       // Ein zweiter Klick hebt die Hervorhebung an **beiden** Vorkommen auf.
-      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await alsoInA.click();
       await expect(cardInA).not.toHaveClass(/kcard--linked/);
       await expect(cardInB).not.toHaveClass(/kcard--linked/);
       await expect(announcement).toHaveText('Hervorhebung aufgehoben.');
