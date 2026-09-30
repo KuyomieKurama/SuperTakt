@@ -1407,6 +1407,24 @@ probe("`over` an einem deckenden Hintergrund wird abgewiesen", () => {
   return "beide Richtungen: das wirkungslose wird gemeldet, das richtige nicht";
 });
 
+/* A broken warning hue and foreground must fail a status pair in every design theme. */
+probe("eine Warn-Hue auf der Theme-Flaeche macht in jedem Design-Theme ein Statuspaar rot", () => {
+  const failuresByTheme = [];
+  for (const theme of themes.filter((candidate) => candidate.statusOnly === true)) {
+    const broken = new Map(theme.tokens);
+    broken.set("--status-warning-hue", resolveToken(theme.tokens, "--bg-surface"));
+    broken.set("--warning-fg", resolveToken(broken, "--warning-bg"));
+    const failedPair = statusPairs.find((pair) => {
+      if (!`${pair.fg} ${pair.bg}`.includes("--warning-")) return false;
+      return measure(broken, pair, `Gegenprobe ${theme.label}`) < pair.min;
+    });
+    expect(failedPair !== undefined, `${theme.label}: die gesetzte Warn-Hue laesst alle Statuspaare gruen`);
+    failuresByTheme.push(`${theme.label} ${failedPair.fg} auf ${failedPair.bg}`);
+  }
+  expect(failuresByTheme.length > 0, "keine Design-Themes wurden geladen — die Gegenprobe misst nichts");
+  return `${failuresByTheme.length} Themes: ${failuresByTheme.join("; ")}`;
+});
+
 /*
  * Drei Gegenproben zur Vollstaendigkeit (A-A-45). Ein Waechter, der nie rot
  * war, ist eine Behauptung ueber einen Waechter — und dieser hier ist am Tag
