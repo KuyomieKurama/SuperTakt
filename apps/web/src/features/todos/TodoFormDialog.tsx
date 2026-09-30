@@ -109,6 +109,8 @@ export function TodoFormDialog({
   const [dueTime, setDueTime] = useState("");
   const noExportHintId = useId();
   const [noExport, setNoExport] = useState(false);
+  const noEvidenceHintId = useId();
+  const [noEvidence, setNoEvidence] = useState(false);
   const [estimateMinutes, setEstimateMinutes] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -125,6 +127,7 @@ export function TodoFormDialog({
     setDueTime(todo?.dueTime ?? "");
     setEstimateMinutes(todo?.estimateMinutes?.toString() ?? "");
     setNoExport(todo?.noExport ?? false);
+    setNoEvidence(todo?.noEvidence ?? false);
     setPriorityId(todo?.priorityId ?? "");
     setTitleTouched(false);
     setAttempted(false);
@@ -171,6 +174,7 @@ export function TodoFormDialog({
           dueTime: dueDate ? dueTime || "00:00" : null,
           estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
           noExport,
+          noEvidence,
           priorityId: priorityId || null,
         });
         structure.reload();
@@ -221,6 +225,7 @@ export function TodoFormDialog({
           dueTime: dueDate ? dueTime || "00:00" : null,
           estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
           noExport,
+          noEvidence,
           priorityId: priorityId || null,
       });
       if (freshTags.length > 0) structure.reload();
@@ -302,6 +307,14 @@ export function TodoFormDialog({
         </span>
         <input className="todo-export-option__switch" type="checkbox" role="switch" checked={noExport}
           onChange={event => setNoExport(event.target.checked)} aria-labelledby={`${noExportHintId}-label`} aria-describedby={noExportHintId} />
+      </label>
+      <label className="todo-export-option">
+        <span className="todo-export-option__text">
+          <span className="todo-export-option__title" id={`${noEvidenceHintId}-label`}>{text.noEvidence}</span>
+          <span className="todo-export-option__hint" id={noEvidenceHintId}>{text.noEvidenceHint}</span>
+        </span>
+        <input className="todo-export-option__switch" type="checkbox" role="switch" checked={noEvidence}
+          onChange={event => setNoEvidence(event.target.checked)} aria-labelledby={`${noEvidenceHintId}-label`} aria-describedby={noEvidenceHintId} />
       </label>
       <Select label={text.priority} value={priorityId} onChange={setPriorityId}
         hint={text.priorityHint}

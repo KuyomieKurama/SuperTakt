@@ -432,7 +432,7 @@ function TodayRow({ entry }: { readonly entry: TimeEntry }) {
       <span className="entry-row__period">{formatTimeRange(entry.startedAt, entry.endedAt)}</span>
       <span className="entry-row__duration tabular">{formatDuration(entry.durationSeconds)}</span>
       <span className="entry-row__note grow truncate">
-        {entry.note.length === 0 ? (
+        {entry.note.length === 0 && !entry.todoNoEvidence ? (
           <span className="muted">{text.withoutNote}</span>
         ) : (
           <Foreign value={entry.note} />

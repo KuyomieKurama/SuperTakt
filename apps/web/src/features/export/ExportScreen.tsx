@@ -552,7 +552,23 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
   }, [data.state, settings?.exportDirectory]);
 
   const rowCount = totals?.rows.length ?? 0;
-  const blockedCount = layout.filter(group => insights.get(group.key)?.blockedReason != null).length;
+  const groupNeedsEvidence = (group: GroupLayout): boolean => {
+    const readyData = data.state.status === "ready" ? data.state.value : null;
+    if (readyData === null) return true;
+    const entries = group.entryIds
+      .map((id) => readyData.byId.get(id))
+      .filter((entry): entry is TimeEntry => entry !== undefined);
+    return entries.length === 0 || entries.some((entry) => !entry.todoNoEvidence);
+  };
+  const groupIsBlocked = (group: GroupLayout): boolean => {
+    const reason = insights.get(group.key)?.blockedReason;
+    return reason !== null && reason !== undefined && (reason !== text.noteMissing || groupNeedsEvidence(group));
+  };
+  const groupIdIsBlocked = (groupId: string): boolean => {
+    const group = layout.find((candidate) => candidate.key === groupId);
+    return group === undefined || groupIsBlocked(group);
+  };
+  const blockedCount = layout.filter(groupIsBlocked).length;
 
   const previewCurrent = filterReady && totalsState.kind === "ready" && totalsState.selection === selectedKey && totalsState.templateId === activeTemplateId;
 
@@ -937,7 +953,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                       ? formatQuarters(insight.quarters)
                       : "—",
                 mergedNote: previewNote(included),
-                blockedReason: insight?.blockedReason ?? null,
+                blockedReason: groupIsBlocked(group) ? insight?.blockedReason ?? null : null,
               };
             });
 
@@ -1007,7 +1023,7 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
                     <GroupRowDetail
                       row={rowByGroup.get(groupId) ?? null}
                       deselected={deselected.has(groupId)}
-                      blocked={(insights.get(groupId)?.blockedReason ?? null) !== null}
+                      blocked={groupIdIsBlocked(groupId)}
                       template={templateFields}
                       catalog={catalog}
                     />

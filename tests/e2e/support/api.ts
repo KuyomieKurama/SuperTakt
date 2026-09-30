@@ -30,6 +30,8 @@ export interface Todo {
   readonly tagIds: readonly string[];
   /** Tageswert YYYY-MM-DD oder null, kein Zeitstempel. */
   readonly dueDate: string | null;
+  readonly noExport: boolean;
+  readonly noEvidence: boolean;
 }
 
 export interface TimeEntry {
@@ -50,6 +52,8 @@ export async function createTodo(input: {
   statusId?: string | null;
   /** Die Frist beim Anlegen (A-19.1, A-19.3). Fehlt sie, entsteht das Todo ohne Frist. */
   dueDate?: string | null;
+  noExport?: boolean;
+  noEvidence?: boolean;
 }): Promise<Todo> {
   const result = await call<{ todo: Todo; addedDefaultTagIds: readonly string[] }>('/todos', {
     method: 'POST',
@@ -60,6 +64,8 @@ export async function createTodo(input: {
       tagIds: input.tagIds ?? [],
       statusId: input.statusId ?? null,
       dueDate: input.dueDate ?? null,
+      noExport: input.noExport ?? false,
+      noEvidence: input.noEvidence ?? false,
     }),
   });
   return result.todo;
@@ -70,6 +76,16 @@ export async function updateTodoDueDate(id: string, dueDate: string | null): Pro
   return call<Todo>(`/todos/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ dueDate }),
+  });
+}
+
+export async function updateTodoEvidenceFlags(
+  id: string,
+  flags: { noExport?: boolean; noEvidence?: boolean },
+): Promise<Todo> {
+  return call<Todo>(`/todos/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(flags),
   });
 }
 

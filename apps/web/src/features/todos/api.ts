@@ -51,6 +51,7 @@ export interface TodoCreate {
   readonly dueTime?: string | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
+  readonly noEvidence?: boolean;
   readonly priorityId?: string | null;
   readonly dueDate?: CalendarDay | null;
 }
@@ -64,6 +65,7 @@ export interface TodoUpdate {
   readonly dueTime?: string | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
+  readonly noEvidence?: boolean;
   readonly priorityId?: string | null;
   readonly dueDate?: CalendarDay | null;
 }

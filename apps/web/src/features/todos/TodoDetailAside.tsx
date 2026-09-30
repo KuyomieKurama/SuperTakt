@@ -87,6 +87,7 @@ export function TodoDetailAside({
       </Card>
 
       {todo.noExport ? <Card title={text.noExport}><p>{text.noExportCard}</p></Card> : null}
+      {todo.noEvidence ? <Card title={text.noEvidence}><p>{text.noEvidenceCard}</p></Card> : null}
       {todo.estimateMinutes ? <Card title={text.estimate}><p>{text.estimateMinutes(todo.estimateMinutes)}</p></Card> : null}
       <Card title={text.recordedTime}>
         <div className="stat-grid stat-grid--tight">
