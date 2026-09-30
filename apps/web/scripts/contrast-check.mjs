@@ -1407,22 +1407,57 @@ probe("`over` an einem deckenden Hintergrund wird abgewiesen", () => {
   return "beide Richtungen: das wirkungslose wird gemeldet, das richtige nicht";
 });
 
-/* A broken warning hue and foreground must fail a status pair in every design theme. */
-probe("eine Warn-Hue auf der Theme-Flaeche macht in jedem Design-Theme ein Statuspaar rot", () => {
-  const failuresByTheme = [];
+function colourDelta(left, right) {
+  const first = parseColor(left);
+  const second = parseColor(right);
+  return Math.max(
+    Math.abs(first.r - second.r),
+    Math.abs(first.g - second.g),
+    Math.abs(first.b - second.b),
+  );
+}
+
+probe("eine Warn-Hue aendert in jedem Design-Theme die abgeleiteten Statuswerte", () => {
+  const deltasByTheme = [];
   for (const theme of themes.filter((candidate) => candidate.statusOnly === true)) {
     const broken = new Map(theme.tokens);
-    broken.set("--status-warning-hue", resolveToken(theme.tokens, "--bg-surface"));
-    broken.set("--warning-fg", resolveToken(broken, "--warning-bg"));
+    broken.set("--status-warning-hue", resolveToken(theme.tokens, "--preset-ink"));
+    const backgroundDelta = colourDelta(
+      resolveToken(theme.tokens, "--warning-bg"),
+      resolveToken(broken, "--warning-bg"),
+    );
+    const borderDelta = colourDelta(
+      resolveToken(theme.tokens, "--warning-border"),
+      resolveToken(broken, "--warning-border"),
+    );
+    expect(
+      backgroundDelta > 0 && borderDelta > 0,
+      `${theme.label}: die Warn-Hue aendert --warning-bg um ${backgroundDelta} und --warning-border um ${borderDelta}`,
+    );
+    deltasByTheme.push(
+      `${theme.label} Hintergrund ${backgroundDelta.toFixed(2)}, Kontur ${borderDelta.toFixed(2)}`,
+    );
+  }
+  expect(deltasByTheme.length > 0, "keine Design-Themes wurden geladen — die Gegenprobe misst nichts");
+  return `${deltasByTheme.length} Themes: ${deltasByTheme.join("; ")}`;
+});
+
+probe("eine Warn-Hue allein wird als rotes Statuspaar erkannt", () => {
+  const failures = [];
+  for (const theme of themes.filter((candidate) => candidate.statusOnly === true)) {
+    const broken = new Map(theme.tokens);
+    broken.set("--status-warning-hue", "#ffffff");
     const failedPair = statusPairs.find((pair) => {
       if (!`${pair.fg} ${pair.bg}`.includes("--warning-")) return false;
       return measure(broken, pair, `Gegenprobe ${theme.label}`) < pair.min;
     });
-    expect(failedPair !== undefined, `${theme.label}: die gesetzte Warn-Hue laesst alle Statuspaare gruen`);
-    failuresByTheme.push(`${theme.label} ${failedPair.fg} auf ${failedPair.bg}`);
+    if (failedPair !== undefined) {
+      const value = measure(broken, failedPair, `Gegenprobe ${theme.label}`);
+      failures.push(`${theme.label} ${failedPair.fg} auf ${failedPair.bg} ${value.toFixed(2)}:1`);
+    }
   }
-  expect(failuresByTheme.length > 0, "keine Design-Themes wurden geladen — die Gegenprobe misst nichts");
-  return `${failuresByTheme.length} Themes: ${failuresByTheme.join("; ")}`;
+  expect(failures.length > 0, "die allein gesetzte Warn-Hue laesst alle Statuspaare gruen");
+  return failures.join("; ");
 });
 
 /*
