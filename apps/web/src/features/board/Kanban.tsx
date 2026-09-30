@@ -168,7 +168,13 @@ export function KanbanCard({
       )}
     >
       <div className="kcard__main">
-        <div className="kcard__top">
+        <h4 className="kcard__title">
+          <button type="button" className="kcard__open" onClick={onOpen}>
+            <Foreign value={card.title} />
+          </button>
+        </h4>
+
+        <div className="kcard__tags">
           {card.callNumber !== null ? (
             <span className="kcard__call mono">
               <Foreign value={card.callNumber} />
@@ -190,13 +196,14 @@ export function KanbanCard({
             hält.
           */}
           <DeadlineFlag dueDate={card.dueDate} today={today} className="kcard__deadline" />
+          {card.priority !== undefined && card.priority.weight > 0 ? (
+            <span className="kcard__priority">
+              <Icon name="arrow-up" size={12} />
+              <Foreign value={card.priority.name} />
+            </span>
+          ) : null}
+          <TodoTagsCell count={card.tagCount ?? card.tags.length} tags={card.tags.map(tag => ({ name: tag.label, path: tag.path ?? [] }))} open={tagsOpen} onOpenChange={setTagsOpen} />
         </div>
-
-        <h4 className="kcard__title">
-          <button type="button" className="kcard__open" onClick={onOpen}>
-            <Foreign value={card.title} />
-          </button>
-        </h4>
 
         {others.length > 0 ? (
           <button
@@ -211,16 +218,6 @@ export function KanbanCard({
             <span>{text.alsoIn(others.map(foreignText))}</span>
           </button>
         ) : null}
-
-        <div className="kcard__tags">
-          {card.priority !== undefined && card.priority.weight > 0 ? (
-            <span className="kcard__priority">
-              <Icon name="arrow-up" size={12} />
-              <Foreign value={card.priority.name} />
-            </span>
-          ) : null}
-          <TodoTagsCell count={card.tagCount ?? card.tags.length} tags={card.tags.map(tag => ({ name: tag.label, path: tag.path ?? [] }))} open={tagsOpen} onOpenChange={setTagsOpen} />
-        </div>
 
         {showFoot ? (
           <div className="kcard__foot">

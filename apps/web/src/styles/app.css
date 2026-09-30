@@ -2433,17 +2433,8 @@ body:has(.scrim) .toast {
 }
 
 
-/* Auf der Kanban-Karte steht sie in der Kopfzeile neben dem
-   Erledigt-Kennzeichen und darf umbrechen, statt die Zeile zu sprengen.
-   Bis T-281 war das nur eine Absicht im Kommentar: `max-width` deckelt die
-   Breite, aber `.deadline` steht auf `flex: none` und schrumpfte deshalb
-   nicht, und die Kopfzeile brach nicht um. Beides steht jetzt hier.
-
-   `flex: 0 1 auto` laesst die Marke schrumpfen, `min-width` bleibt dabei auf
-   `auto` — das ist der Boden, unter den kein Flex-Element faellt, und damit
-   der Grund, weshalb hier nichts abgeschnitten wird. Reicht der Platz einer
-   ganzen Zeile nicht, stapeln Zustandswort und Datum uebereinander (`wrap`),
-   statt ueber den Kartenrand hinauszulaufen. Lesbar bleibt beides. */
+/* Auf der Kanban-Karte steht die Frist unter dem Titel in der gemeinsamen
+   Metazeile. Sie darf dort umbrechen, statt den Kartenrand zu sprengen. */
 .kcard__deadline {
   flex: 0 1 auto;
   flex-wrap: wrap;
@@ -4261,21 +4252,6 @@ body:has(.scrim) .toast {
   padding-bottom: var(--space-3);
 }
 
-/* Kopfzeile ueber dem Board: Stand, Nachladehinweis, Neuberechnen. Ein Board
-   aus Regeln ist die Antwort auf eine Frage zu einem Zeitpunkt (E-054) —
-   deshalb steht der Zeitpunkt da. */
-.board__bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-bottom: var(--space-2);
-}
-
-.board__stamp {
-  flex: 1 1 auto;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
 
 /* Der Leerzustand des Boards. Er erklaert und fuehrt weiter; er ist kein
    "keine Daten".
@@ -5422,9 +5398,11 @@ body:has(.scrim) .toast {
   margin-block-end: var(--space-3);
 }
 .board__filters > .field { min-inline-size: 12rem; }
-.board__help { margin-inline-start: auto; max-inline-size: 32rem; font-size: var(--text-sm); color: var(--text-muted); }
+.board__help { max-inline-size: 32rem; font-size: var(--text-sm); color: var(--text-muted); }
 .board__help summary { padding-block: var(--space-2); cursor: pointer; }
 .board__help p { margin-block-start: var(--space-2); }
+.board__stamp { flex: 0 1 auto; margin: 0; color: var(--text-muted); font-size: var(--text-xs); }
+.board__filter-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-inline-start: auto; }
 .board--single { grid-auto-columns: min(100%, 42rem); }
 .board .kcolumn__head { padding: var(--space-3); }
 .board .kcolumn__title { font-size: var(--text-base); text-transform: none; letter-spacing: normal; }
@@ -5436,8 +5414,8 @@ body:has(.scrim) .toast {
   .board { grid-auto-columns: min(85vw, 24rem); }
   .board--single { grid-auto-columns: 100%; }
   .board__filters > .field { flex: 1 1 10rem; min-inline-size: 0; }
-  .board__help { margin-inline-start: 0; }
-  .board__bar { flex-wrap: wrap; }
+  .board__filter-actions { margin-inline-start: 0; }
+  .board__filter-actions { flex: 1 1 100%; }
 }
 
 /* Groups of the global search by kind of hit (C-22, T-393 K-9/K-10). */

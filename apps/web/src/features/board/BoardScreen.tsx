@@ -169,6 +169,9 @@ export function BoardScreen() {
     ]);
     return { board, summaries };
   }, [showDone, perColumn, priority, prioritySort], [version]);
+  const boardData = data.state.status === "ready" ? data.state.value.board : null;
+  const partial = boardData?.columns.some((view) => view.todos.length < view.total) ?? false;
+  const refreshing = data.state.status === "ready" && data.state.refreshing;
 
   const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
@@ -404,6 +407,24 @@ export function BoardScreen() {
             <p>{labels().ruleWhatMovesACard}</p>
             <p>{text.doneHidden}</p>
           </details>
+          {boardData !== null ? (
+            <p className="board__stamp">
+              {text.stamp} {formatTime(boardData.generatedAt)}
+              {boardData.appearances.length === 0
+                ? ""
+                : ` · ${text.multipleCards(boardData.appearances.length)}`}
+            </p>
+          ) : null}
+          <div className="board__filter-actions">
+            {partial ? <Button size="sm" variant="secondary"
+              onClick={() => setPerColumn(current => current + PAGE_SIZE)}>
+              {text.moreCards}
+            </Button> : null}
+            <RefreshHint active={refreshing} />
+            <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
+              {text.recalculate}
+            </Button>
+          </div>
         </section>
       </div>
 
@@ -429,13 +450,11 @@ export function BoardScreen() {
         onRetry={data.reload}
         fallbackFrame={(content) => <ScreenBody label={text.screenTitle}>{content}</ScreenBody>}
       >
-        {(value, refreshing) => {
+        {(value) => {
           const columnName = new Map(value.board.columns.map((view) => [view.column.id, view.column.name]));
           const appearances = new Map(
             value.board.appearances.map((entry) => [entry.todoId, entry.columnIds]),
           );
-          const partial = value.board.columns.some((view) => view.todos.length < view.total);
-
           if (value.board.columns.length === 0) {
             return (
               <ScreenBody label={text.screenTitle}>
@@ -451,27 +470,6 @@ export function BoardScreen() {
 
           return (
             <>
-              {/* Die Werkzeugzeile steht (T-322 4.4). Der Umschlag trägt den
-                  seitlichen Innenabstand der Ansicht, nicht die Zeile selbst. */}
-              <div className="screen__bar">
-                <div className="board__bar">
-                  <p className="board__stamp">
-                    {text.stamp} {formatTime(value.board.generatedAt)}
-                    {value.board.appearances.length === 0
-                      ? ""
-                      : ` · ${text.multipleCards(value.board.appearances.length)}`}
-                  </p>
-                  {partial ? <Button size="sm" variant="secondary"
-                    onClick={() => setPerColumn(current => current + PAGE_SIZE)}>
-                    {text.moreCards}
-                  </Button> : null}
-                  <RefreshHint active={refreshing} />
-                  <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
-                    {text.recalculate}
-                  </Button>
-                </div>
-              </div>
-
               {/*
                 Der Rahmen ohne Halt, das Board mit (T-344 8.5). `.board` ist
                 die **waagerechte** Laufstrecke der Ansicht; der Rahmen darum
