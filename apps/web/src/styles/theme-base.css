@@ -30,6 +30,25 @@
   --accent-bg-subtle: var(--bg-selected);
   --accent-text: var(--preset-link);
   --accent-border-subtle: color-mix(in srgb, var(--preset-accent) 40%, var(--preset-surface));
+  --status-info-hue: var(--preset-accent);
+  --status-success-hue: #0f6b4c;
+  --status-warning-hue: #6f4708;
+  --status-danger-hue: #b42318;
+  --info-fg: color-mix(in srgb, var(--status-info-hue) 35%, var(--preset-ink));
+  --info-bg: color-mix(in srgb, var(--status-info-hue) 12%, var(--preset-surface));
+  --info-border: color-mix(in srgb, var(--status-info-hue) 40%, var(--preset-surface));
+  --success-fg: color-mix(in srgb, var(--status-success-hue) 35%, var(--preset-ink));
+  --success-bg: color-mix(in srgb, var(--status-success-hue) 12%, var(--preset-surface));
+  --success-border: color-mix(in srgb, var(--status-success-hue) 40%, var(--preset-surface));
+  --warning-fg: color-mix(in srgb, var(--status-warning-hue) 35%, var(--preset-ink));
+  --warning-bg: color-mix(in srgb, var(--status-warning-hue) 12%, var(--preset-surface));
+  --warning-border: color-mix(in srgb, var(--status-warning-hue) 40%, var(--preset-surface));
+  --danger-text: color-mix(in srgb, var(--status-danger-hue) 30%, var(--preset-ink));
+  --danger-bg: var(--status-danger-hue);
+  --danger-bg-hover: color-mix(in srgb, var(--preset-ink) 6%, var(--status-danger-hue));
+  --danger-bg-active: color-mix(in srgb, var(--preset-ink) 12%, var(--status-danger-hue));
+  --danger-bg-subtle: color-mix(in srgb, #ffffff 6%, var(--preset-surface));
+  --danger-border: color-mix(in srgb, var(--status-danger-hue) 40%, var(--preset-surface));
   --focus-ring-color: var(--preset-link);
   --focus-ring-contrast: var(--preset-on);
   --note-billing-rail: var(--preset-link);
@@ -45,6 +64,20 @@
   --timer-idle-fg: var(--text-muted);
   --timer-idle-bg: var(--bg-subtle);
   --timer-idle-border: var(--border-default);
+}
+
+:root[data-design-theme]:not([data-design-theme="classic"]):not([data-design-theme="clear"])[data-theme="dark"] {
+  --status-success-hue: #6cc79e;
+  --status-warning-hue: #e6b554;
+  --status-danger-hue: #ee8d87;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme]:not([data-design-theme="classic"]):not([data-design-theme="clear"]):not([data-theme="light"]) {
+    --status-success-hue: #6cc79e;
+    --status-warning-hue: #e6b554;
+    --status-danger-hue: #ee8d87;
+  }
 }
 
 /* Surface effects do not change layout, typography, or interaction geometry. */

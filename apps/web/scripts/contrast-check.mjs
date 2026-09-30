@@ -125,9 +125,19 @@ function resolveToken(tokens, name, depth = 0) {
   if (depth > 10) throw new Error(`Zirkulaerer Verweis bei ${name}`);
   const raw = tokens.get(name);
   if (raw === undefined) throw new Error(`Unbekanntes Token: ${name}`);
-  const varMatch = /^var\((--[a-z0-9-]+)\)$/i.exec(raw);
-  if (varMatch) return resolveToken(tokens, varMatch[1], depth + 1);
-  return raw;
+  return resolveColourValue(tokens, raw, depth);
+}
+
+/** Loest die `var()`- und `color-mix()`-Formen der Theme-Ableitungen auf. */
+function resolveColourValue(tokens, value, depth) {
+  const variable = /^var\((--[a-z0-9-]+)\)$/i.exec(value);
+  if (variable) return resolveToken(tokens, variable[1], depth + 1);
+  const mix = /^color-mix\(in srgb,\s*(.+?)\s+(\d+(?:\.\d+)?)%,\s*(.+?)\)$/i.exec(value);
+  if (!mix) return value;
+  const front = parseColor(resolveColourValue(tokens, mix[1], depth + 1));
+  const back = parseColor(resolveColourValue(tokens, mix[3], depth + 1));
+  const amount = Number(mix[2]) / 100;
+  return `rgb(${front.r * amount + back.r * (1 - amount)}, ${front.g * amount + back.g * (1 - amount)}, ${front.b * amount + back.b * (1 - amount)})`;
 }
 
 /** Wandelt `#rgb`, `#rrggbb` oder `rgba(r, g, b, a)` in {r,g,b,a} mit 0..255. */
@@ -851,6 +861,45 @@ const themes = [
   { label: "hell", tokens: lightTokens },
   { label: "dunkel", tokens: darkTokens },
 ];
+const baseThemes = [...themes];
+const themeBasePath = resolve(here, "../src/styles/theme-base.css");
+const themeDirectory = resolve(here, "../src/styles/themes");
+const themeBaseTokens = parseDeclarations(
+  extractBlock(
+    readRequiredFile(themeBasePath, "die Theme-Ableitungen der Statusfarben"),
+    ':root[data-design-theme]:not([data-design-theme="classic"]):not([data-design-theme="clear"])',
+  ),
+);
+const statusPairs = pairs.filter((pair) => /--(info|success|warning|danger)-/.test(`${pair.fg} ${pair.bg}`));
+
+/** Liest die Presets und die passende helle/dunkle Variante jeder Theme-Datei. */
+for (const filename of readdirSync(themeDirectory).filter((entry) => entry.endsWith(".css") && entry !== "classic.css")) {
+  const themeCss = readFileSync(join(themeDirectory, filename), "utf8");
+  const metadata = /@theme\s+(\{.*?\})/.exec(themeCss);
+  if (metadata === null) throw new Error(`${label(join(themeDirectory, filename))}: @theme fehlt`);
+  const { label: themeLabel, mode } = JSON.parse(metadata[1]);
+  const name = filename.slice(0, -4);
+  const selector = `:root[data-design-theme="${name}"]`;
+  if (mode !== "dark") {
+    const light = new Map(lightTokens);
+    for (const [key, value] of parseDeclarations(extractBlock(themeCss, selector))) light.set(key, value);
+    for (const [key, value] of themeBaseTokens) light.set(key, value);
+    themes.push({ label: `${themeLabel} hell`, tokens: light, statusOnly: true });
+  }
+  if (mode === "dark" || mode === "auto") {
+    const dark = new Map(darkTokens);
+    for (const [key, value] of parseDeclarations(extractBlock(themeCss, selector))) dark.set(key, value);
+    const explicitDarkSelector = `${selector}[data-theme="dark"]`;
+    if (themeCss.includes(explicitDarkSelector)) {
+      for (const [key, value] of parseDeclarations(extractBlock(themeCss, explicitDarkSelector))) dark.set(key, value);
+    }
+    for (const [key, value] of themeBaseTokens) dark.set(key, value);
+    dark.set("--status-success-hue", "#6cc79e");
+    dark.set("--status-warning-hue", "#e6b554");
+    dark.set("--status-danger-hue", "#ee8d87");
+    themes.push({ label: `${themeLabel} dunkel`, tokens: dark, statusOnly: true });
+  }
+}
 
 /**
  * Misst ein Paar in einem Thema. Abgeschnitten statt gerundet: 4,499 ist nicht
@@ -1175,12 +1224,13 @@ try {
   }
 
   for (const theme of themes) {
+    const themePairs = theme.statusOnly === true ? statusPairs : pairs;
     lines.push(
       asMarkdown
         ? `\n### Modus ${theme.label}\n\n| Gruppe | Vordergrund | Hintergrund | Verhaeltnis | Mindestwert | Ergebnis | Bedeutung |\n| --- | --- | --- | ---: | ---: | --- | --- |`
         : `\n== Modus ${theme.label} ==`,
     );
-    for (const pair of pairs) {
+    for (const pair of themePairs) {
       const rounded = measure(
         theme.tokens,
         pair,
@@ -1298,7 +1348,7 @@ probe("dieselbe Verletzung waere ueber der Leinwand gruen geblieben", () => {
 });
 
 probe("auch ohne Verletzung gehen beide Rechnungen auseinander", () => {
-  for (const theme of themes) {
+  for (const theme of baseThemes) {
     const real = measure(theme.tokens, capPair, "Gegenprobe");
     const naive = measureOverCanvas(theme.tokens, capPair);
     expect(
@@ -1307,7 +1357,7 @@ probe("auch ohne Verletzung gehen beide Rechnungen auseinander", () => {
         `${real.toFixed(2)}:1 — \`over\` waere dort Zierde`,
     );
   }
-  const delta = themes.map((theme) => {
+  const delta = baseThemes.map((theme) => {
     const real = measure(theme.tokens, capPair, "Gegenprobe");
     return `${theme.label} ${(measureOverCanvas(theme.tokens, capPair) - real).toFixed(2)}`;
   });
@@ -1475,7 +1525,7 @@ for (const entry of probes) {
 
 /* Schlusszeile                                                        */
 
-const measurements = pairs.length * themes.length;
+const measurements = pairs.length * baseThemes.length + statusPairs.length * (themes.length - baseThemes.length);
 const withSurface = pairs.filter((pair) => surfaceStack(pair).length > 0).length;
 
 console.log(lines.join("\n"));
