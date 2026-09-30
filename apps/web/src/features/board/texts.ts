@@ -102,8 +102,10 @@ const de = {
 
   // Kanban
   alsoInTitle: (names: string) => `Dieselbe Karte steht auch in: ${names}`,
-  alsoIn: (count: number) =>
-    count === 1 ? "Steht auch in 1 Spalte" : `Steht auch in ${String(count)} Spalten`,
+  alsoIn: (names: readonly string[]) =>
+    names.length === 1
+      ? `Steht auch in „${names[0] ?? ""}“`
+      : `Steht auch in ${String(names.length)} Spalten`,
   status: "Status",
   stopTimer: (title: string) => `Timer für ${title} stoppen`,
   startTimer: (title: string) => `Timer für ${title} starten`,
@@ -213,8 +215,10 @@ const en: typeof de = {
   orderHint: "The arrows change the order on the board and in the pool list.",
 
   alsoInTitle: (names: string) => `The same card is also in: ${names}`,
-  alsoIn: (count: number) =>
-    count === 1 ? "Also in 1 column" : `Also in ${String(count)} columns`,
+  alsoIn: (names: readonly string[]) =>
+    names.length === 1
+      ? `Also in “${names[0] ?? ""}”`
+      : `Also in ${String(names.length)} columns`,
   status: "Status",
   stopTimer: (title: string) => `Stop timer for ${title}`,
   startTimer: (title: string) => `Start timer for ${title}`,

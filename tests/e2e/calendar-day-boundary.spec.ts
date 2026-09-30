@@ -37,7 +37,7 @@ test.describe('Tagesgrenze in Ortszeit (T-041, Nachtrag T-048)', () => {
     await page.goto(
       `/#/buchungen?${new URLSearchParams({ von: today, bis: today, todo: todo.id }).toString()}`,
     );
-    await expect(page.locator('.table__row', { hasText: title })).toBeVisible();
+    await expect(page.locator('.export-todo__head', { hasText: title })).toBeVisible();
 
     // Gefiltert auf "gestern" darf sie nicht erscheinen — der UTC-Bug hätte
     // sie genau dort gezeigt. Über die Felder "Ab Tag"/"Bis Tag" statt eines
@@ -49,7 +49,7 @@ test.describe('Tagesgrenze in Ortszeit (T-041, Nachtrag T-048)', () => {
     // fälschlich rot geworden).
     await page.getByLabel('Ab Tag').fill(yesterday);
     await page.getByLabel('Bis Tag').fill(yesterday);
-    await expect(page.locator('.table__row', { hasText: title })).toHaveCount(0);
+    await expect(page.locator('.export-todo__head', { hasText: title })).toHaveCount(0);
 
     // Aufräumen: keine offene Buchung im gemeinsamen Bestand zurücklassen
     // (export-end-to-end.spec.ts exportiert sonst "alle offenen Buchungen"
@@ -73,7 +73,7 @@ test.describe('Tagesgrenze in Ortszeit (T-041, Nachtrag T-048)', () => {
     await page.goto(
       `/#/buchungen?${new URLSearchParams({ von: today, bis: today, todo: todo.id }).toString()}`,
     );
-    await expect(page.locator('.table__row', { hasText: title })).toBeVisible();
+    await expect(page.locator('.export-todo__head', { hasText: title })).toBeVisible();
 
     for (const entry of await listTimeEntriesByTodo(todo.id)) await deleteTimeEntry(entry.id);
   });

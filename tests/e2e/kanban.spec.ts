@@ -206,12 +206,11 @@ test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => 
       await expect(cardInA).toBeVisible();
       await expect(cardInB).toBeVisible();
 
-      // Sichtbar bleibt die Anzahl der anderen Spalten; die Namen stehen im
-      // zugänglichen Namen, damit die Karte den Kontext nicht doppelt trägt.
+      // Bei genau einer weiteren Spalte steht deren Name sichtbar auf der Karte.
       const alsoInA = cardInA.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnBName}`) });
       const alsoInB = cardInB.getByRole('button', { name: new RegExp(`Dieselbe Karte steht auch in: ${columnAName}`) });
-      await expect(alsoInA).toHaveText('Steht auch in 1 Spalte');
-      await expect(alsoInB).toHaveText('Steht auch in 1 Spalte');
+      await expect(alsoInA).toHaveText(`Steht auch in „${columnBName}“`);
+      await expect(alsoInB).toHaveText(`Steht auch in „${columnAName}“`);
 
       // Live-Region der Ansicht (BoardScreen.tsx, `announcement`) — nicht per
       // Rolle "status" gesucht, weil jede Hinweismeldung (`InlineMessage`)
@@ -336,6 +335,8 @@ test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ a
       // noch ohne Tag- oder Regeländerung die Spalte wechselt (A-2.5).
       await expect(doneColumn.locator('.kcard', { hasText: todo.title })).toHaveCount(0);
       await expect(cardInOpen).toBeVisible();
+      const startToast = page.locator('.toast').filter({ hasText: `Er läuft auf „${todo.title}“` });
+      await expect(startToast).toBeHidden();
       await expect(cardInOpen.locator('.kcard__flag')).toHaveText(/Erledigt aufgehoben/);
       await expect(cardInOpen).toHaveClass(/kcard--running/);
       await expect(cardInOpen.getByRole('button', { name: /Timer für „.*“ stoppen/ })).toBeVisible();

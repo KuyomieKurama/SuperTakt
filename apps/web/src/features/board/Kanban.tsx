@@ -174,26 +174,14 @@ export function KanbanCard({
               <Foreign value={card.callNumber} />
             </span>
           ) : null}
-          {/* Das Erledigt-Kennzeichen steht auf jeder Karte, auch wenn es
-              "offen" lautet. Waere es nur bei "erledigt" da, muesste man es
-              aus der Spalte erschliessen — und das geht nicht: Eine Spalte ist
-              eine Regel ueber fuenf Achsen (E-055), und nur **eine** davon
-              fragt nach "Erledigt". Ob diese Spalte es tut, steht der Karte
-              nicht an; in der weit ueberwiegenden Zahl der Faelle sagt die
-              Regel darueber nichts. */}
-          <span className={cx("kcard__flag", `kcard__flag--${cardFlagState}`)}>
-            <Icon
-              name={card.done ? "check" : card.reactivated === true ? "rotate-ccw" : "circle"}
-              size={12}
-            />
-            {/* Die Woerter stehen in `lib/labels.ts`, damit die Karte nicht
-                etwas anderes sagt als die Zeile daneben (Befund C-23). */}
-            {cardFlagState === "open" ? (
-              <span className="visually-hidden">{labels().doneFlag[cardFlagState]}</span>
-            ) : (
-              labels().doneFlag[cardFlagState]
-            )}
-          </span>
+          {cardFlagState === "open" ? (
+            <span className="visually-hidden">{labels().doneFlag[cardFlagState]}</span>
+          ) : (
+            <span className={cx("kcard__flag", `kcard__flag--${cardFlagState}`)}>
+              <Icon name={card.done ? "check" : "rotate-ccw"} size={12} />
+              {labels().doneFlag[cardFlagState]}
+            </span>
+          )}
           {/*
             Die dritte Marke, und sie ist die einzige, die **fehlen** darf: Ein
             Todo ohne Frist hat keinen dieser Zustände (A-19.5). Damit trägt die
@@ -220,7 +208,7 @@ export function KanbanCard({
             aria-label={text.alsoInTitle(others.map(foreignText).join(", "))}
           >
             <Icon name="copy" size={12} />
-            <span>{text.alsoIn(others.length)}</span>
+            <span>{text.alsoIn(others.map(foreignText))}</span>
           </button>
         ) : null}
 
