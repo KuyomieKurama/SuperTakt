@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 const entry = '/@fs/' + fileURLToPath(new URL('./support/kanban-layout.html', import.meta.url)).replace(/^\//, '');
+const themePalettes = '/@fs/' + fileURLToPath(new URL('../../apps/web/src/styles/theme-palettes.css', import.meta.url)).replace(/^\//, '');
+const filterbarScreenshotPath = process.env['KANBAN_FILTERBAR_SCREENSHOT_PATH'];
+const filterbarTheme = process.env['KANBAN_FILTERBAR_THEME'];
+
 test('Kanban keeps filters together and gives a single column readable space; manual booking belongs to bookings', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => { errors.push(error.message); console.log(error.stack); });
@@ -24,12 +28,24 @@ test('Kanban keeps filters together and gives a single column readable space; ma
     await route.fulfill({ json: { data } });
   });
   await page.goto(entry);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.getByRole('button', { name: todo.title, exact: true })).toBeVisible();
   const filters = page.getByRole('region', { name: 'Kanban filtern und sortieren' });
   await expect(filters.getByRole('combobox', { name: 'Priorität', exact: true })).toBeVisible();
   expect((await page.locator('.kcolumn').boundingBox())!.width).toBeGreaterThan(450);
   await expect(page.getByRole('button', { name: 'Mehr Karten laden' })).toBeVisible();
-  await page.screenshot({ path: '/tmp/kanban-layout.png' });
+  expect(await page.getByRole('button', { name: 'Neu berechnen' }).evaluate(button => button.matches(':focus-visible'))).toBe(false);
+  if (filterbarScreenshotPath !== undefined) {
+    const isEverfrost = filterbarTheme === 'everfrost';
+    await page.addStyleTag({ url: themePalettes });
+    await page.evaluate(({ designTheme, theme }) => {
+      document.documentElement.dataset.designTheme = designTheme;
+      document.documentElement.dataset.theme = theme;
+    }, { designTheme: isEverfrost ? 'everfrost' : 'classic', theme: isEverfrost ? 'dark' : 'light' });
+    await page.screenshot({ path: filterbarScreenshotPath, fullPage: false });
+  } else {
+    await page.screenshot({ path: '/tmp/kanban-layout.png' });
+  }
   await page.setViewportSize({ width: 600, height: 820 });
   await expect(filters).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

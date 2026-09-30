@@ -407,15 +407,15 @@ export function BoardScreen() {
             <p>{labels().ruleWhatMovesACard}</p>
             <p>{text.doneHidden}</p>
           </details>
-          {boardData !== null ? (
-            <p className="board__stamp">
-              {text.stamp} {formatTime(boardData.generatedAt)}
-              {boardData.appearances.length === 0
-                ? ""
-                : ` · ${text.multipleCards(boardData.appearances.length)}`}
-            </p>
-          ) : null}
           <div className="board__filter-actions">
+            {boardData !== null ? (
+              <p className="board__stamp">
+                {text.stamp} {formatTime(boardData.generatedAt)}
+                {boardData.appearances.length === 0
+                  ? ""
+                  : ` · ${text.multipleCards(boardData.appearances.length)}`}
+              </p>
+            ) : null}
             {partial ? <Button size="sm" variant="secondary"
               onClick={() => setPerColumn(current => current + PAGE_SIZE)}>
               {text.moreCards}

@@ -42,3 +42,38 @@ Offene Fragen:
 - Keine zur Umsetzung. Die drei Viewport-Fit-Fehler benötigen gegebenenfalls eine getrennte Aufgabe für Tags/Einstellungen.
 
 Nächster Schritt: Code- und UX-Review der kompakten Karte, Filterleiste und Screenshots; danach Entscheidung über die nicht zu diesem Auftrag gehörenden Viewport-Fit-Fehler.
+
+Nachbesserung P1 — Filterleiste (REQ-20260930-012, d758de079359e68a)
+
+Status: braucht Review
+
+Artefakte:
+- apps/web/src/features/board/BoardScreen.tsx
+- apps/web/src/styles/app.css
+- tests/e2e/kanban-layout.spec.ts
+- .claude/team/reports/req012-filterbar-after-classic.png
+- .claude/team/reports/req012-filterbar-after-everfrost.png
+
+Zusammenfassung:
+- Die Standanzeige ist jetzt das erste Element der rechten Aktionsgruppe, unmittelbar vor „Mehr Karten laden“, Refresh-Hinweis und „Neu berechnen“. Der Abstand zur Hilfe bleibt durch `margin-inline-start: auto` zwischen den Gruppen; in der Aktionsgruppe gilt `gap: var(--space-3)`.
+- Hilfe und Standanzeige verwenden nun beide `--text-sm` und `--leading-normal`; die Aktionsgruppe richtet ihren Inhalt mittig aus und schließt als Gruppe mit den Feldern ab.
+- Der Layouttest zeichnet mit `KANBAN_FILTERBAR_SCREENSHOT_PATH` die echte `BoardScreen`-Filterleiste bei 1280×900 in classic/light bzw. everfrost/dark auf. Er stellt nach frischem Laden außerdem fest, dass „Neu berechnen“ nicht `:focus-visible` ist.
+
+Prüfung:
+- pnpm typecheck: bestanden.
+- pnpm contrast: bestanden (vollständiger Lauf, keine Fehler).
+- KANBAN_FILTERBAR_THEME=classic KANBAN_FILTERBAR_SCREENSHOT_PATH=… pnpm exec playwright test -c /tmp/req012-playwright.config.mjs --workers=1 --retries=0: bestanden; echte BoardScreen, 1280×900.
+- Dasselbe mit `KANBAN_FILTERBAR_THEME=everfrost`: bestanden; echte BoardScreen, 1280×900.
+- Sichtprüfung beider PNGs: Stand steht vor den Aktionen mit sichtbarem Abstand, keine dauerhafte rosa Kontur an „Neu berechnen“.
+- Der vollständige normale Playwright-Aufruf konnte nicht starten, weil ein fremder Vite-Prozess Port 5173 bereits belegte. Ein API-only-Ausweichlauf von kanban.spec.ts gegen diesen fremden Webserver lief folgerichtig in fünf Timeouts auf „Spalten verwalten“; das ist keine Aussage über die Änderung. Der Vorgängerstand dokumentiert kanban.spec.ts und kanban-layout.spec.ts mit 6 bestanden.
+
+Annahmen:
+- Die laufende Vite-Instanz auf Port 5173 war nicht von diesem Task und wurde nicht beendet, um parallele Arbeit nicht zu stören.
+
+Risiken:
+- Der vollständige kanban.spec.ts-Nachweis ist in diesem Lauf wegen der fremden Portbelegung nicht erneut grün. Die unmittelbar geänderte BoardScreen-Layoutprüfung ist grün.
+
+Offene Fragen:
+- Keine zur Umsetzung; nach Freigabe kann der vollständige E2E-Satz auf einem freien Port-5173-Slot erneut laufen.
+
+Rückweg: Den Commit „fix(board): align board stamp with filter bar“ zurücksetzen. Das stellt die frühere Position der Standanzeige, die kleineren Schriftwerte und den früheren Screenshot-Hook wieder her.

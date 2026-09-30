@@ -5398,11 +5398,11 @@ body:has(.scrim) .toast {
   margin-block-end: var(--space-3);
 }
 .board__filters > .field { min-inline-size: 12rem; }
-.board__help { max-inline-size: 32rem; font-size: var(--text-sm); color: var(--text-muted); }
+.board__help { max-inline-size: 32rem; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-muted); }
 .board__help summary { padding-block: var(--space-2); cursor: pointer; }
 .board__help p { margin-block-start: var(--space-2); }
-.board__stamp { flex: 0 1 auto; margin: 0; color: var(--text-muted); font-size: var(--text-xs); }
-.board__filter-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-inline-start: auto; }
+.board__stamp { flex: 0 1 auto; margin: 0; color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
+.board__filter-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-self: end; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
 .board--single { grid-auto-columns: min(100%, 42rem); }
 .board .kcolumn__head { padding: var(--space-3); }
 .board .kcolumn__title { font-size: var(--text-base); text-transform: none; letter-spacing: normal; }
