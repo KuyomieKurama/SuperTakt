@@ -34,7 +34,7 @@ import {
   type ExportGroupViewModel,
 } from "./ExportGroups";
 import { Select } from "../../shared/ui/Select";
-import { InfoHint } from "./InfoHint";
+import { InfoHint } from "../../shared/ui/InfoHint";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../../shared/ui/Primitives";
 import { useRefresh } from "../../app/RefreshContext";
