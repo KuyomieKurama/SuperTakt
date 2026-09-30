@@ -24,9 +24,9 @@ import { escapeLike, todoFilterConditions, type PoolResolver } from './repo-todo
 import { decodeCursor, encodeCursor, pageSize } from './paging.ts';
 import type { IdSource } from './ids.ts';
 
-// `todo_no_export` is read along (F-8); the filter below still decides what a list shows.
+// Todo flags are read along; the filter below still decides what a list shows.
 const COLUMNS =
-  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at, (SELECT no_export FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_export';
+  'id, todo_id, started_at, ended_at, duration_seconds, note, export_status, export_count, source, created_at, updated_at, (SELECT no_export FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_export, (SELECT no_evidence FROM todo WHERE todo.id = time_entry.todo_id) AS todo_no_evidence';
 
 /**
  * Der Filter in SQL — und die Tagesgrenze kommt aus der Domäne.

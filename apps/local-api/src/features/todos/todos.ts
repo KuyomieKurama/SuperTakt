@@ -67,6 +67,7 @@ export interface CreateTodoInput {
   readonly dueTime?: string | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
+  readonly noEvidence?: boolean;
   readonly priorityId?: string | null;
   readonly dueDate: CalendarDay | null;
 }
@@ -168,6 +169,7 @@ export async function createTodo(
           dueTime: input.dueTime ?? null,
           estimateMinutes: input.estimateMinutes ?? null,
           noExport: input.noExport ?? false,
+          noEvidence: input.noEvidence ?? false,
           priorityId: input.priorityId ?? null,
           now: timestamp,
         },
@@ -210,6 +212,7 @@ export interface UpdateTodoInput {
   readonly dueTime?: string | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
+  readonly noEvidence?: boolean;
   readonly priorityId?: string | null;
   readonly dueDate?: CalendarDay | null;
 }
@@ -241,6 +244,7 @@ export async function updateTodo(
       ...(input.dueTime === undefined ? {} : { dueTime: input.dueTime }),
       ...(input.priorityId === undefined ? {} : { priorityId: input.priorityId }),
       ...(input.noExport === undefined ? {} : { noExport: input.noExport }),
+      ...(input.noEvidence === undefined ? {} : { noEvidence: input.noEvidence }),
       ...(input.estimateMinutes === undefined ? {} : { estimateMinutes: input.estimateMinutes }),
       ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
       now: timestamp,

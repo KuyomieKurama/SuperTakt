@@ -18,7 +18,7 @@
  * ist der SHA-256 darüber; jede Abweichung wäre eine andere Prüfsumme und damit
  * ein Bestand, den die gebündelte Fassung nicht mehr annimmt.
  *
- * 60 Datei(en).
+ * 62 Datei(en).
  */
 
 export const EMBEDDED_MIGRATION_FILES: Readonly<Record<string, string>> = Object.freeze({
@@ -82,4 +82,6 @@ export const EMBEDDED_MIGRATION_FILES: Readonly<Record<string, string>> = Object
   "0029_interface_preferences.up.sql": "-- Takt — migration 0029 \"interface_preferences\", forward direction\n-- Covers: A-28.1, A-28.2, E-120 (F-18, F-23), E-123\n-- The migration runner sets PRAGMA foreign_keys before BEGIN and opens the transaction itself.\n--\n-- Two settings, both stored in the one-row table like every other setting (E-011), so that they\n-- survive restart and the data archive (A-28.1, A-28.2, A-20.4).\n--\n-- version_check_enabled: 1 = the version check may ask GitHub (default, A-28.1). 0 = no request\n--   and no outgoing connection at all, not even at start.\n-- ui_language: language of the main interface, 'de' (default) or 'en' (A-28.2). It never reaches\n--   the export file (E-123 point 4). The older column `locale` stays untouched: it was never read.\n--\n-- ADD COLUMN and no table rebuild: no existing column, reference, trigger or view changes.\n\nALTER TABLE app_setting ADD COLUMN version_check_enabled INTEGER NOT NULL DEFAULT 1\n  CHECK (version_check_enabled IN (0, 1));\n\nALTER TABLE app_setting ADD COLUMN ui_language TEXT NOT NULL DEFAULT 'de'\n  CHECK (ui_language IN ('de', 'en'));\n",
   "0030_motion_intensity.down.sql": "-- Die persönliche Bewegungsstärke wird beim Rückweg verworfen; ältere\n-- Fassungen kennen nur ihre bisherige, zurückhaltende Bewegung.\nALTER TABLE app_setting DROP COLUMN motion_intensity;\n",
   "0030_motion_intensity.up.sql": "-- Globale Bewegungsstärke der Oberfläche. „subtle\" bewahrt die bisherige,\n-- zurückhaltende Bewegungsdauer für jeden bestehenden Bestand.\nALTER TABLE app_setting ADD COLUMN motion_intensity TEXT NOT NULL DEFAULT 'subtle'\n  CHECK (motion_intensity IN ('reduced', 'subtle', 'expressive'));\n",
+  "0031_todo_no_evidence.down.sql": "-- The no-evidence mark is discarded when downgrading. Back up the database before this migration.\nALTER TABLE todo DROP COLUMN no_evidence;",
+  "0031_todo_no_evidence.up.sql": "ALTER TABLE todo ADD COLUMN no_evidence INTEGER NOT NULL DEFAULT 0 CHECK (no_evidence IN (0, 1));",
 });

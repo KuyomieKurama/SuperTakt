@@ -634,6 +634,15 @@ Das Flag ändert weder Zeitbuchungen noch bestehende Exporthistorie. Beim Aussch
 werden noch offene Zeiten wieder für Buchungsübersicht und Export verfügbar.
 **A-26.4.** Migration 0026 ergänzt den Standard false für bestehende Aufgaben.
 Datenarchivfassung 8 sichert das Flag; ältere Fassungen 1–7 werden mit false übernommen.
+**A-26.5.** Aufgaben besitzen zusätzlich das dauerhaft gespeicherte Flag `noEvidence`,
+standardmäßig false. Es ist beim Anlegen und Bearbeiten schaltbar.
+**A-26.6.** `noEvidence` und `NoExport` sind unabhängig; alle vier Kombinationen sind
+zulässig. Ohne Abrechnung setzt Ohne Nachweis nicht automatisch.
+**A-26.7.** Das Flag ändert weder Zeitbuchungen noch Notizen oder Exporthistorie. Timer
+und manuelle Zeiterfassung bleiben uneingeschränkt nutzbar; beim Ausschalten bleibt der
+Bestand erhalten.
+**A-26.8.** Migration 0031 ergänzt den Standard false für bestehende Aufgaben.
+Datenarchivfassung 13 sichert das Flag; ältere Fassungen 1–12 werden mit false übernommen.
 
 **Darstellungspräzisierung (16.09.2026, A-19.4/A-26.1):** Überfällige
 Fristmarkierungen zeigen Warnsymbol und Datum in der bestehenden roten Gestaltung.

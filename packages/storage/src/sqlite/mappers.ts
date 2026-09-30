@@ -94,6 +94,7 @@ export function toTodo(row: SqlRow, tagIds: readonly TagId[]): Todo {
     dueTime: textOrNull(row, 'due_time'),
     estimateMinutes: row['estimate_minutes'] == null ? null : integer(row, 'estimate_minutes'),
     noExport: row['no_export'] === 1,
+    noEvidence: row['no_evidence'] === 1,
     priorityId: textOrNull(row, 'priority_id'),
     dueDate: mapNullable(textOrNull(row, 'due_date'), brand<CalendarDay>),
     tagIds,
@@ -378,6 +379,7 @@ export function toTimeEntry(row: SqlRow): TimeEntry {
     exportCount: integer(row, 'export_count'),
     source: toSource(text(row, 'source')),
     todoNoExport: row['todo_no_export'] === 1,
+    todoNoEvidence: row['todo_no_evidence'] === 1,
     createdAt: asTimestamp(text(row, 'created_at')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };

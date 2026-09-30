@@ -103,6 +103,21 @@ describe('createExportReadPort — nur offene Buchungen (R-06, R-10)', () => {
     expect((await db.unit.timeEntries.search({ excludeNoExport: true })).total).toBe(1);
   });
 
+  it('noEvidence is independent from NoExport and preserves bookings when reversed', async () => {
+    db = openTestDatabase();
+    const { entry, todo } = await seedOpenBooking(db);
+
+    expect((await db.unit.todos.update(todo.id, { noEvidence: true, now: NOW })).ok).toBe(true);
+    expect((await db.unit.todos.load(todo.id))).toMatchObject({ noExport: false, noEvidence: true });
+    expect((await db.unit.timeEntries.load(entry.id))?.todoNoEvidence).toBe(true);
+    expect(await db.unit.exportRead.openCandidates()).toHaveLength(1);
+    expect(await db.unit.timeEntries.sumSeconds({ todoId: todo.id })).toBe(1800);
+
+    expect((await db.unit.todos.update(todo.id, { noEvidence: false, now: NOW })).ok).toBe(true);
+    expect((await db.unit.todos.load(todo.id))).toMatchObject({ noExport: false, noEvidence: false });
+    expect(await db.unit.timeEntries.sumSeconds({ todoId: todo.id })).toBe(1800);
+  });
+
   it('eine bereits exportierte Buchung erscheint nicht als Kandidat, aber mit previouslyExported nach einem Reset (R-10)', async () => {
     db = openTestDatabase();
     const { entry, todo } = await seedOpenBooking(db);

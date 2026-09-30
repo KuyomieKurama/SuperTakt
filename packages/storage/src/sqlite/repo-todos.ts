@@ -48,7 +48,7 @@ import type { IdSource } from './ids.ts';
  * wird gerechnet und nie gespeichert (E-070 Punkt 3).
  */
 const TODO_COLUMNS =
-  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.due_date, t.due_time, t.estimate_minutes, t.no_export, t.priority_id, (SELECT weight FROM todo_priority WHERE id = t.priority_id) AS priority_weight, t.created_at, t.updated_at';
+  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.due_date, t.due_time, t.estimate_minutes, t.no_export, t.no_evidence, t.priority_id, (SELECT weight FROM todo_priority WHERE id = t.priority_id) AS priority_weight, t.created_at, t.updated_at';
 
 /**
  * Der Ersatzwert, mit dem ein Todo **ohne** Frist beim Sortieren ans Ende
@@ -647,13 +647,13 @@ export function createTodoPort(
 
       conn
         .prepare(
-          `INSERT INTO todo (id, title, call_number, status_id, completed_at, due_date, due_time, estimate_minutes, no_export, priority_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO todo (id, title, call_number, status_id, completed_at, due_date, due_time, estimate_minutes, no_export, no_evidence, priority_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         // `dueDate` kommt geprüft herein (`checkDueDate` in der Domäne, an der
         // Tür). Der Adapter urteilt nicht — der CHECK aus Migration 0014 ist
         // die zweite Wache und nicht die erste.
-        .run(id, input.title, input.callNumber, statusId, input.dueDate ?? null, input.dueTime ?? null, input.estimateMinutes ?? null, input.noExport === true ? 1 : 0, input.priorityId ?? null, input.now, input.now);
+        .run(id, input.title, input.callNumber, statusId, input.dueDate ?? null, input.dueTime ?? null, input.estimateMinutes ?? null, input.noExport === true ? 1 : 0, input.noEvidence === true ? 1 : 0, input.priorityId ?? null, input.now, input.now);
 
       writeTags(id, tagIds, input.now);
 
@@ -739,6 +739,10 @@ export function createTodoPort(
         if (input.noExport !== undefined) {
           sets.push('no_export = ?');
           params.push(input.noExport ? 1 : 0);
+        }
+        if (input.noEvidence !== undefined) {
+          sets.push('no_evidence = ?');
+          params.push(input.noEvidence ? 1 : 0);
         }
         if (input.estimateMinutes !== undefined) {
           sets.push('estimate_minutes = ?');

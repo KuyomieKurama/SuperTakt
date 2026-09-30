@@ -1,0 +1,1 @@
+ALTER TABLE todo ADD COLUMN no_evidence INTEGER NOT NULL DEFAULT 0 CHECK (no_evidence IN (0, 1));

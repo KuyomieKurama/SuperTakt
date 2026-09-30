@@ -86,12 +86,12 @@ export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
  * deren Bytes sie wegwirft.
  */
 // Version 11 (T-397, A-28.1, A-28.2): `app_setting` carries `version_check_enabled` and
-// `ui_language`. Version 12 adds the global motion preference; older archives
-// receive the former, subtle behavior instead of an invented animation style.
-export const DATA_ARCHIVE_VERSION = 12 as const;
+// `ui_language`. Version 12 adds the global motion preference. Version 13 adds
+// `todo.no_evidence`; older archives receive false.
+export const DATA_ARCHIVE_VERSION = 13 as const;
 
 /** Die Fassungen, die eingelesen werden. Alles andere wird abgewiesen, nicht geraten. */
-const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+const READABLE_VERSIONS = Object.freeze([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
 /** Die Fassungen **ohne** `data.files` — sie kennen die Bytes der Anhänge nicht. */
 const VERSIONS_WITHOUT_FILES = Object.freeze([1, 2, 3, 4, 5]);
@@ -374,6 +374,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       }
       if (table === 'todo' && version < 10) upgraded = { ...upgraded, priority_id: null };
       if (table === 'todo' && version < 8) upgraded = { ...upgraded, no_export: 0 };
+      if (table === 'todo' && version < 13) upgraded = { ...upgraded, no_evidence: 0 };
       if (table === 'todo_attachment') {
         /*
          * Die vier Spalten aus Migration 0023 (A-A-84, A-A-97) — **ohne**

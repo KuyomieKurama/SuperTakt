@@ -40,6 +40,8 @@ export interface TimeEntry {
    * but never "open for billing"; the time screen must not count it as open.
    */
   readonly todoNoExport: boolean;
+  /** Read-only copy of `todo.no_evidence`; it only controls evidence hints. */
+  readonly todoNoEvidence: boolean;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
