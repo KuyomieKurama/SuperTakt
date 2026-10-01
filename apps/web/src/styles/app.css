@@ -5397,12 +5397,10 @@ body:has(.scrim) .toast {
   background: var(--bg-surface);
   margin-block-end: var(--space-3);
 }
-.board__filters > .field { min-inline-size: 12rem; }
-.board__help { max-inline-size: 32rem; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-muted); }
-.board__help summary { padding-block: var(--space-2); cursor: pointer; }
-.board__help p { margin-block-start: var(--space-2); }
+.board__filter-fields { display: flex; flex: 1 1 0; align-items: end; gap: var(--space-3); min-inline-size: 0; }
+.board__filter-fields > .field { flex: 0 1 10rem; min-inline-size: 10rem; }
 .board__stamp { flex: 0 1 auto; margin: 0; color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
-.board__filter-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-self: end; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
+.board__filter-actions { display: flex; flex: 0 1 auto; align-self: end; align-items: center; gap: var(--space-3); margin-block-end: 0.25rem; margin-inline-start: auto; }
 .board--single { grid-auto-columns: min(100%, 42rem); }
 .board .kcolumn__head { padding: var(--space-3); }
 .board .kcolumn__title { font-size: var(--text-base); text-transform: none; letter-spacing: normal; }
@@ -5410,12 +5408,11 @@ body:has(.scrim) .toast {
 .board .kcard { padding: var(--space-3); }
 .board .kcard__title { font-size: var(--text-base); line-height: 1.5; }
 .detail__deadline-time { margin-block-start: var(--space-2); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-@media (max-width: 600px) {
+@media (max-width: 1120px) {
   .board { grid-auto-columns: min(85vw, 24rem); }
   .board--single { grid-auto-columns: 100%; }
-  .board__filters > .field { flex: 1 1 10rem; min-inline-size: 0; }
-  .board__filter-actions { margin-inline-start: 0; }
-  .board__filter-actions { flex: 1 1 100%; }
+  .board__filter-fields > .field { flex: 1 1 10rem; min-inline-size: 0; }
+  .board__filter-actions { flex: 1 1 100%; margin-block-end: 0; margin-inline-start: 0; }
 }
 
 /* Groups of the global search by kind of hit (C-22, T-393 K-9/K-10). */

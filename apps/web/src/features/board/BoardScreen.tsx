@@ -16,7 +16,7 @@ import type { MenuEntry } from "../../shared/ui/Menu";
 import { Button } from "../../shared/ui/Primitives";
 import { quotedName } from "../../lib/foreign";
 import { formatTime } from "../../lib/format";
-import { labels, poolPlacementMessage } from "../../lib/labels";
+import { poolPlacementMessage } from "../../lib/labels";
 import { boardTexts } from "./texts";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
@@ -393,6 +393,7 @@ export function BoardScreen() {
       />
       <div className="screen__bar">
         <section className="board__filters" aria-label={text.filtersLabel}>
+          <div className="board__filter-fields">
             <Select label={text.priority} value={priority} onChange={value => { setPriority(value); setPerColumn(PAGE_SIZE); }} options={[
               { value: "", label: text.allPriorities }, { value: "none", label: text.noPriority },
               ...(priorities.state.status === "ready" ? priorities.state.value.map(item => ({ value: item.id, label: `${item.name} · ${item.weight}` })) : []),
@@ -403,10 +404,7 @@ export function BoardScreen() {
               pressed={showDone}
               onChange={setShowDone}
             />
-          <details className="board__help"><summary>{text.howColumnsWork}</summary>
-            <p>{labels().ruleWhatMovesACard}</p>
-            <p>{text.doneHidden}</p>
-          </details>
+          </div>
           <div className="board__filter-actions">
             {boardData !== null ? (
               <p className="board__stamp">

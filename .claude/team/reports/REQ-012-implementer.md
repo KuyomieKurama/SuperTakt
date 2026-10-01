@@ -77,3 +77,47 @@ Offene Fragen:
 - Keine zur Umsetzung; nach Freigabe kann der vollständige E2E-Satz auf einem freien Port-5173-Slot erneut laufen.
 
 Rückweg: Den Commit „fix(board): align board stamp with filter bar“ zurücksetzen. Das stellt die frühere Position der Standanzeige, die kleineren Schriftwerte und den früheren Screenshot-Hook wieder her.
+
+Nachbesserung W3 — Filterleiste klein (REQ-20260930-012, d758de079359e68a)
+
+Status: braucht Review
+
+Artefakte:
+- apps/web/src/features/board/BoardScreen.tsx
+- apps/web/src/features/board/BoardSetupDialog.tsx
+- apps/web/src/features/board/texts.ts
+- apps/web/src/styles/app.css
+- tests/e2e/kanban-layout.spec.ts
+- .claude/team/reports/req012-w3-filterbar-1024x768-classic.png
+- .claude/team/reports/req012-w3-filterbar-1024x768-everfrost.png
+- .claude/team/reports/req012-w3-filterbar-1290x800-classic.png
+- .claude/team/reports/req012-w3-filterbar-1290x800-everfrost.png
+- .claude/team/reports/req012-w3-filterbar-1920x1080-classic.png
+- .claude/team/reports/req012-w3-filterbar-1920x1080-everfrost.png
+
+Zusammenfassung:
+- Die Filterleiste hat jetzt eine linke Feldgruppe und eine rechte Aktionsgruppe. Bis 1290 × 800 liegen sie in einer Zeile; unter 1120 px steht die vollständige Aktionsgruppe linksbündig in einer zweiten Zeile.
+- „Spalten verstehen“ und sein Aufklapper sind entfernt. Die unveränderten Sätze über die Regelbewegung und ausgeblendete erledigte Todos stehen nun im Dialog „Spalten verwalten“.
+- Der Layouttest misst bei 1290 px die Top-Koordinaten von Priorität und Aktionsgruppe mit höchstens 2 px Differenz und nimmt über `KANBAN_FILTERBAR_VIEWPORT` die drei geforderten Viewports auf.
+
+Prüfung:
+- Arbeitsbaum-Suche ohne Bauergebnisse: 0 Treffer für „Spalten verstehen“, `howColumnsWork` und `board__help` in `apps/web/src`, `apps/local-api/src`, `apps/desktop/src-tauri/src`, `apps/outlook-addin/src` und `tests`.
+- `pnpm typecheck`: bestanden.
+- `pnpm contrast`: bestanden.
+- `pnpm exec playwright test -c tests/e2e/playwright.kanban-layout.config.ts`: bestanden.
+- Je ein echter Layoutlauf für classic und everfrost bei 1290 × 800, 1024 × 768 und 1920 × 1080: 6/6 bestanden; die PNG-Dateien haben die jeweiligen gemessenen Abmessungen.
+- `pnpm --filter @takt/web test`: bestanden.
+- `pnpm exec playwright test tests/e2e/kanban.spec.ts --workers=1`: nicht bestanden; alle fünf Fälle konnten die lokale API auf 127.0.0.1:17843 nicht erreichen. Das ist ein Umgebungsblocker vor der geänderten Oberfläche.
+
+Annahmen:
+- Die bei 1120 px gesetzte Umbruchschwelle ist der aus den geforderten Screenshots abgeleitete Rückfall: 1290 bleibt einzeilig, 1024 zeigt die vollständige Aktionsgruppe unter den Feldern.
+
+Risiken:
+- Der vollständige API-gestützte Kanban-E2E-Satz ist in dieser Sandbox nicht durchführbar, solange der lokale Dienst auf 127.0.0.1:17843 nicht läuft.
+
+Offene Fragen:
+- Keine zur Umsetzung.
+
+Nächster Schritt: Code-, UX- und Spezifikationsreview der W3-Änderung; anschließend den API-gestützten Kanban-Satz in einer laufenden lokalen Dienstumgebung wiederholen.
+
+Rückweg: Den folgenden W3-Commit zurücksetzen. Das stellt den Aufklapper, seine Texte und die frühere Ein-Gruppen-Layoutregel wieder her.
