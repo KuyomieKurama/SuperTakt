@@ -1047,7 +1047,7 @@
   position: relative;
   display: flex;
   gap: var(--space-1);
-  padding: var(--space-2);
+  padding: var(--card-padding-y) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background-color: var(--bg-surface);

@@ -2057,7 +2057,7 @@ body:has(.scrim) .toast {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-1);
+  padding: var(--list-row-padding-y) var(--space-1);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--text-sm);
 }
@@ -2189,7 +2189,7 @@ body:has(.scrim) .toast {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--list-row-padding-y) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -4405,7 +4405,7 @@ body:has(.scrim) .toast {
 .pool-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--list-row-gap);
   margin: 0;
 }
 
@@ -4415,7 +4415,7 @@ body:has(.scrim) .toast {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--list-row-padding-y) var(--space-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background-color: var(--bg-surface);
@@ -5148,8 +5148,7 @@ body:has(.scrim) .toast {
 :root[data-design-theme="clear"] .dash-columns { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 :root[data-design-theme="clear"] .dash-columns .card { min-width: 0; }
 :root[data-design-theme="clear"] .dash-columns .card__header { min-height: 4rem; }
-:root[data-design-theme="clear"] .dash-columns .pick-row { min-height: 3.5rem; }
-:root[data-design-theme="clear"][data-density="compact"] .dash-columns .pick-row { min-height: var(--row-height); padding-block: var(--space-2); }
+:root[data-design-theme="clear"] .dash-columns .pick-row { min-height: var(--dashboard-pick-row-min-height); }
 
 @media (max-width: 68rem) {
   :root[data-design-theme="clear"] .screen--dashboard .stat-grid,
@@ -5405,7 +5404,7 @@ body:has(.scrim) .toast {
 .board .kcolumn__head { padding: var(--space-3); }
 .board .kcolumn__title { font-size: var(--text-base); text-transform: none; letter-spacing: normal; }
 .board .kcolumn__body { padding: var(--space-3); gap: var(--space-3); }
-.board .kcard { padding: var(--space-3); }
+.board .kcard { padding: var(--board-card-padding-y) var(--space-3); }
 .board .kcard__title { font-size: var(--text-base); line-height: 1.5; }
 .detail__deadline-time { margin-block-start: var(--space-2); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 @media (max-width: 1120px) {
