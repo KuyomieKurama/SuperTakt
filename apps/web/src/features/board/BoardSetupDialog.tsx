@@ -130,7 +130,7 @@ export function BoardSetupDialog({
         fuehrt. Dass hier `RULE_IS_A_RULE` steht, ist Bedingung der Freigabe
         von UM-03 (Auflage Z-07 Punkt 1).
       */
-      description={labels().ruleIsARule}
+      description={`${labels().ruleIsARule} ${labels().ruleWhatMovesACard} ${text.doneHidden}`}
       submitLabel={text.newColumn}
       cancelLabel={text.close}
       onSubmit={onCreate}
