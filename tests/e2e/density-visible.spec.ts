@@ -4,10 +4,10 @@ import { join } from 'node:path';
 
 import { createPool, createTag, createTimeEntry, createTodo, deletePool, deleteTag, deleteTimeEntry, deleteTodo } from './support/api';
 import { todayAt } from './support/local-time';
-import { gotoBoard, gotoBookings, gotoSettings, gotoTags } from './support/nav';
+import { gotoBoard, gotoBookings, gotoSettings, gotoTags, gotoTodo } from './support/nav';
 
 type Density = 'comfortable' | 'compact';
-type View = 'kanban' | 'pools' | 'bookings' | 'tree';
+type View = 'kanban' | 'pools' | 'entryRow' | 'bookings' | 'tree';
 
 const screenshotDirectory = process.env['DENSITY_SCREENSHOT_DIR'];
 const negativeProbe = process.env['DENSITY_NEGATIVE_PROBE'] === '1';
@@ -22,7 +22,7 @@ async function rowHeight(locator: Locator): Promise<number> {
   return locator.evaluate((element) => element.getBoundingClientRect().height);
 }
 
-async function openView(page: Page, view: View): Promise<Locator> {
+async function openView(page: Page, view: View, todoId?: string): Promise<Locator> {
   switch (view) {
     case 'kanban':
       await gotoBoard(page);
@@ -30,6 +30,10 @@ async function openView(page: Page, view: View): Promise<Locator> {
     case 'pools':
       await gotoSettings(page, 'regeln');
       return page.locator('.pool-row').filter({ hasText: 'E2E-DICHTE-' }).first();
+    case 'entryRow':
+      if (todoId === undefined) throw new Error('An entry row needs its todo ID');
+      await gotoTodo(page, todoId);
+      return page.locator('.entry-row').filter({ hasText: 'E2E-DICHTE-' }).first();
     case 'bookings':
       await gotoBookings(page);
       return page.locator('.table tbody tr').filter({ hasText: 'E2E-DICHTE-' }).first();
@@ -40,11 +44,11 @@ async function openView(page: Page, view: View): Promise<Locator> {
   }
 }
 
-async function measureDensity(page: Page, view: View): Promise<{ comfortable: number; compact: number }> {
+async function measureDensity(page: Page, view: View, todoId?: string): Promise<{ comfortable: number; compact: number }> {
   await setDensity(page, 'comfortable');
-  const comfortable = await rowHeight(await openView(page, view));
+  const comfortable = await rowHeight(await openView(page, view, todoId));
   await setDensity(page, negativeProbe ? 'comfortable' : 'compact');
-  const compact = await rowHeight(await openView(page, view));
+  const compact = await rowHeight(await openView(page, view, todoId));
   return { comfortable, compact };
 }
 
@@ -85,10 +89,12 @@ test('compact density reduces real Kanban, pool, booking, table, and tree row he
     const measurements = {
       kanban: await measureDensity(page, 'kanban'),
       pools: await measureDensity(page, 'pools'),
+      entryRow: await measureDensity(page, 'entryRow', todo.id),
       bookings: await measureDensity(page, 'bookings'),
 
       tree: await measureDensity(page, 'tree'),
     };
+    console.log(`Density measurements: ${JSON.stringify(measurements)}`);
 
     for (const [view, measurement] of Object.entries(measurements)) {
       expect(measurement.compact, `${view}: compact must be shorter than comfortable`).toBeLessThan(measurement.comfortable);
