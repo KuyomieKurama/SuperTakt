@@ -121,3 +121,38 @@ Offene Fragen:
 Nächster Schritt: Code-, UX- und Spezifikationsreview der W3-Änderung; anschließend den API-gestützten Kanban-Satz in einer laufenden lokalen Dienstumgebung wiederholen.
 
 Rückweg: Den folgenden W3-Commit zurücksetzen. Das stellt den Aufklapper, seine Texte und die frühere Ein-Gruppen-Layoutregel wieder her.
+
+Lieferkette — hono 4.13.5 auf 4.13.7 (REQ-20260930-012, d758de079359e68a)
+
+Status: fertig
+
+Artefakte:
+- apps/local-api/package.json
+- pnpm-lock.yaml
+- .claude/team/reports/REQ-012-implementer.md
+
+Zusammenfassung:
+- `hono` ist im lokalen Dienst exakt auf 4.13.7 angehoben. Damit ist GHSA-hxh3-vqpv-xpqv geschlossen; `@hono/node-server` bleibt bei 2.1.1, weil seine deklarierte Peer-Abhängigkeit `hono: ^4` die 4.13.7 einschließt.
+- Der Lockfile-Diff enthält ausschließlich die Auflösung 4.13.5 → 4.13.7 für `hono` und die davon abhängige Peer-Suffix-/Snapshot-Referenz von `@hono/node-server`; keine andere Paketauflösung bewegt sich.
+
+Prüfung:
+- Vor dem Lauf waren nur ein fremder Web-Vite-Prozess, dessen Node-Elternprozess und esbuild sichtbar; sie wurden nicht beendet.
+- `pnpm install --lockfile-only`: bestanden. Der Offline-Versuch brach erwartungsgemäß bei fehlenden Metadaten für die unabhängige Root-Abhängigkeit `@playwright/test` ab; der anschließende normale Lauf löste ausschließlich die angeforderte Lockfile-Aktualisierung auf. `pnpm install`: bestanden, 2 Pakete ersetzt.
+- `pnpm audit`: bestanden, `No known vulnerabilities found`.
+- `pnpm typecheck`: bestanden.
+- `pnpm --filter @takt/local-api test`: bestanden (keine Ausgabe, Exit 0).
+- Dienststart-Smoke: bestanden. Der echte Proof-Einstieg startete gegen isolierte temporäre Anwendungsdaten mit `TAKT_PROOF_PORT=17845`; `GET /api/v1/health` mit gültigem Origin und Token antwortete `{"data":{"status":"ok"}}`. Der Prozess wurde danach beendet, der temporäre Bestand entfernt und der Port war nicht mehr erreichbar.
+- Lokal installiertes `node_modules/hono/package.json` bestätigt 4.13.7. Lokale Release Notes bzw. ein Changelog für 4.13.5 → 4.13.7 waren nicht vorhanden und wurden daher nicht gesichtet.
+
+Annahmen:
+- Der zur Laufzeit verwendete, isolierte Proof-Einstieg ist ein ausreichend naher Dienststart-Smoke: Er verwendet denselben `main()`-Zusammenbau, ersetzt nur die Versionsquelle durch eine netzlose Stütze und lässt den Produktport unverändert.
+
+Risiken:
+- Keine bekannten. Der temporäre Smoke erzeugte ein lokales Entwicklungszertifikat ausschließlich im anschließend entfernten temporären Anwendungsdatenverzeichnis.
+
+Offene Fragen:
+- Keine.
+
+Nächster Schritt: Commit und Push des Sicherheitsfixes; anschließend Review.
+
+Rückweg: Den Commit `build(local-api): bump hono to 4.13.7 (GHSA-hxh3-vqpv-xpqv)` zurücksetzen. Das stellt `hono` 4.13.5 und die zugehörigen Lockfile-Referenzen wieder her, stellt aber die gemeldete Sicherheitslücke erneut her.
