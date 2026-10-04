@@ -275,10 +275,15 @@
   --space-12: 3rem; /* 48 — Abstand zwischen Abschnitten */
   --space-16: 4rem; /* 64 — Seitenrand oben/unten */
 
-  /* Zeilenhoehen der Tabellen. Zwei Dichten, umschaltbar ueber
-     [data-density] am Wurzelelement. */
+  /* Zeilenhoehen und vertikale Abstaende. Zwei Dichten, umschaltbar ueber
+     [data-density] am Wurzelelement. Komponenten lesen nur diese Tokens. */
   --row-height: 2.5rem; /* 40px, Vorgabe */
   --row-padding-x: var(--space-3);
+  --card-padding-y: var(--space-2);
+  --board-card-padding-y: var(--space-3);
+  --list-row-padding-y: var(--space-2);
+  --list-row-gap: var(--space-2);
+  --dashboard-pick-row-min-height: 3.5rem;
   /* 13. Radien                                                         */
 
   --radius-xs: 3px; /* Schraffurflaechen, kleine Marker */
@@ -358,6 +363,11 @@
 :root[data-density="compact"] {
   --row-height: 2rem; /* 32px */
   --row-padding-x: var(--space-2);
+  --card-padding-y: var(--space-1);
+  --board-card-padding-y: var(--space-2);
+  --list-row-padding-y: var(--space-1);
+  --list-row-gap: var(--space-1);
+  --dashboard-pick-row-min-height: var(--row-height);
 }
 /* Dunkler Modus                                                        */
 /*

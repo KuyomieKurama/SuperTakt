@@ -1047,7 +1047,7 @@
   position: relative;
   display: flex;
   gap: var(--space-1);
-  padding: var(--space-2);
+  padding: var(--card-padding-y) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background-color: var(--bg-surface);
@@ -1099,40 +1099,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-/* Die Kopfzeile der Karte traegt bis zu drei Marken: Call-Nummer,
-   Erledigt-Kennzeichen und — nur wenn eine Frist gesetzt ist (A-19.5) — die
-   Frist. Die Spalte ist zwischen 17rem und 21rem breit (`.board`), der Karte
-   bleiben davon rund 200 px fuer diese Zeile. Drei Marken passen darin nicht
-   nebeneinander.
-
-   Deshalb **umbricht** sie (T-281). Ohne `flex-wrap` schob die dritte Marke
-   sich aus `.kcard__main` heraus und legte sich ueber `.kcard__actions` — die
-   Frist lag unter dem Timerknopf. Kuerzen waere die schlechtere Antwort: Eine
-   Frist, die als "Ueberfael..." endet, sieht richtig aus und ist es nicht.
-
-   Gemessen in Chromium: Der Ueberlauf begann bei einer Spaltenbreite von
-   308 px, in den Gestaltungen mit groesseren Marken (`--text-2xs: 0.75rem`)
-   schon bei 324 px — die Spalte darf 272 bis 336 px breit sein, der Fall lag
-   also im Regelbereich und bei der Mindestbreite immer vor. Mit dem Umbruch
-   bleibt bis hinunter zu 240 px alles innerhalb der Karte.
-
-   Es ist dieselbe Regel, die S-02 fuer dieselben Marken schon traegt — bis
-   T-365 als `.todo-row__meta` an der Listenzeile, seither als
-   `.todo-cell--deadline .deadline` in der Fristspalte der Todo-Tabelle
-   (`app.css`). Hier fehlte sie, und nur hier.
-
-   Die Zeilenluecke ist kleiner als die Spaltenluecke: Die zweite Zeile gehoert
-   sichtbar zum selben Block und soll ihn nicht zu einem zweiten Absatz
-   auseinanderziehen. */
-.kcard__top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: var(--space-2);
-  row-gap: var(--space-1);
-  min-height: 1rem;
 }
 
 .kcard__call {
@@ -1265,6 +1231,7 @@
 .kcard__tags {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-1);
 }
 

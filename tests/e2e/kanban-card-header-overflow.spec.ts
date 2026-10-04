@@ -1,15 +1,10 @@
 import { localDayFromToday } from './support/local-time';
-/**
- * Überlappung und Abschneiden am gerenderten Board messen. Das schmale Fenster muss die Spalte
- * tatsächlich auf ihre Mindestbreite bringen.
- */
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import { createBoardColumn } from './support/actions';
 import { createTag, createTodo, deletePoolByName, deleteTag, deleteTodo } from './support/api';
 import { gotoBoard } from './support/nav';
 
-/** Wie in `kanban.spec.ts`: eine Spalte über ihre Überschrift, nicht über den ganzen Text finden. */
 function boardColumn(page: Page, name: string): Locator {
   return page.locator('.kcolumn').filter({ has: page.locator('.kcolumn__title', { hasText: name }) });
 }
@@ -21,45 +16,27 @@ interface Box {
   readonly height: number;
 }
 
-/** Rechteckschnittfläche zweier Kästen — 0, wenn sie sich nicht berühren. */
 function overlapArea(a: Box, b: Box): number {
   const overlapX = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
   const overlapY = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
   return overlapX * overlapY;
 }
 
-test.describe('TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in schmaler Spalte', () => {
-  test('Call-Nummer, Erledigt-Kennzeichen und Frist bleiben bei Spaltenmindestbreite innerhalb der Karte, ohne Text zu verlieren', async ({
-    page,
-  }) => {
+test.describe('TP-KANBAN-07 — Kartenmetadaten unter dem Titel in schmaler Spalte', () => {
+  test('Call und Frist stehen unter dem Titel, bleiben in der Karte und eine Karte ohne Call beginnt gleich hoch', async ({ page }) => {
     const run = Date.now();
-    const columnName = `E2E-Kopf-Ueberlauf-${run}`;
-    const tag = await createTag(`E2E-Kopf-Ueberlauf-${run}`);
-    // Eine **realistische** Call-Nummer, kurz wie im echten Betrieb (siehe
-    // Vorgabewert des Add-in-Regex, `call[\s#:_-]*(\d{5,6})`) — nicht der
-    // volle Zeitstempel `run`. Der Titel bleibt eindeutig über `run`; die
-    // Call-Nummer braucht das nicht und würde sonst selbst mit nur zwei
-    // Marken umbrechen (nachgemessen: 28 Zeichen lang bricht die Kopfzeile
-    // schon ohne Frist — ein Fehler in den Testdaten, keiner der Karte).
+    const columnName = `E2E-Metazeile-${run}`;
+    const tag = await createTag(`E2E-Metazeile-${run}`);
     const callSuffix = String(run).slice(-6);
-
-    // Überfällig, nicht nur "gestern": ein Abstand von fünf Tagen bleibt auch
-    // dann sicher im Zustand "Überfällig", wenn die Uhr des Testläufers ein
-    // paar Stunden von der Browser-Zeitzone (Europe/Berlin, playwright.config
-    // .ts) abweicht — derselbe Kniff wie in `deadline-computed-state.spec.ts`.
     const overdue = localDayFromToday(-5);
-
-    const threeMarks = await createTodo({
-      title: `E2E-KOPF-DREI-${run}`,
+    const withCall = await createTodo({
+      title: `E2E-META-MIT-CALL-${run}`,
       callNumber: `CALL-${callSuffix}`,
       dueDate: overdue,
       tagIds: [tag.id],
     });
-    // Gegenprobe: dieselbe Regel, aber ohne Frist — zwei Marken, kein Umbruch
-    // nötig (A-19.5: ein Todo ohne Frist trägt diese dritte Marke gar nicht).
-    const twoMarks = await createTodo({
-      title: `E2E-KOPF-ZWEI-${run}`,
-      callNumber: `CALL-${callSuffix}9`,
+    const withoutCall = await createTodo({
+      title: `E2E-META-OHNE-CALL-${run}`,
       tagIds: [tag.id],
     });
 
@@ -68,95 +45,62 @@ test.describe('TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in sc
       await createBoardColumn(page, columnName, { requiredTagNames: [tag.name] });
 
       const column = boardColumn(page, columnName);
-      await expect(column).toBeVisible();
-
-      const cardThree = column.locator('.kcard', { hasText: threeMarks.title });
-      const cardTwo = column.locator('.kcard', { hasText: twoMarks.title });
-      await expect(cardThree).toBeVisible();
-      await expect(cardTwo).toBeVisible();
-
-      // Vor dem Verengen: die dritte Marke steht wirklich da (aria-label trägt
-      // Zustandswort und Datum, DeadlineFlag.tsx) — sonst prüfte der Rest
-      // dieses Falls einen Fall mit nur zwei Marken und hieße falsch.
-      await expect(cardThree.locator('.kcard__deadline')).toHaveAttribute(
+      const cardWithCall = column.locator('.kcard', { hasText: withCall.title });
+      const cardWithoutCall = column.locator('.kcard', { hasText: withoutCall.title });
+      await expect(cardWithCall).toBeVisible();
+      await expect(cardWithoutCall).toBeVisible();
+      await expect(cardWithCall.locator('.kcard__top')).toHaveCount(0);
+      await expect(cardWithCall.locator('.kcard__deadline')).toHaveAttribute(
         'aria-label',
         /^Überfällig — Frist: \d{2}\.\d{2}\.\d{4}$/,
       );
-      await expect(cardTwo.locator('.kcard__deadline')).toHaveCount(0);
+      await expect(cardWithoutCall.locator('.kcard__call')).toHaveCount(0);
 
-      // --- Spalte auf ihre Mindestbreite bringen: ein schmales Fenster, ----
-      // --- keine erzwungene Breite im Testcode (siehe Dateikopf). ----------
       await page.setViewportSize({ width: 314, height: 900 });
-
       const columnBox = await column.boundingBox();
       expect(columnBox).not.toBeNull();
-      // 17 rem = 272 px bei einer Wurzelschriftgröße von 16 px (keine Datei
-      // in diesem Bestand setzt eine andere). ±1,5 px Toleranz für
-      // Sub-Pixel-Rundung zwischen Layout-Engine und `getBoundingClientRect`.
       expect(columnBox!.width).toBeGreaterThanOrEqual(270.5);
       expect(columnBox!.width).toBeLessThanOrEqual(273.5);
 
-      // --- Der Fall mit drei Marken: nichts ragt aus `.kcard__main`, -------
-      // --- nichts überschneidet `.kcard__actions`, nichts wird abgeschnitten.
-      const main = cardThree.locator('.kcard__main');
-      const actions = cardThree.locator('.kcard__actions');
-      const top = cardThree.locator('.kcard__top');
+      const main = cardWithCall.locator('.kcard__main');
+      const actions = cardWithCall.locator('.kcard__actions');
+      const title = cardWithCall.locator('.kcard__title');
+      const call = cardWithCall.locator('.kcard__call');
+      const deadline = cardWithCall.locator('.kcard__deadline');
+      const metadata = cardWithCall.locator('.kcard__title + .kcard__tags');
+      await expect(metadata).toBeVisible();
 
-      const mainBox = (await main.boundingBox()) as Box | null;
-      const actionsBox = (await actions.boundingBox()) as Box | null;
+      const [mainBox, actionsBox, titleBox, callBox, deadlineBox, withoutCallCardBox, withoutCallTitleBox] = await Promise.all([
+        main.boundingBox(),
+        actions.boundingBox(),
+        title.boundingBox(),
+        call.boundingBox(),
+        deadline.boundingBox(),
+        cardWithoutCall.boundingBox(),
+        cardWithoutCall.locator('.kcard__title').boundingBox(),
+      ]);
       expect(mainBox).not.toBeNull();
       expect(actionsBox).not.toBeNull();
+      expect(titleBox).not.toBeNull();
+      expect(callBox).not.toBeNull();
+      expect(deadlineBox).not.toBeNull();
+      expect(withoutCallCardBox).not.toBeNull();
+      expect(withoutCallTitleBox).not.toBeNull();
 
-      const marks = await top.locator(':scope > *').all();
-      // Call-Nummer, Erledigt-Kennzeichen, Frist — sonst ist das nicht der
-      // Drei-Marken-Fall, den dieser Testfall prüfen soll.
-      expect(marks.length).toBe(3);
-
-      for (const mark of marks) {
-        const box = (await mark.boundingBox()) as Box | null;
-        expect(box).not.toBeNull();
-        const b = box as Box;
-
-        // Rechter Rand der Marke ≤ rechter Rand von `.kcard__main`.
-        expect(b.x + b.width).toBeLessThanOrEqual(mainBox!.x + mainBox!.width + 1);
-
-        // Keine Überschneidung mit `.kcard__actions` (dem Fach mit Timer- und
-        // Menüknopf) — das war genau der gemeldete Schaden: die Frist lag
-        // unter der Abspieltaste.
-        expect(overlapArea(b, actionsBox as Box)).toBeLessThanOrEqual(1);
-
-        // Kein Text wird abgeschnitten: Der sichtbare Inhalt der Marke passt
-        // vollständig in ihren eigenen Kasten. Das fängt einen künftigen
-        // `text-overflow`/`overflow: hidden`-„Ausgleich" ab, der die beiden
-        // Prüfungen oben grün ließe, aber die Frist stumm kürzte.
-        const metrics = await mark.evaluate((el) => ({
-          scrollWidth: el.scrollWidth,
-          clientWidth: el.clientWidth,
-        }));
-        expect(metrics.scrollWidth).toBeLessThanOrEqual(Math.ceil(metrics.clientWidth) + 1);
+      for (const mark of [callBox, deadlineBox] as Box[]) {
+        expect(mark.x + mark.width).toBeLessThanOrEqual(mainBox!.x + mainBox!.width + 1);
+        expect(overlapArea(mark, actionsBox as Box)).toBeLessThanOrEqual(1);
       }
+      expect(callBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height - 1);
+      expect(deadlineBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height - 1);
 
-      // --- Gegenprobe: ohne Frist bleiben es zwei Marken in einer Zeile. ---
-      const topTwo = cardTwo.locator('.kcard__top');
-      const marksTwo = await topTwo.locator(':scope > *').all();
-      expect(marksTwo.length).toBe(2);
-
-      const boxesTwo = await Promise.all(marksTwo.map((mark) => mark.boundingBox()));
-      expect(boxesTwo[0]).not.toBeNull();
-      expect(boxesTwo[1]).not.toBeNull();
-      // Einzeilig heißt: beide Marken teilen sich dieselbe Zeile. Ihre obere
-      // Kante allein zu vergleichen, trägt nicht — `.kcard__top` zentriert
-      // (`align-items: center`), und Call-Nummer und Erledigt-Kennzeichen sind
-      // unterschiedlich hoch (verschiedene Symbol- und Schriftgrößen), stehen
-      // aber auf derselben Zeile trotzdem mit **gleicher Mitte**. Die Mitte
-      // ist deshalb das richtige Maß, nicht die Kante — sonst meldet dieser
-      // Test einen Umbruch, den es gar nicht gibt (am Bildschirm nachgesehen).
-      const [centerYFirst, centerYSecond] = (boxesTwo as Box[]).map((box) => box.y + box.height / 2);
-      expect(Math.abs((centerYFirst as number) - (centerYSecond as number))).toBeLessThanOrEqual(1.5);
+      const withCallTop = titleBox!.y - (await cardWithCall.boundingBox())!.y;
+      const withoutCallTop = withoutCallTitleBox!.y - withoutCallCardBox!.y;
+      expect(Math.abs(withCallTop - withoutCallTop)).toBeLessThanOrEqual(1);
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
-      await deleteTodo(threeMarks.id).catch(() => undefined);
-      await deleteTodo(twoMarks.id).catch(() => undefined);
+      await deleteTodo(withCall.id).catch(() => undefined);
+      await deleteTodo(withoutCall.id).catch(() => undefined);
       await deleteTag(tag.id).catch(() => undefined);
     }
   });

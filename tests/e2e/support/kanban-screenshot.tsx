@@ -30,7 +30,7 @@ function card(input: Partial<KanbanCardData> & Pick<KanbanCardData, 'id' | 'titl
 }
 
 const cards = {
-  open: card({ id: 'open', title: 'Offen ohne Zeit und Export', callNumber: 'CALL-11001' }),
+  open: card({ id: 'open', title: 'Offen ohne Zeit und Export' }),
   booked: card({ id: 'booked', title: 'Erfasste Zeit mit Exportstreifen', callNumber: 'CALL-11002', trackedSeconds: 5400, trackedDisplay: '1:30 h', exportSummary }),
   overdue: card({ id: 'overdue', title: 'Überfällige Rückfrage', callNumber: 'CALL-11003', dueDate: '2026-09-25', priority: { name: 'Dringend', weight: 100 } }),
   done: card({ id: 'done', title: 'Erledigte Abstimmung', callNumber: 'CALL-11004', done: true, trackedSeconds: 1800, trackedDisplay: '0:30 h' }),
