@@ -1,86 +1,84 @@
-Takt verwaltet Todos, erfasst Zeiten und erzeugt Exportdateien für die Abrechnung.
-Alle Daten bleiben auf dem Rechner, auf dem es läuft.
+SuperTakt manages todos, tracks time and produces export files for billing.
+All data stays on the computer it runs on.
 
-## Welche Datei für welches System
+## Which file for which system
 
-| Datei | System | Anmerkung |
+| File | System | Notes |
 |---|---|---|
-| `Takt_<fassung>_x64-setup.exe` | Windows 10/11, 64 Bit | Installiert in das Benutzerprofil, kein Administratorkonto nötig |
-| `Takt_<fassung>_aarch64.dmg` | macOS auf Apple Silicon (M1 und neuer) | **Nicht** für Macs mit Intel-Prozessor |
-| `Takt_<fassung>_amd64.deb` | Debian, Ubuntu und Verwandte, 64 Bit | Gebaut auf Ubuntu 24.04, verlangt glibc 2.39 oder neuer |
-| `Takt_<fassung>_amd64.AppImage` | Linux ohne Paketverwaltung, 64 Bit | Ausführbar machen und starten, keine Installation; dieselbe glibc-Grenze |
+| `SuperTakt_<version>_x64-setup.exe` | Windows 10/11, 64-bit | Installs into the user profile, no administrator account needed |
+| `SuperTakt_<version>_aarch64.dmg` | macOS on Apple Silicon (M1 and newer) | **Not** for Macs with an Intel processor |
+| `SuperTakt_<version>_amd64.deb` | Debian, Ubuntu and relatives, 64-bit | Built on Ubuntu 24.04, requires glibc 2.39 or newer |
+| `SuperTakt_<version>_amd64.AppImage` | Linux without a package manager, 64-bit | Make it executable and run it, no installation; same glibc requirement |
 
-Für Macs mit Intel-Prozessor gibt es in dieser Fassung **keine** Datei. Das ist
-keine Auslassung, sondern eine offene Stelle: Sie wurde nie gebaut und nie
-geprüft.
+There is **no** file for Macs with an Intel processor in this release. This is
+not an oversight but an open gap: it has never been built or tested.
 
-## Diese Dateien sind nicht signiert
+## These files are not signed
 
-Das ist der wichtigste Satz dieser Beschreibung, deshalb steht er weit oben.
+This is the most important sentence of this description, which is why it is
+near the top.
 
-Ein Signaturzertifikat kostet Geld und einen Antrag. Solange darüber nicht
-entschieden ist, gehen die Dateien unsigniert heraus. Beide Betriebssysteme
-halten sie deshalb beim ersten Start an — nicht, weil an ihnen etwas
-auffällig wäre, sondern weil sie **keine** Herkunftsangabe tragen, die das
-System prüfen könnte.
+A signing certificate costs money and requires an application. Until that is
+decided, the files are released unsigned. Both operating systems therefore stop
+them on first launch, not because anything is wrong with them, but because they
+carry **no** proof of origin that the system could check.
 
-**Windows.** Beim Start der `.exe` erscheint „Der Computer wurde durch
-Windows geschützt". Der Weg führt über „Weitere Informationen" zu „Trotzdem
-ausführen". Ohne diesen Klick startet der Installer nicht.
+**Windows.** Launching the `.exe` shows "Windows protected your PC". Choose
+"More info", then "Run anyway". Without that click the installer does not start.
 
-**macOS.** Beim ersten Öffnen meldet das System, die Anwendung stamme von einem
-nicht verifizierten Entwickler, und bietet nur „In den Papierkorb legen" an.
-Der Weg führt über *Systemeinstellungen → Datenschutz & Sicherheit*; dort steht
-nach dem gescheiterten Versuch ein Knopf „Dennoch öffnen". Ein Rechtsklick auf
-das Programmsymbol genügt seit macOS 15 nicht mehr.
+**macOS.** On first launch the system says the application is from an
+unverified developer and offers only "Move to Trash". Go to
+*System Settings → Privacy & Security*; after the failed attempt there is an
+"Open Anyway" button. Right-clicking the app icon is no longer enough since
+macOS 15.
 
-Wer lieber die Befehlszeile benutzt:
+If you prefer the command line:
 
 ```
-xattr -dr com.apple.quarantine /Applications/Takt.app
+xattr -dr com.apple.quarantine /Applications/SuperTakt.app
 ```
 
-**Linux.** Keine Warnung. Die `.AppImage` muss ausführbar gemacht werden:
+**Linux.** No warning. The `.AppImage` has to be made executable:
 
 ```
-chmod +x Takt_<fassung>_amd64.AppImage
+chmod +x SuperTakt_<version>_amd64.AppImage
 ```
 
-## Die heruntergeladene Datei prüfen
+## Verify the downloaded file
 
-Die SHA-256-Prüfsummen aller Dateien stehen weiter unten in dieser Beschreibung.
-Sie sind während des Baus entstanden, nicht danach von Hand eingetragen.
+The SHA-256 checksums of all files are further down in this description.
+They were produced during the build, not entered by hand afterwards.
 
 ```
-# Linux und macOS
-sha256sum Takt_<fassung>_amd64.deb
-shasum -a 256 Takt_<fassung>_aarch64.dmg
+# Linux and macOS
+sha256sum SuperTakt_<version>_amd64.deb
+shasum -a 256 SuperTakt_<version>_aarch64.dmg
 
 # Windows (PowerShell)
-Get-FileHash .\Takt_<fassung>_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\SuperTakt_<version>_x64-setup.exe -Algorithm SHA256
 ```
 
-Weicht ein Wert ab, ist die Datei unvollständig heruntergeladen oder verändert
-worden. In beiden Fällen: nicht ausführen.
+If a value differs, the file was downloaded incompletely or has been modified.
+In both cases: do not run it.
 
-## Lizenzen
+## Licenses
 
-Takt selbst steht unter der MIT-Lizenz.
+SuperTakt itself is released under the MIT License.
 
-In jedem Paket liegt `THIRD-PARTY-LICENSES.txt` — die Lizenztexte aller
-mitgelieferten Fremdbestandteile, darunter die eingebettete Node-Laufzeit, die
-Fensterschicht unter Apache-2.0 und ein Bestandteil unter MPL-2.0 mit dem
-zugehörigen Hinweis auf die Quelltextverfügbarkeit. Dieselbe Datei hängt
-zusätzlich an dieser Fassung, je Plattform eine: Der Abhängigkeitsbaum
-unterscheidet sich zwischen Windows, macOS und Linux, und damit die Liste.
+Every package contains `THIRD-PARTY-LICENSES.txt`, the license texts of all
+bundled third-party components, including the embedded Node runtime, the window
+layer under Apache-2.0 and one component under MPL-2.0 with the corresponding
+notice about source code availability. The same file is also attached to this
+release, one per platform: the dependency tree differs between Windows, macOS
+and Linux, and so does the list.
 
-## Was noch offen ist
+## What is still open
 
-- **Keine Signatur**, siehe oben.
-- **Kein Intel-Mac.**
-- **Kein Linux mit älterer glibc.** Die Linux-Dateien entstehen auf Ubuntu 24.04
-  und verlangen glibc 2.39. Auf Ubuntu 22.04 oder Debian 12 starten sie nicht.
-- **Das Outlook-Add-in** wird mitgeliefert, ist aber auf keinem echten
-  Windows-Rechner mit Outlook geprüft worden.
-- **Automatische Aktualisierung** gibt es nicht. Eine neue Fassung wird von Hand
-  heruntergeladen und installiert.
+- **No signature**, see above.
+- **No Intel Mac.**
+- **No Linux with an older glibc.** The Linux files are built on Ubuntu 24.04
+  and require glibc 2.39. They do not start on Ubuntu 22.04 or Debian 12.
+- **The Outlook add-in** is shipped with the app but has not been tested on a
+  real Windows machine with Outlook.
+- **Automatic updates** do not exist. A new version is downloaded and installed
+  by hand.
