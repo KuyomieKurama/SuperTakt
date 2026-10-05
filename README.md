@@ -1,194 +1,213 @@
+<!-- Screenshots use light/dark pairs; GitHub serves the one matching the viewer's theme. -->
+
+<div align="center">
+
+<img src="docs/images/supertakt-logo.png" alt="SuperTakt logo" width="88" height="88">
+
 # SuperTakt
 
-SuperTakt ist eine lokale Anwendung zum Verwalten von Todos, zum Erfassen von Arbeitszeit und zum
-Export dieser Zeit an ein externes Abrechnungstool. Dazu kommen ein Kanban-Board, frei
-verschachtelbare Tags und Ordner, konfigurierbare Todo-Pools und ein Outlook-Add-in, mit dem sich
-Todos direkt aus einer E-Mail heraus anlegen lassen.
+**Plan todos, run a timer on them, and export the hours to your billing tool. Everything stays on your computer.**
 
-SuperTakt läuft vollständig auf dem eigenen Rechner. Es gibt keine Cloud-Anbindung, keinen
-Datenbankserver und keine Telemetrie; gespeichert wird in einer eingebetteten SQLite-Datei im
-Anwendungsdatenverzeichnis. Diese Entscheidung ist architektonisch verankert: Die Fachlogik in
-`packages/domain` kennt weder HTTP noch SQL, sodass sich der Speicherweg austauschen ließe, ohne
-die Fachlogik anzufassen, falls sich die Vorgabe „lokal, zumindest derzeit" einmal ändert.
+[![Latest release](https://img.shields.io/github/v/release/KuyomieKurama/SuperTakt?style=flat-square&labelColor=1c2330&color=2159da)](https://github.com/KuyomieKurama/SuperTakt/releases/latest)
+[![Checks](https://img.shields.io/github/actions/workflow/status/KuyomieKurama/SuperTakt/pruefung.yml?style=flat-square&label=checks&labelColor=1c2330)](https://github.com/KuyomieKurama/SuperTakt/actions/workflows/pruefung.yml)
+[![License: MIT](https://img.shields.io/github/license/KuyomieKurama/SuperTakt?style=flat-square&labelColor=1c2330&color=2159da)](LICENSE)
+![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri-2159da?style=flat-square&labelColor=1c2330)
+![TypeScript](https://img.shields.io/badge/TypeScript-React%20%2B%20Node-2159da?style=flat-square&labelColor=1c2330)
 
-Wer die Anwendung benutzt, statt an ihr zu arbeiten, findet das vollständige Benutzerhandbuch unter
-`docs/benutzerhandbuch.md`. Wer daran weiterarbeitet, findet den Aufbau des Projekts und die
-wichtigsten Lehren aus seiner Entstehung im `docs/entwicklerhandbuch.md`. Begriffe, die auf dem
-Bildschirm und im Code unterschiedlich heißen könnten, aber es nicht tun sollen, stehen in
-`docs/glossar.md`.
+<a href="https://github.com/KuyomieKurama/SuperTakt/releases/latest">Download</a>
+&nbsp;&nbsp;&nbsp;
+<a href="docs/benutzerhandbuch.md">User guide</a>
+&nbsp;&nbsp;&nbsp;
+<a href="docs/entwicklerhandbuch.md">Developer guide</a>
 
-## Name und bestehende Installationen
+<br>
+<br>
 
-Der sichtbare Produktname lautet SuperTakt. Bestehende Datenpfade (`Takt` unter Windows,
-`takt` unter Linux), die Anwendungskennung `de.takt.desktop`, interne `@takt/*`-Pakete
-und Schnittstellenkennungen bleiben kompatibel. Die Erzeugerkennung `Takt` im
-versionierten Datenarchiv bleibt erhalten. Die aktuelle Archivfassung, lesbare Vorgänger
-und Kompatibilitätsregeln sind in [docs/datenarchiv.md](docs/datenarchiv.md) beschrieben.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/supertakt-overview-dark.png">
+  <img src="docs/images/supertakt-overview-light.png" alt="The SuperTakt dashboard: time recorded today, bookings not yet exported, open and overdue todos, a running timer, recently edited todos and today's entries" width="900">
+</picture>
 
-Unter **Einstellungen → Darstellung** lassen sich Gestaltung, Farbmodus und
-Zeilendichte einstellen. **Klassisch** ist die Vorgabe; die frühere Auswahl
-`clear` bleibt kompatibel und wird klassisch dargestellt. Die verfügbaren
-Gestaltungen stehen in der Anwendung und in
-[`packages/domain/src/settings.ts`](packages/domain/src/settings.ts).
+<sub>The dashboard with demo data. The timer in the top bar is running on a todo.</sub>
 
-## Timer und Leistung
+</div>
 
-Unter **Einstellungen → Timer** lässt sich **Leistung beim Stoppen abfragen**
-ausschalten. Der Timer bucht dann direkt; vorhandener Leistungstext bleibt erhalten.
-Fehlende Leistung lässt sich später in der Buchungsübersicht ergänzen. Die Auswahl
-wird dauerhaft gespeichert und ist zunächst eingeschaltet.
+<br>
 
-## Inaktive Zeit zuordnen
+SuperTakt is a desktop app for people who track work against todos and then have to bill that time somewhere else. You plan on a Kanban board, start a timer on the todo you are working on, and export the finished bookings as a file your billing tool can read.
 
-Unter **Einstellungen → Timer** ist die Inaktivitätserkennung einstellbar:
-zunächst nach **5 Minuten**, abschaltbar und zwischen 1 und 120 Minuten wählbar.
-Die automatische Erkennung benötigt die Desktop-App und eine unterstützte
-Systemschnittstelle unter Windows, macOS oder Linux. Maus- und Tastatureingaben
-in anderen Programmen zählen ebenfalls als Aktivität; es werden keine
-Eingabeinhalte aufgezeichnet. Im Browser steht diese Erkennung nicht bereit.
+It runs entirely on your own machine. There is no cloud service, no account, no database server and no telemetry. Your data lives in one embedded SQLite file in the application data directory.
 
-Standardmäßig läuft der Timer während der Abwesenheit weiter. Bei der Rückkehr
-trennt SuperTakt die aktive Zeit von der inaktiven Phase und führt den Timer ab
-der Rückkehr fort. Alternativ lässt sich **Timer bei Inaktivität** auf Pausieren
-stellen. Die inaktive Zeit kann als Pause ausgelassen, einer Aufgabe zugeordnet
-oder auf mehrere Aufgaben und Pausen verteilt werden. Vor dem Speichern muss sie
-vollständig zugeordnet sein.
+## Why SuperTakt?
 
-Offene Zuordnungen bleiben nach einem Neustart erhalten. **Später zuordnen**
-lässt die Zuordnung offen; ein bereits fortgeführter Timer läuft weiter.
-Die Archivhistorie einschließlich der offenen Inaktivitätsphasen steht in
-[docs/datenarchiv.md](docs/datenarchiv.md).
+Time tracking usually breaks at the handover. The todo list lives in one tool, the timer in another, and the billing sheet gets rebuilt from memory on Friday afternoon.
 
-Die Bedienidee orientiert sich an [Super Productivitys Inaktivitätsdialog](https://github.com/super-productivity/super-productivity/tree/master/src/app/features/idle).
+SuperTakt keeps the whole path in one place:
 
-## Outlook lokal einrichten
+- A booking always belongs to a todo, and it is visibly either exported or still open.
+- Exports are driven by templates, so the file can match what your billing tool expects.
+- The local service listens on `127.0.0.1` only. The one outbound connection is a check for new releases on GitHub, which you can switch off in the settings.
 
-In der Windows-Desktop-App führt **Einstellungen → Outlook-Add-in** durch die
-Zertifikatsprüfung. Prüfen Sie Inhaber, Gültigkeit und SHA-256-Fingerabdruck und
-bestätigen Sie **Zertifikat prüfen und vertrauen**. Erst diese Bestätigung
-hinterlegt das konkrete lokale Serverzertifikat für Ihr Windows-Benutzerkonto.
-Bestätigen Sie auch die Windows-Sicherheitsabfrage; der Assistent wartet dafür
-bis zu drei Minuten. Bei Abbruch wird kein erfolgreicher Abschluss behauptet.
-Danach prüft SuperTakt die Add-in-Seite über HTTPS. Fehlende Zertifikate, ein
-nicht erreichbarer Server oder Windows-Richtlinien werden als Fehler angezeigt.
+## A closer look
 
-Anschließend importieren Sie `apps/outlook-addin/manifest.xml` in Outlook und
-verbinden das Add-in mit dem Zugangstoken aus demselben Einstellungsbereich.
-SuperTakt muss dafür laufen. Eine Domain ist für diese lokale Einrichtung nicht nötig.
-Im Browser und auf anderen Betriebssystemen ist die Windows-Zertifikatseinrichtung
-nicht verfügbar. Nach einer Zertifikatserneuerung muss das neue Zertifikat erneut
-bestätigt werden. Alte Einträge werden nicht automatisch aus dem Windows-Speicher entfernt.
+### A board that follows your data
 
-## Aufbau
+Kanban columns in SuperTakt are rules, not containers. A column is defined by required and excluded tags, status, done state and export state, and a card shows up because it matches. Nothing has to be dragged into place, so the board cannot drift away from what your todos actually say.
 
-Ein pnpm-Arbeitsbereich mit acht Paketen:
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/supertakt-kanban-dark.png">
+  <img src="docs/images/supertakt-kanban-light.png" alt="Kanban board with three rule-based columns, Backlog, In progress and Review. Cards show a call number, a due date and the booked time" width="900">
+</picture>
 
-```
-packages/domain        Fachlogik: Rundung, Timer-Regeln, Exportstatus, Tag-Baum. Ohne HTTP, ohne SQL.
-packages/storage        Ausgehende Ports und der SQLite-Adapter.
-packages/export         Der Exportvorlagen-Motor.
-packages/ui-tokens      Geteilte Farb-, Schrift- und Abstands-Token für Oberfläche und Add-in.
-apps/local-api          Der lokale Dienst: HTTP, Token-Prüfung, Anwendungsfälle.
-apps/web                Die Oberfläche, React und Vite.
-apps/desktop            Die Tauri-Hülle um den lokalen Dienst und die Oberfläche.
-apps/outlook-addin      Das Outlook-Add-in, Office.js.
-```
+<sub>Three columns, each a tag rule. Cards carry the call number, due date and booked time.</sub>
+</div>
 
-Details, Begründungen und Paketgrenzen: `docs/architektur.md` und `docs/entwicklerhandbuch.md`.
+### From bookings to a billing file
 
-## Starten
+Bookings are grouped per day and todo, and time is rounded in steps of 0.25 h (15 minutes). The built-in template writes the columns `Call`, `Zeit`, `Notiz` and `WindowsUser`. The structure is configurable through export templates. Filter by status, date, tag or pool, check the preview, then run the export into your export folder.
 
-Voraussetzung ist Node ab Fassung 22.5 und pnpm; die genauen Mindestfassungen stehen im
-Wurzel-`package.json`. Für die Tauri-Hülle wird zusätzlich eine Rust-Toolchain gebraucht.
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/supertakt-export-dark.png">
+  <img src="docs/images/supertakt-export-light.png" alt="Export screen: a summary of open bookings in hours, filters for status, date range, tag and pool, a table of exportable todos with booked time, and the list of recent export runs" width="900">
+</picture>
+
+<sub>Filter the open bookings, see the total, and check earlier export runs.</sub>
+</div>
+
+### Light and dark
+
+SuperTakt has a light and a dark colour mode. By default it follows your operating system. You can fix it to light or dark under **Settings → Appearance → Colour mode**. Some of the other design themes use fixed colours and ignore this choice.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/supertakt-overview-light.png" alt="The SuperTakt dashboard in light mode">
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/supertakt-overview-dark.png" alt="The SuperTakt dashboard in dark mode">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Light</sub></td>
+    <td align="center"><sub>Dark</sub></td>
+  </tr>
+</table>
+
+### Also in the box
+
+| | |
+|---|---|
+| Timer that copes with real days | Start and stop from the dashboard, the todo list or a Kanban card. With inactivity detection in the desktop app, idle time can be skipped as a break, assigned to one task or split across several. Open assignments survive a restart. |
+| Tags, nested folders, pools | Organise with tags inside folders of any depth, define pools through tags, and set default tags for every new todo, including ones created from Outlook. |
+| Outlook add-in | Create a todo straight from an email. If exactly one todo with the same call number already exists, the email is added to it instead of creating a duplicate. |
+| Backups and imports | Download a full JSON backup and restore it later, or import from Todoist (CSV) and Super Productivity (JSON). |
+
+## Getting started
+
+### Download
+
+Installers for each release are on the [Releases page](https://github.com/KuyomieKurama/SuperTakt/releases/latest).
+
+| Platform | File |
+|---|---|
+| Windows 10/11, 64-bit | `SuperTakt_<version>_x64-setup.exe` |
+| macOS, Apple Silicon | `SuperTakt_<version>_aarch64.dmg` |
+| Debian, Ubuntu and relatives, 64-bit | `SuperTakt_<version>_amd64.deb` |
+| Other Linux, 64-bit | `SuperTakt_<version>_amd64.AppImage` |
+
+> [!IMPORTANT]
+> The installers are **not code-signed**, so Windows and macOS warn you on first launch. The release notes explain how to proceed and list SHA-256 checksums. There is no build for Intel Macs.
+
+### Run from source
+
+You need Node.js 22.13 or newer, pnpm 11 or newer and a Rust toolchain with the Tauri system libraries for your OS.
 
 ```bash
+git clone https://github.com/KuyomieKurama/SuperTakt.git
+cd SuperTakt
 pnpm install
-```
-
-Nur die Oberfläche, im Browser, ohne die Tauri-Hülle und ohne Rust-Toolchain:
-
-```bash
-pnpm dev
-# http://127.0.0.1:5173
-```
-
-SuperTakt als Anwendung, mit Fenster und lokalem Dienst als Sidecar:
-
-```bash
 pnpm desktop
 ```
 
-Der erste Aufruf von `pnpm desktop` baut den Sidecar mit und lädt dabei einmalig die benötigte
-Node-Laufzeit; das braucht Netzzugang und etwas Zeit. Danach nicht mehr. Eine auslieferbare Fassung
-mit Installationspaket entsteht mit:
+The first `pnpm desktop` also builds the local service and downloads the pinned Node runtime for it, so it needs network access and some patience.
+
+To try only the interface in a browser, without Rust, run `pnpm dev`. The browser has no inactivity detection and no Tauri shell, so the app shows a notice instead of its data unless a development session is wired up.
+
+```bash
+pnpm dev
+```
+
+To build an installer package:
 
 ```bash
 pnpm desktop:build
 ```
 
-Beide Befehle bauen den Sidecar, **führen den Nachweis gegen die gebaute Binärdatei aus** und
-stellen das Bündel des Outlook-Aufgabenbereichs neben der Binärdatei bereit. Der Nachweis kostet
-gemessen fünf Sekunden und ist der Grund, warum es ihn gibt: Er stand vorher nur in einer Kette, die
-niemand aufrief, und deshalb ist eine Fassung ausgeliefert worden, die nicht startete (T-053).
-
-## Prüfen
+To run the full project checks:
 
 ```bash
 pnpm check
 ```
 
-Die verbindliche Zusammensetzung und Reihenfolge steht im Skript `check` der
-[Wurzel-package.json](package.json). Es schließt `proof:all`, den Nachweis am gebauten
-Sidecar (`verify:bundle`), Abdeckung, Rust-Tests, Bau und Audit ein. Die Voraussetzungen
-und getrennten Prüfwege stehen im [Entwicklerhandbuch](docs/entwicklerhandbuch.md#befehle).
+`pnpm check` covers type checks, boundary and contrast checks, proof scripts, tests with coverage, Rust tests, a build and a dependency audit. Some steps need extra system packages. See the [developer guide](docs/entwicklerhandbuch.md) and [apps/desktop/README.md](apps/desktop/README.md).
 
-Einzeln aufrufbar, unter anderem:
+## Usage
 
-```bash
-pnpm typecheck      # tsc --noEmit über alle Pakete
-pnpm test           # Vitest, Einheiten- und Integrationstests
-pnpm test:coverage  # dieselben Fälle mit Abdeckungsbericht
-pnpm boundaries     # erlaubte Importe zwischen den Paketen
-pnpm contrast       # Farbpaare der Oberfläche gegen WCAG 2.2 AA
+A typical day with SuperTakt:
+
+1. **Set up structure once.** Create tags and folders, then define pools or Kanban columns from them. Add default tags if every todo should start with some.
+2. **Capture work.** Create todos in the app, or from an email through the Outlook add-in. On Windows, **Settings → Outlook add-in** guides you through trusting the local certificate. Then import `apps/outlook-addin/manifest.xml` in Outlook and connect it with the access token from the same settings page. The full steps are in [docs/outlook-certificate-setup.md](docs/outlook-certificate-setup.md).
+3. **Track time.** Press **Start** on a todo from the dashboard, the todo list or a Kanban card. By default, stopping the timer asks for a short description of the work. That text goes into the billing export, while the todo's own note stays internal.
+4. **Review.** The bookings overview shows what has been exported and what is still open.
+5. **Export.** On the Export screen, choose a template, check the preview grouped by day and todo, and run the export.
+
+You can switch the interface between German and English in the settings. The [user guide](docs/benutzerhandbuch.md) covers every screen in detail and is currently written in German.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Desktop shell | Tauri 2 with a deliberately thin Rust layer |
+| User interface | React, Vite, TypeScript |
+| Local service | Node.js sidecar bound to `127.0.0.1` |
+| Storage | Embedded SQLite, a single file |
+| Outlook add-in | Office.js, TypeScript |
+| Testing | Vitest, Playwright |
+
+The code is a pnpm workspace. Business logic in `packages/domain` knows nothing about HTTP or SQL, which keeps storage replaceable. The reasoning is in [docs/architektur.md](docs/architektur.md).
+
+```text
+packages/domain        Business rules: rounding, timer, export status, tag tree
+packages/storage       Ports and the SQLite adapter
+packages/export        Export template engine
+packages/ui-tokens     Shared colour, type and spacing tokens
+apps/local-api         Local HTTP service
+apps/web               The user interface
+apps/desktop           The Tauri shell
+apps/outlook-addin     The Outlook add-in
 ```
 
-Die Nachweisläufe sind über `proof:all` und die einzelnen `proof:*`-Skripte der
-[Wurzel-package.json](package.json) auffindbar; die Paketskripte verweisen auf die
-jeweilige Implementierung. `proof:engines` läuft separat, weil es zusätzliche
-Browser- und WebKitGTK-Abhängigkeiten benötigt.
+## Documentation
 
-Ende-zu-Ende-Tests laufen mit Playwright:
+| Document | Content |
+|---|---|
+| [docs/benutzerhandbuch.md](docs/benutzerhandbuch.md) | User guide (German) |
+| [docs/entwicklerhandbuch.md](docs/entwicklerhandbuch.md) | Project structure, commands, lessons learned |
+| [docs/architektur.md](docs/architektur.md) | Architecture decisions |
+| [docs/datenarchiv.md](docs/datenarchiv.md) | Backup format and compatibility |
+| [docs/glossar.md](docs/glossar.md) | Terms and their counterparts in the code |
+| [docs/bedrohungsmodell.md](docs/bedrohungsmodell.md) | Threat model (German) |
 
-```bash
-pnpm test:e2e
-```
+## Contributing
 
-### Der Nachweis gegen das Erzeugnis
+There is no separate contribution guide yet. Before changing code, read the [developer guide](docs/entwicklerhandbuch.md) and the project rules in [CLAUDE.md](CLAUDE.md), which define directory ownership and quality gates. Please run `pnpm check` before opening a pull request.
 
-`verify:bundle` ist Teil von `pnpm check` und startet die **gebaute
-Sidecar-Binärdatei**. Die einzelnen Prüfaussagen stehen in
-[verify-sidecar.mjs](apps/desktop/scripts/verify-sidecar.mjs).
+## License
 
-```bash
-pnpm verify:bundle   # baut den Sidecar und führt den Nachweis aus
-pnpm sidecar:verify  # nur den Nachweis, gegen die zuletzt gebaute Datei
-```
+SuperTakt is released under the [MIT License](LICENSE).
 
-Der Nachweis benötigt freie Ports 17843 und 17844 und kann deshalb nicht neben einem
-laufenden SuperTakt bestehen. Der erste Sidecar-Bau benötigt außerdem den Download der
-festgelegten Node-Laufzeit; Voraussetzungen stehen in [apps/desktop/README.md](apps/desktop/README.md).
+## About the name
 
-Historischer Anlass für diesen Nachweis war T-053: Elf Nachweispfade, 556 Testfälle und 28
-Ende-zu-Ende-Fälle liefen an einer Anwendung vorbei, die nicht startete, weil sie alle aus dem
-Quelltext laufen und keiner das Erzeugnis ausführte. `pnpm desktop` und `pnpm desktop:build` führen
-den Nachweis seither selbst mit.
-
-## Wo es weitergeht
-
-- Was SuperTakt tut und wie man damit arbeitet: `docs/benutzerhandbuch.md`
-- Aufbau, Paketgrenzen, Sicherheitsmodell und die Lehren aus der Entwicklung: `docs/entwicklerhandbuch.md`
-- Begriffe mit ihrer Entsprechung im Code: `docs/glossar.md`
-- Datenmodell und Migrationsverfahren: `docs/datenmodell.md`
-- Architekturentscheidungen im Detail: `docs/architektur.md`
-- Bedrohungsmodell: `docs/bedrohungsmodell.md`
-- Testplan: `docs/testplan.md`
+The product is called SuperTakt. Earlier versions were called Takt, so some internal identifiers, such as the `@takt/*` packages and the application data directories, keep the old name for compatibility with existing installations.
