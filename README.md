@@ -14,7 +14,7 @@
 ![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri-2159da?style=flat-square&labelColor=1c2330)
 ![TypeScript](https://img.shields.io/badge/TypeScript-React%20%2B%20Node-2159da?style=flat-square&labelColor=1c2330)
 
-<a href="https://github.com/KuyomieKurama/SuperTakt/releases/latest"><b>Download</b></a>
+<a href="https://github.com/KuyomieKurama/SuperTakt/releases/latest">Download</a>
 &nbsp;&nbsp;&nbsp;
 <a href="docs/benutzerhandbuch.md">User guide</a>
 &nbsp;&nbsp;&nbsp;
