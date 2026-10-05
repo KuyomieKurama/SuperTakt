@@ -76,6 +76,25 @@ Bookings are grouped per day and todo, and time is rounded in steps of 0.25 h (1
 <sub>Filter the open bookings, see the total, and check earlier export runs.</sub>
 </div>
 
+### Light and dark
+
+SuperTakt has a light and a dark colour mode. By default it follows your operating system. You can fix it to light or dark under **Settings → Appearance → Colour mode**. Some of the other design themes use fixed colours and ignore this choice.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/supertakt-overview-light.png" alt="The SuperTakt dashboard in light mode">
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/supertakt-overview-dark.png" alt="The SuperTakt dashboard in dark mode">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Light</sub></td>
+    <td align="center"><sub>Dark</sub></td>
+  </tr>
+</table>
+
 ### Also in the box
 
 | | |
