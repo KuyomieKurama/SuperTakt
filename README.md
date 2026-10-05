@@ -70,10 +70,10 @@ Bookings are grouped per day and todo, and time is rounded in steps of 0.25 h (1
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/supertakt-export-dark.png">
-  <img src="docs/images/supertakt-export-light.png" alt="Export screen with template selection, rounding, export folder, date and tag filters and a list of open bookings grouped by todo" width="900">
+  <img src="docs/images/supertakt-export-light.png" alt="Export screen: a summary of open bookings in hours, filters for status, date range, tag and pool, a table of exportable todos with booked time, and the list of recent export runs" width="900">
 </picture>
 
-<sub>Pick a template, filter the open bookings, run the export.</sub>
+<sub>Filter the open bookings, see the total, and check earlier export runs.</sub>
 </div>
 
 ### Also in the box
